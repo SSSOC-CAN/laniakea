@@ -1,6 +1,6 @@
 package fmtd
 
-func test_fmtd() {
+func Test_fmtd() {
 	log := InitLogger()
 	log.Info().Msg("Hello World!")
 }

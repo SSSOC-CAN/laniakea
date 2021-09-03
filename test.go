@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/SSSOC-CAN/Facility-Management-Tool/fmtd"
+	fmtd "github.com/SSSOC-CAN/fmtd/fmtd"
 )
 
 func main() {
-	fmtd.fmtd_test()
+	fmtd.Test_fmtd()
 }
