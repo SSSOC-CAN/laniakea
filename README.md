@@ -22,10 +22,7 @@ export PATH=$PATH:/usr/local/go/bin
 export GOPATH=/Path/To/Your/Working/Directory
 export PATH=$PATH:$GOPATH/bin
 ```
-If you type `$ go version` you should see
-```
-go version go1.17 linux/amd64
-```
+If you type `$ go version` you should see `go1.17 linux/amd64`
 ## Installing fmtd from source
 
 In your working directory (which is your `GOPATH`), create a `/src/github.com/SSSOC-CAN` directory
@@ -100,6 +97,9 @@ In the future, Continuous Integration (CI) and automated testing will be a part 
 
 [This blog post](https://blog.alexellis.io/golang-writing-unit-tests/) covers how Go handles unit tests natively. A strategy for integration testing will be devised at a later time. For now, remember that for every method/function you create, a minimum of one unit test will be created to ensure that this function meets the requirements defined for it.
 
+## Release Strategy
+
+*TBD*
 
 
 
