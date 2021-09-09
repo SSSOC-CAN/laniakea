@@ -35,15 +35,7 @@ var (
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
 func InitConfig() Config {
-	var (
-		home_dir	string
-		err			error
-	)
-	home_dir, err = os.UserHomeDir() // this should be OS agnostic
-	if err != nil {
-		log.Fatal(err)
-	}
-	filename, _ := filepath.Abs(home_dir+"/.fmtd/config.yaml")
+	filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
 	config_file, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -83,7 +75,7 @@ func change_field(field reflect.Value, new_value interface{}) {
 	}
 }
 
-// check_yaml_config iterates over the Config struct fields and changes black fields to default values
+// check_yaml_config iterates over the Config struct fields and changes blank fields to default values
 func check_yaml_config(config Config) Config {
 	pv := reflect.ValueOf(&config)
 	v := pv.Elem()
