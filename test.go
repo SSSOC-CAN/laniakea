@@ -8,7 +8,8 @@ import (
 
 func main() {
 	// fmtd.Test_fmtd()
-	log := fmtd.InitLogger(true)
+	config := fmtd.InitConfig()
+	log := fmtd.InitLogger(true, config)
 	tcp_log := fmtd.NewSubLogger(log, "TCPS")
 	tcp_log.Log("INFO", "Hello World")
 	tcp_log.Log("TEST", "Hello World")
