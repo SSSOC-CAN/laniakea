@@ -17,6 +17,7 @@ type Config struct {
 }
 
 // default_config returns the default configuration
+// default_log_dir returns the default log directory
 var (
 	default_log_dir = func() string {
 		home_dir, err := os.UserHomeDir() // this should be OS agnostic

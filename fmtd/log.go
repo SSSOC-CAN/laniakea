@@ -26,7 +26,7 @@ var log_level = map[string]zerolog.Level{
 }
 
 // InitLogger creates a new instance of the `zerolog.Logger` type. If `console_out` is true, it will output the logs to the console as well as the logfile
-func InitLogger(console_output bool, config Config) zerolog.Logger {
+func InitLogger(console_output bool, config *Config) zerolog.Logger {
 	// check to see if log file exists. If not, create one
 	var (
 		log_file 	*os.File
@@ -84,7 +84,7 @@ func InitLogger(console_output bool, config Config) zerolog.Logger {
 }
 
 // NewSubLogger takes a `zerolog.Logger` and string for the name of the subsystem and creates a `subLogger` for this subsystem
-func NewSubLogger(l zerolog.Logger, subsystem string) *subLogger {
+func NewSubLogger(l *zerolog.Logger, subsystem string) *subLogger {
 	sub := l.With().Str("subsystem", subsystem).Logger()
 	s := subLogger{
 		SubLogger: sub,
