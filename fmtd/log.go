@@ -26,30 +26,31 @@ var log_level = map[string]zerolog.Level{
 }
 
 // InitLogger creates a new instance of the `zerolog.Logger` type. If `console_out` is true, it will output the logs to the console as well as the logfile
-func InitLogger(console_output bool) zerolog.Logger {
+func InitLogger(console_output bool, config Config) zerolog.Logger {
 	// check to see if log file exists. If not, create one
 	var (
-		home_dir 	string
 		log_file 	*os.File
 		err			error
+		logger 		zerolog.Logger
 	)
-	home_dir, err = os.UserHomeDir()
+	log_file, err = os.OpenFile(config.LogFileDir+"/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
 	if err != nil {
-		log.Fatal(err)
-	}
-	log_file, err = os.OpenFile(home_dir+"/.fmtd/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
-	if err != nil {
-		// try to create the .fmtd dir and try again
-		err = os.Mkdir(home_dir+"/.fmtd", 0775)
-		if err != nil {
+		// try to create the .fmtd dir and try again if log dir is default log dir
+		if config.DefaultLogDir {
+			err = os.Mkdir(config.LogFileDir, 0775)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log_file, err = os.OpenFile(config.LogFileDir+"/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
 			log.Fatal(err)
 		}
-		log_file, err = os.OpenFile(home_dir+"/.fmtd/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
-		if err != nil {
-			log.Fatal(err)
-		}
 	}
-	var logger zerolog.Logger
+	
+	
 	if console_output {
 		output := zerolog.ConsoleWriter{Out: os.Stderr}
 		output.FormatLevel = func(i interface{}) string {

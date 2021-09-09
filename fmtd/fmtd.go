@@ -1,6 +1,7 @@
 package fmtd
 
 func Test_fmtd() {
-	log := InitLogger(true)
+	config := InitConfig()
+	log := InitLogger(true, config)
 	log.Info().Msg("Hello World!")
 }
