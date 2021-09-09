@@ -87,7 +87,7 @@ In general, any useful comments to understand the context of your code are encou
 
 ## Git Workflow
 
-When making any changes to the codebase, please create a feature branch and send frequent commits on the feature branch. When the new feature is ready to be merged, please then create a merge request. In the creation of the merge request, please add any of the organization administrators as reviewers and await their approval before merging any changes into `main`. Additionally, a reference to the issue in Github **MUST** be included in the merge request. Which means any and all work is going to be documented using issues.
+When making any changes to the codebase, please create a feature branch and send frequent commits on the feature branch. When the new feature is ready to be merged, create a merge request. In the creation of the merge request, please add any of the organization administrators as reviewers and await their approval before merging any changes into `main`. Additionally, a reference to the issue in Github **MUST** be included in the merge request. Which means any and all work is going to be documented using issues.
 ```
 $ git checkout -b <name_of_new_branch>          # Creates a feature branch with specified name and carries over any uncommited changes from the previous branch
 $ git add -A                                    # Adds all modified files to the commit
@@ -98,7 +98,7 @@ In the future, Continuous Integration (CI) and automated testing will be a part 
 
 ## Testing
 
-[This blog post](https://blog.alexellis.io/golang-writing-unit-tests/) covers who Go handles unit tests natively. A strategy for integration testing will be devised at a later time. For now, remember that for every method/function you create, a minimum of one unit test will be created to ensure that this function meets the requirements defined for it.
+[This blog post](https://blog.alexellis.io/golang-writing-unit-tests/) covers how Go handles unit tests natively. A strategy for integration testing will be devised at a later time. For now, remember that for every method/function you create, a minimum of one unit test will be created to ensure that this function meets the requirements defined for it.
 
 
 
