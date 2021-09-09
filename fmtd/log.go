@@ -2,33 +2,56 @@ package fmtd
 
 import (
 	"fmt"
+	"log"
 	"os"
-	log "github.com/rs/zerolog"
 	"strings"
+	"github.com/rs/zerolog"
 	color "github.com/mgutz/ansi"
 )
 
 // subLogger is a thin-wrapper for the `zerolog.Logger` struct
 type subLogger struct {
-	SubLogger log.Logger
+	SubLogger zerolog.Logger
 	Subsystem string
 }
 
 // log_level is a mapping of log levels as strings to structs from the zerolog package
-var log_level = map[string]log.Level{
-	"INFO": log.InfoLevel,
-	"PANIC": log.PanicLevel,
-	"FATAL": log.FatalLevel,
-	"ERROR": log.ErrorLevel,
-	"DEBUG": log.DebugLevel,
-	"TRACE": log.TraceLevel,
+var log_level = map[string]zerolog.Level{
+	"INFO": zerolog.InfoLevel,
+	"PANIC": zerolog.PanicLevel,
+	"FATAL": zerolog.FatalLevel,
+	"ERROR": zerolog.ErrorLevel,
+	"DEBUG": zerolog.DebugLevel,
+	"TRACE": zerolog.TraceLevel,
 }
 
 // InitLogger creates a new instance of the `zerolog.Logger` type. If `console_out` is true, it will output the logs to the console as well as the logfile
-func InitLogger(console_output bool) log.Logger {
-	var logger log.Logger
+func InitLogger(console_output bool) zerolog.Logger {
+	// check to see if log file exists. If not, create one
+	var (
+		home_dir 	string
+		log_file 	*os.File
+		err			error
+	)
+	home_dir, err = os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log_file, err = os.OpenFile(home_dir+"/.fmtd/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
+	if err != nil {
+		// try to create the .fmtd dir and try again
+		err = os.Mkdir(home_dir+"/.fmtd", 0775)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log_file, err = os.OpenFile(home_dir+"/.fmtd/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	var logger zerolog.Logger
 	if console_output {
-		output := log.ConsoleWriter{Out: os.Stderr}
+		output := zerolog.ConsoleWriter{Out: os.Stderr}
 		output.FormatLevel = func(i interface{}) string {
 			var msg string
 			switch v := i.(type) {
@@ -51,16 +74,16 @@ func InitLogger(console_output bool) log.Logger {
 			}
 			return msg+fmt.Sprintf("\t")
 		}
-		multi := log.MultiLevelWriter(output, os.Stdout)
-		logger = log.New(multi).With().Timestamp().Logger()
+		multi := zerolog.MultiLevelWriter(output, log_file)
+		logger = zerolog.New(multi).With().Timestamp().Logger()
 	} else {
-		logger = log.New(os.Stderr).With().Timestamp().Logger()
+		logger = zerolog.New(log_file).With().Timestamp().Logger()
 	}
 	return logger
 }
 
 // NewSubLogger takes a `zerolog.Logger` and string for the name of the subsystem and creates a `subLogger` for this subsystem
-func NewSubLogger(l log.Logger, subsystem string) *subLogger {
+func NewSubLogger(l zerolog.Logger, subsystem string) *subLogger {
 	sub := l.With().Str("subsystem", subsystem).Logger()
 	s := subLogger{
 		SubLogger: sub,
