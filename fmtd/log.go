@@ -26,7 +26,7 @@ var log_level = map[string]zerolog.Level{
 }
 
 // InitLogger creates a new instance of the `zerolog.Logger` type. If `console_out` is true, it will output the logs to the console as well as the logfile
-func InitLogger(console_output bool, config *Config) zerolog.Logger {
+func InitLogger(config *Config) zerolog.Logger {
 	// check to see if log file exists. If not, create one
 	var (
 		log_file 	*os.File
@@ -51,7 +51,7 @@ func InitLogger(console_output bool, config *Config) zerolog.Logger {
 	}
 	
 	
-	if console_output {
+	if config.ConsoleOutput {
 		output := zerolog.ConsoleWriter{Out: os.Stderr}
 		output.FormatLevel = func(i interface{}) string {
 			var msg string
