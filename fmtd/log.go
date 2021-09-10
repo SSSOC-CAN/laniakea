@@ -93,11 +93,18 @@ func NewSubLogger(l *zerolog.Logger, subsystem string) *subLogger {
 	return &s
 }
 
-// Log is a method which takes a log level and message as a string and writes the corresponding log
-func (s subLogger) Log(level, msg string) {
+// LogWithErrors is a method which takes a log level and message as a string and writes the corresponding log. Returns an error if the log level doesn't exist
+func (s subLogger) LogWithErrors(level, msg string) error {
 	if lvl, ok := log_level[level]; ok {
 		s.SubLogger.WithLevel(lvl).Msg(msg)
+		return nil
 	} else {
 		s.SubLogger.Error().Msg(fmt.Sprintf("Log level %v not found.", level))
+		return fmt.Errorf("log: Log level %v not found.", level)
 	}
+}
+
+// Log is a method which takes a log level and message as a string and writes the corresponding log.
+func (s subLogger) Log(level, msg string) {
+	_ = s.LogWithErrors(level, msg)
 }
