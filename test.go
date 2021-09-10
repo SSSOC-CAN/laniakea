@@ -1,14 +1,25 @@
 package main
 
 import (
+	"fmt"
 	fmtd "github.com/SSSOC-CAN/fmtd/fmtd"
 )
 
 func main() {
-	// fmtd.Test_fmtd()
 	config := fmtd.InitConfig()
 	log := fmtd.InitLogger(&config)
-	tcp_log := fmtd.NewSubLogger(&log, "TCPS")
-	tcp_log.Log("INFO", "Hello World")
-	tcp_log.Log("TEST", "Hello World")
+	server, err := fmtd.InitServer(&config, &log)
+	if err != nil {
+		log.Fatal().Msg("Could not initialize server")
+	}
+	err = server.Start()
+	if err != nil {
+		log.Fatal().Msg("Could not start server")
+	}
+	log.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
+	err = server.Stop()
+	if err != nil {
+		log.Fatal().Msg("Could not stop server")
+	}
+	log.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
 }
