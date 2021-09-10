@@ -12,8 +12,9 @@ import (
 
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir	bool `yaml:"DefaultLogDir"`
-	LogFileDir 	string	 `yaml:"LogFileDir"`
+	DefaultLogDir	bool 	`yaml:"DefaultLogDir"`
+	LogFileDir 		string	`yaml:"LogFileDir"`
+	ConsoleOutput	bool	`yaml:"ConsoleOutput"`
 }
 
 // default_config returns the default configuration
@@ -30,6 +31,7 @@ var (
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
+			ConsoleOutput: false,
 		}
 	}
 )
