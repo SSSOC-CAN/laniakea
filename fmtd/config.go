@@ -12,8 +12,8 @@ import (
 
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir	bool
-	LogFileDir 	string
+	DefaultLogDir	bool `yaml:"DefaultLogDir"`
+	LogFileDir 	string	 `yaml:"LogFileDir"`
 }
 
 // default_config returns the default configuration
@@ -39,7 +39,8 @@ func InitConfig() Config {
 	filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
 	config_file, err := ioutil.ReadFile(filename)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return default_config()
 	}
 	var config Config
 	err = yaml.Unmarshal(config_file, &config)
