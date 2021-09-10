@@ -47,12 +47,17 @@ func TestInitConfigFromYAML(t *testing.T) {
 	d_config := Config{
 		DefaultLogDir: false,
 		LogFileDir: "/home/vagrant/documents",
+		ConsoleOutput: true,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	_, err = config_file.WriteString(fmt.Sprintf("LogFileDir: %v", d_config.LogFileDir))
+	_, err = config_file.WriteString(fmt.Sprintf("LogFileDir: %v\n", d_config.LogFileDir))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("ConsoleOutput: %v", d_config.ConsoleOutput))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
@@ -81,6 +86,7 @@ func TestDefaultConfig(t *testing.T) {
 	d_config := Config{
 		DefaultLogDir: true,
 		LogFileDir: default_log_dir(),
+		ConsoleOutput: false,
 	}
 	if d_config != default_config() {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())
