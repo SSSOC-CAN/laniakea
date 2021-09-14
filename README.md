@@ -36,6 +36,32 @@ $ git clone git@github.com:SSSOC-CAN/fmtd.git
 $ cd fmtd
 ```
 
+## Installing Protoc
+
+In order to compile protos in Go, you need `protoc`.
+
+On Linux:
+
+```
+$uname -m
+x86_64
+```
+To check your OS architecture. Once you find that, go to https://github.com/protocolbuffers/protobuf/releases and find the releases that matches your OS and architecture. In your $HOME directory:
+```
+$ curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v3.17.3/protoc-3.17.3-linux-x86_64.zip
+$ unzip protoc-3.17.3-linux-x86_64.zip -d $HOME/.local
+```
+Add the following line to `.bashrc` or `.bash_profile`
+```
+export PATH=$PATH:$HOME/.local/bin
+```
+Then
+```
+$ source .bashrc            #or source .bash_profile
+$ protoc --version
+libprotoc 3.17.3
+```
+
 # Contribution Guide
 
 ## Coding Style

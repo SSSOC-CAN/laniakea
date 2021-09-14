@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package fmtrpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
+
+// Fmt is the main RPC server of the daemon.
+service Fmt {
+    /* fmtcli: `stop`
+    StopDaemon will send a shutdown request to the interrupt handler, triggering
+    a graceful shutdown of the daemon.
+    */
+    rpc StopDaemon (StopRequest) returns (StopResponse);
+}
+
+message StopRequest {
+}
+message StopResponse {
+}
