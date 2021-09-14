@@ -123,6 +123,26 @@ In the future, Continuous Integration (CI) and automated testing will be a part 
 
 [This blog post](https://blog.alexellis.io/golang-writing-unit-tests/) covers how Go handles unit tests natively. A strategy for integration testing will be devised at a later time. For now, remember that for every method/function you create, a minimum of one unit test will be created to ensure that this function meets the requirements defined for it.
 
+To perform unit tests, run the following command from the projects root directory:
+```
+$ go test -v ./...
+```
+
+### Compiling Binaries
+A Makefile has been created to simplify the process. It's important that this project be in the expected location (i.e. $GOPATH/src/github.com/SSSOC-CAN/fmtd). Simply run the following from the root directory to compile binaries
+```
+$ make install
+```
+
+To manually test fmtd and fmtcli, have one terminal window open and run
+```
+$ fmtd
+```
+And then in another, run `fmtcli` followed by a supported command. For example,
+```
+$ fmtcli stop
+```
+
 ## Release Strategy
 
 *TBD*
