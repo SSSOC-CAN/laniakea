@@ -128,6 +128,21 @@ To perform unit tests, run the following command from the projects root director
 $ go test -v ./...
 ```
 
+### Compiling Binaries
+A Makefile has been created to simplify the process. It's important that this project be in the expected location (i.e. $GOPATH/src/github.com/SSSOC-CAN/fmtd). Simply run the following from the root directory to compile binaries
+```
+$ make install
+```
+
+To manually test fmtd and fmtcli, have one terminal window open and run
+```
+$ fmtd
+```
+And then in another, run `fmtcli` followed by a supported command. For example,
+```
+$ fmtcli stop
+```
+
 ## Release Strategy
 
 *TBD*
