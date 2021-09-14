@@ -87,6 +87,7 @@ func TestDefaultConfig(t *testing.T) {
 		DefaultLogDir: true,
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: false,
+		GrpcPort: 7777,
 	}
 	if d_config != default_config() {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())
