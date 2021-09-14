@@ -123,6 +123,11 @@ In the future, Continuous Integration (CI) and automated testing will be a part 
 
 [This blog post](https://blog.alexellis.io/golang-writing-unit-tests/) covers how Go handles unit tests natively. A strategy for integration testing will be devised at a later time. For now, remember that for every method/function you create, a minimum of one unit test will be created to ensure that this function meets the requirements defined for it.
 
+To perform unit tests, run the following command from the projects root directory:
+```
+$ go test -v ./...
+```
+
 ## Release Strategy
 
 *TBD*
