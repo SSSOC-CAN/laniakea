@@ -15,11 +15,13 @@ type Config struct {
 	DefaultLogDir	bool 	`yaml:"DefaultLogDir"`
 	LogFileDir 		string	`yaml:"LogFileDir"`
 	ConsoleOutput	bool	`yaml:"ConsoleOutput"`
+	GrpcPort		int64	`yaml:"GrpcPort"`
 }
 
 // default_config returns the default configuration
 // default_log_dir returns the default log directory
 var (
+	default_grpc_port int64 = 7777
 	default_log_dir = func() string {
 		home_dir, err := os.UserHomeDir() // this should be OS agnostic
 		if err != nil {
@@ -32,6 +34,7 @@ var (
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
 			ConsoleOutput: false,
+			GrpcPort: default_grpc_port,
 		}
 	}
 )
@@ -74,6 +77,12 @@ func change_field(field reflect.Value, new_value interface{}) {
 				} else {
 					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: bool", new_value))
 				}
+			case reflect.Int:
+				if v, ok := new_value.(int64); ok {
+					field.SetInt(v)
+				} else {
+					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: int64", new_value))
+				}
 			}
 		}
 	}
@@ -93,6 +102,10 @@ func check_yaml_config(config Config) Config {
 				change_field(f, default_log_dir())
 				dld := v.FieldByName("DefaultLogDir")
 				change_field(dld, true)
+			}
+		case "GrpcPort":
+			if f.Int() == 0 { // This may end up being a range of values
+				change_field(f, default_grpc_port)
 			}
 		}
 	}
