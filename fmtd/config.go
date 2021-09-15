@@ -41,12 +41,12 @@ var (
 )
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
-func InitConfig() Config {
+func InitConfig() (Config, error) {
 	filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
 	config_file, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Println(err)
-		return default_config()
+		return default_config(), nil
 	}
 	var config Config
 	err = yaml.Unmarshal(config_file, &config)
@@ -57,7 +57,7 @@ func InitConfig() Config {
 		// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
 		config = check_yaml_config(config)
 	}
-	return config
+	return config, nil
 }
 
 // change_field changes the value of a specified field from the config struct

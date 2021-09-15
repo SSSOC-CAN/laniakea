@@ -1,19 +1,37 @@
 package fmtd
 
-// main this file may be deleted
-func main() {
-	config := InitConfig()
-	log := InitLogger(&config)
-	server, err := InitServer(&config, &log)
+import (
+	"fmt"
+	"github.com/SSSOC-CAN/fmtd/intercept"
+)
+
+// Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
+func Main(interceptor *intercept.Interceptor, server *Server) error {
+	// Starting main server
+	err := server.Start()
 	if err != nil {
-		log.Fatal().Msg("Could not initialize server")
+		server.logger.Fatal().Msg("Could not start server")
+		return err
 	}
-	err = server.Start()
+	server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
+	defer server.Stop()
+
+	// Starting RPC server
+	rpcServer, err := NewRpcServer(interceptor, server.cfg, server.logger)
 	if err != nil {
-		log.Fatal().Msg("Could not start server")
+		server.logger.Fatal().Msg("Could not initialize RPC server")
+		return err
 	}
-	err = server.Stop()
+	server.logger.Info().Msg("RPC Server Initialized")
+	defer rpcServer.Grpc_server.Stop()
+	err = rpcServer.Start()
 	if err != nil {
-		log.Fatal().Msg("Could not stop server")
+		server.logger.Fatal().Msg("Could not start RPC server")
+		return err
 	}
+	server.logger.Info().Msg("RPC Server Started")
+	defer rpcServer.Stop()
+
+	<-interceptor.ShutdownChannel()
+	return nil
 }

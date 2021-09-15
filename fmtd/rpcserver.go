@@ -2,6 +2,7 @@ package fmtd
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
@@ -9,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/rs/zerolog"
 )
 
 // RpcServer is a child of the fmtrpc.UnimplementedFmtServer struct. Meant to host all related attributes to the rpcserver
@@ -16,19 +18,21 @@ type RpcServer struct {
 	started int32
 	shutdown int32
 	fmtrpc.UnimplementedFmtServer
-	interceptor intercept.Interceptor
+	interceptor *intercept.Interceptor
 	Grpc_server	*grpc.Server
 	cfg *Config
 	quit chan struct{}
+	sublogger *zerolog.Logger
 }
 
 // NewRpcServer creates an instance of the GrpcServer struct
-func NewRpcServer(interceptor intercept.Interceptor, config *Config) (RpcServer, error) {
+func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerolog.Logger) (RpcServer, error) {
 	return RpcServer{
 		interceptor: interceptor,
 		Grpc_server: grpc.NewServer(),
 		cfg: config,
 		quit: make(chan struct{}, 1),
+		sublogger: &NewSubLogger(log, "RPCS").SubLogger,
 	}, nil
 }
 
@@ -45,10 +49,12 @@ func (s *RpcServer) Start() (error) {
 	}
 	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(s.cfg.GrpcPort, 10))
 	if err != nil {
+		s.sublogger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", s.cfg.GrpcPort, err))
 		return err
 	}
 	err = s.RegisterWithGrpcServer(s.Grpc_server)
 	if err != nil {
+		s.sublogger.Error().Msg(fmt.Sprintf("Couldn't register with gRPC server: %v", err))
 		return err
 	}
 	var wg sync.WaitGroup
