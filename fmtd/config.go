@@ -77,7 +77,7 @@ func change_field(field reflect.Value, new_value interface{}) {
 				} else {
 					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: bool", new_value))
 				}
-			case reflect.Int:
+			case reflect.Int64:
 				if v, ok := new_value.(int64); ok {
 					field.SetInt(v)
 				} else {
