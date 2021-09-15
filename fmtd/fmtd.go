@@ -17,7 +17,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer server.Stop()
 
 	// Starting RPC server
-	rpcServer, err := NewRpcServer(interceptor, server.cfg)
+	rpcServer, err := NewRpcServer(interceptor, server.cfg, server.logger)
 	if err != nil {
 		server.logger.Fatal().Msg("Could not initialize RPC server")
 		return err
