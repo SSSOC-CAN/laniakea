@@ -11,6 +11,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 )
 
+// RpcServer is a child of the fmtrpc.UnimplementedFmtServer struct. Meant to host all related attributes to the rpcserver
 type RpcServer struct {
 	started int32
 	shutdown int32
@@ -60,6 +61,7 @@ func (s *RpcServer) Start() (error) {
 	return nil
 }
 
+// Stop stops the rpc sub-server
 func (s *RpcServer) Stop() (error) {
 	if atomic.AddInt32(&s.shutdown, 1) != 1 {
 		return nil

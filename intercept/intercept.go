@@ -1,3 +1,4 @@
+// Package intercept defines objects and related functions to monitor requests to shutdown the application
 package intercept
 
 import (
