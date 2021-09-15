@@ -20,6 +20,7 @@ type Config struct {
 
 // default_config returns the default configuration
 // default_log_dir returns the default log directory
+// default_grpc_port is the the default grpc port
 var (
 	default_grpc_port int64 = 7777
 	default_log_dir = func() string {
