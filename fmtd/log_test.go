@@ -19,7 +19,10 @@ func TestInitLoggerOutput(t *testing.T) {
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: true,
 	}
-	log := InitLogger(&config)
+	log, err := InitLogger(&config)
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	log.Info().Msg("Testing both outputs...")
 	// False
 	config = Config{
@@ -27,7 +30,10 @@ func TestInitLoggerOutput(t *testing.T) {
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: false,
 	}
-	log = InitLogger(&config)
+	log, err = InitLogger(&config)
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	log.Info().Msg("This shouldn't appear in the console...")
 
 	outC := make(chan string)
@@ -58,7 +64,10 @@ func TestNewSubLogger(t *testing.T) {
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: true,
 	}
-	log := InitLogger(&config)
+	log, err := InitLogger(&config)
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	test_sub_log := NewSubLogger(&log, "TEST")
 	test_sub_log.SubLogger.Info().Msg("Testing both outputs...")
 	// false
@@ -67,7 +76,10 @@ func TestNewSubLogger(t *testing.T) {
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: false,
 	}
-	log = InitLogger(&config)
+	log, err = InitLogger(&config)
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	test_sub_log = NewSubLogger(&log, "TEST")
 	test_sub_log.SubLogger.Info().Msg("This shouldn't appear in the console...")
 	
@@ -90,8 +102,14 @@ func TestNewSubLogger(t *testing.T) {
 
 // TestLogWithErrors ensures that if a bad LogLevel is provided to Log, it will log an error
 func TestLogWithErrors(t *testing.T) {
-	config := InitConfig()
-	log := InitLogger(&config)
+	config, err := InitConfig()
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	log, err := InitLogger(&config)
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	test_sub_log := NewSubLogger(&log, "TEST")
 	tables := []struct{
 		level	string

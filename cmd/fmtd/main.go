@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"github.com/SSSOC-CAN/fmtd/fmtd"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 )
@@ -10,29 +11,29 @@ import (
 // TODO:SSSOCPaulCote - Refactor some of this into server.Start()
 func main() {
 	shutdownInterceptor, err := intercept.InitInterceptor()
-	config := fmtd.InitConfig()
-	log := fmtd.InitLogger(&config)
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	log, err := fmtd.InitLogger(&config)
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	shutdownInterceptor.Logger = &log
 	server, err := fmtd.InitServer(&config, &log)
 	if err != nil {
-		log.Fatal().Msg("Could not initialize server")
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	err = server.Start()
-	if err != nil {
-		log.Fatal().Msg("Could not start server")
+	if err = fmtd.Main(shutdownInterceptor, server); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	log.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
-	defer server.Stop()
-	rpcServer, err := fmtd.NewRpcServer(shutdownInterceptor, &config)
-	if err != nil {
-		log.Fatal().Msg("Could not initialize RPC server")
-	}
-	log.Info().Msg("RPC Server Initialized")
-	defer rpcServer.Grpc_server.Stop()
-	err = rpcServer.Start()
-	if err != nil {
-		log.Fatal().Msg("Could not start RPC server")
-	}
-	log.Info().Msg("RPC Server Started")
-	defer rpcServer.Stop()
-	<-shutdownInterceptor.ShutdownChannel()
+	
 }
