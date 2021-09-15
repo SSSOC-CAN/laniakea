@@ -3,11 +3,13 @@ package intercept
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"sync/atomic"
 	"syscall"
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -17,6 +19,7 @@ var (
 // Interceptor is the object controlling application shutdown requests
 type Interceptor struct {
 	interruptChannel chan os.Signal
+	Logger *zerolog.Logger
 	shutdownChannel chan struct{}
 	shutdownRequestChannel chan struct{}
 	quit chan struct{}
@@ -29,23 +32,43 @@ func (interceptor *Interceptor) mainInterruptHandler() {
 	var isShutdown bool
 	shutdown := func() {
 		if isShutdown {
-			log.Println("Already shutting down...")
+			if interceptor.Logger != nil {
+				interceptor.Logger.Info().Msg("Already shutting down...")
+			} else {
+				log.Println("Already shutting down...")
+			}
 			return
 		}
 		isShutdown = true
-		log.Println("Shutting down...")
+		if interceptor.Logger != nil {
+			interceptor.Logger.Info().Msg("Shutting down...")
+		} else {
+			log.Println("Shutting down...")
+		}
 		close(interceptor.quit)
 	}
 	for {
 		select {
 		case signal := <-interceptor.interruptChannel:
-			log.Printf("Received %v", signal)
+			if interceptor.Logger != nil {
+				interceptor.Logger.Info().Msg(fmt.Sprintf("Received %v", signal))
+			} else {
+				log.Printf("Received %v", signal)
+			}
 			shutdown()
 		case <-interceptor.shutdownRequestChannel:
-			log.Println("Received shutdown request.")
+			if interceptor.Logger != nil {
+				interceptor.Logger.Info().Msg("Received shutdown request.")
+			} else {
+				log.Println("Received shutdown request.")
+			}
 			shutdown()
 		case <-interceptor.quit:
-			log.Println("Gracefully shutting down.")
+			if interceptor.Logger != nil {
+				interceptor.Logger.Info().Msg("Gracefully shutting down.")
+			} else {
+				log.Println("Gracefully shutting down.")
+			}
 			close(interceptor.shutdownChannel)
 			signal.Stop(interceptor.interruptChannel)
 			return
@@ -68,9 +91,9 @@ func (c *Interceptor) ShutdownChannel() <-chan struct{} {
 }
 
 // InitInterceptor initializes the shutdown and interrupt interceptor
-func InitInterceptor() (Interceptor, error) {
+func InitInterceptor() (*Interceptor, error) {
 	if !atomic.CompareAndSwapInt32(&started, 0, 1) {
-		return Interceptor{}, errors.New("Interceptor already initialized")
+		return &Interceptor{}, errors.New("Interceptor already initialized")
 	}
 	interceptor := Interceptor{
 		interruptChannel: 		make(chan os.Signal, 1),
@@ -86,5 +109,5 @@ func InitInterceptor() (Interceptor, error) {
 	}
 	signal.Notify(interceptor.interruptChannel, signalsToCatch...)
 	go interceptor.mainInterruptHandler()
-	return interceptor, nil
+	return &interceptor, nil
 }
