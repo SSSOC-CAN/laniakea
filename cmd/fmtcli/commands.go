@@ -17,6 +17,7 @@ var stopCommand = cli.Command{
 	Action: stopDaemon,
 }
 
+// getContext spins up a go routine to monitor for shutdown requests and returns a context object
 func getContext() context.Context {
 	shutdownInterceptor, err := intercept.InitInterceptor()
 	if err != nil {
@@ -32,10 +33,10 @@ func getContext() context.Context {
 	return ctxc
 }
 
+// stopDaemon is the proxy command between fmtcli and gRPC equivalent. 
 func stopDaemon(ctx *cli.Context) error {
 	ctxc := getContext()
 	client, cleanUp := getClient(ctx) //This command returns the proto generated FmtClient instance
-	// client, cleanUp := getClient(ctx) 
 	defer cleanUp()
 
 	_, err := client.StopDaemon(ctxc, &fmtrpc.StopRequest{})
