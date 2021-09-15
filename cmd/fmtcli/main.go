@@ -34,6 +34,7 @@ func getClientConn(ctx *cli.Context) *grpc.ClientConn {
 	return conn
 }
 
+// main is the entrypoint for fmtcli
 func main() {
 	app := cli.NewApp()
 	app.Name = "fmtcli"

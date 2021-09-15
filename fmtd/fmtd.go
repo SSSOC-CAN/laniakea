@@ -1,5 +1,6 @@
 package fmtd
 
+// main this file may be deleted
 func main() {
 	config := InitConfig()
 	log := InitLogger(&config)
