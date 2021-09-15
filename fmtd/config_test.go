@@ -18,7 +18,10 @@ func TestInitConfigNoYAML(t *testing.T) {
 			t.Errorf("%s", err)
 		}
 	}
-	config := InitConfig()
+	config, err := InitConfig()
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	if config != default_config() {
 		t.Errorf("InitConfig did not produce a default config when config.yaml was not present")
 	}
@@ -48,6 +51,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 		DefaultLogDir: false,
 		LogFileDir: "/home/vagrant/documents",
 		ConsoleOutput: true,
+		GrpcPort: 3567,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -57,13 +61,20 @@ func TestInitConfigFromYAML(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	_, err = config_file.WriteString(fmt.Sprintf("ConsoleOutput: %v", d_config.ConsoleOutput))
+	_, err = config_file.WriteString(fmt.Sprintf("ConsoleOutput: %v\n", d_config.ConsoleOutput))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("GrpcPort: %v", d_config.GrpcPort))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
 	config_file.Sync()
 	config_file.Close()
-	config := InitConfig()
+	config, err := InitConfig()
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	if config != d_config {
 		t.Errorf("InitConfig did not properly read the config file: %v", config)
 	}

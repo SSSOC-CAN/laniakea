@@ -22,7 +22,7 @@ type RpcServer struct {
 	Grpc_server	*grpc.Server
 	cfg *Config
 	quit chan struct{}
-	sublogger *subLogger
+	sublogger *zerolog.Logger
 }
 
 // NewRpcServer creates an instance of the GrpcServer struct
@@ -32,7 +32,7 @@ func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerol
 		Grpc_server: grpc.NewServer(),
 		cfg: config,
 		quit: make(chan struct{}, 1),
-		sublogger: NewSubLogger(log, "RPCS")
+		sublogger: &NewSubLogger(log, "RPCS").SubLogger,
 	}, nil
 }
 
