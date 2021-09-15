@@ -2,7 +2,6 @@ package fmtd
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"github.com/rs/zerolog"
@@ -26,7 +25,7 @@ var log_level = map[string]zerolog.Level{
 }
 
 // InitLogger creates a new instance of the `zerolog.Logger` type. If `console_out` is true, it will output the logs to the console as well as the logfile
-func InitLogger(config *Config) zerolog.Logger {
+func InitLogger(config *Config) (zerolog.Logger, error) {
 	// check to see if log file exists. If not, create one
 	var (
 		log_file 	*os.File
@@ -39,14 +38,14 @@ func InitLogger(config *Config) zerolog.Logger {
 		if config.DefaultLogDir {
 			err = os.Mkdir(config.LogFileDir, 0775)
 			if err != nil {
-				log.Fatal(err)
+				return zerolog.Logger{}, err
 			}
 			log_file, err = os.OpenFile(config.LogFileDir+"/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
 			if err != nil {
-				log.Fatal(err)
+				return zerolog.Logger{}, err
 			}
 		} else {
-			log.Fatal(err)
+			return zerolog.Logger{}, err
 		}
 	}
 	
@@ -80,7 +79,7 @@ func InitLogger(config *Config) zerolog.Logger {
 	} else {
 		logger = zerolog.New(log_file).With().Timestamp().Logger()
 	}
-	return logger
+	return logger, nil
 }
 
 // NewSubLogger takes a `zerolog.Logger` and string for the name of the subsystem and creates a `subLogger` for this subsystem
