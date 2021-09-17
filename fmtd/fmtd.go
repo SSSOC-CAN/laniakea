@@ -3,6 +3,7 @@ package fmtd
 import (
 	"fmt"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"google.golang.org/grpc"
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
@@ -23,7 +24,14 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	server.logger.Info().Msg("RPC Server Initialized")
-	defer rpcServer.Grpc_server.Stop()
+
+	// Creating gRPC server and Server options
+	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, true)
+	grpc_server := grpc.NewServer(grpc_interceptor.CreateGrpcOptions()...)
+	rpcServer.AddGrpcServer(grpc_server)
+	defer rpcServer.GrpcServer.Stop()
+
+	//Starting RPC and gRPC Servers
 	err = rpcServer.Start()
 	if err != nil {
 		server.logger.Fatal().Msg("Could not start RPC server")
