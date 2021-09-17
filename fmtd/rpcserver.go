@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"google.golang.org/grpc"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc"
 )
 
 // RpcServer is a child of the fmtrpc.UnimplementedFmtServer struct. Meant to host all related attributes to the rpcserver
@@ -19,21 +19,25 @@ type RpcServer struct {
 	shutdown int32
 	fmtrpc.UnimplementedFmtServer
 	interceptor *intercept.Interceptor
-	Grpc_server	*grpc.Server
+	GrpcServer	*grpc.Server
 	cfg *Config
 	quit chan struct{}
-	sublogger *zerolog.Logger
+	SubLogger *zerolog.Logger
 }
 
 // NewRpcServer creates an instance of the GrpcServer struct
 func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerolog.Logger) (RpcServer, error) {
 	return RpcServer{
 		interceptor: interceptor,
-		Grpc_server: grpc.NewServer(),
 		cfg: config,
 		quit: make(chan struct{}, 1),
-		sublogger: &NewSubLogger(log, "RPCS").SubLogger,
+		SubLogger: &NewSubLogger(log, "RPCS").SubLogger,
 	}, nil
+}
+
+// AddGrpcServer adds a gRPC server to the attributes of the RpcServer struct
+func (r *RpcServer) AddGrpcServer(server *grpc.Server) {
+	r.GrpcServer = server
 }
 
 // RegisterWithGrpcServer registers the rpcServer with the root gRPC server.
@@ -49,21 +53,22 @@ func (s *RpcServer) Start() (error) {
 	}
 	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(s.cfg.GrpcPort, 10))
 	if err != nil {
-		s.sublogger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", s.cfg.GrpcPort, err))
+		s.SubLogger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", s.cfg.GrpcPort, err))
 		return err
 	}
-	err = s.RegisterWithGrpcServer(s.Grpc_server)
+	err = s.RegisterWithGrpcServer(s.GrpcServer)
 	if err != nil {
-		s.sublogger.Error().Msg(fmt.Sprintf("Couldn't register with gRPC server: %v", err))
+		s.SubLogger.Error().Msg(fmt.Sprintf("Couldn't register with gRPC server: %v", err))
 		return err
 	}
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func(lis *net.Listener) {
 		wg.Done()
-		_ = s.Grpc_server.Serve(listener)
+		_ = s.GrpcServer.Serve(listener)
 	}(&listener)
 	wg.Wait()
+	s.SubLogger.Info().Msg(fmt.Sprintf("gRPC listening on port %v", s.cfg.GrpcPort))
 	return nil
 }
 
