@@ -52,6 +52,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 		LogFileDir: "/home/vagrant/documents",
 		ConsoleOutput: true,
 		GrpcPort: 3567,
+		MacaroonDBDir: default_macaroon_db_file,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -99,6 +100,7 @@ func TestDefaultConfig(t *testing.T) {
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: false,
 		GrpcPort: 7777,
+		MacaroonDBDir: default_macaroon_db_file,
 	}
 	if d_config != default_config() {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())

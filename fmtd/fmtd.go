@@ -2,6 +2,7 @@ package fmtd
 
 import (
 	"fmt"
+	badger "github.com/dgraph-io/badger/v3"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"google.golang.org/grpc"
 )
@@ -16,6 +17,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
 	defer server.Stop()
+
+	// Starting badger kvdb
+	db, err := badger.Open(badger.DefaultOptions(server.cfg.MacaroonDBDir))
+	defer db.Close()
 
 	// Starting RPC server
 	rpcServer, err := NewRpcServer(interceptor, server.cfg, server.logger)
