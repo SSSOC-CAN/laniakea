@@ -7,7 +7,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"google.golang.org/grpc"
 )
-
+//TODO:SSSOCPaulCote - Get the TLS certificate and feed it to grpc connection
 // fatal exits the process and prints out error information
 func fatal(err error) {
 	fmt.Fprintf(os.Stderr, "[fmtcli] %v\n", err)
@@ -27,7 +27,7 @@ func getClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
 func getClientConn(ctx *cli.Context) *grpc.ClientConn {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithInsecure())
-	conn, err := grpc.Dial(":7777", opts...) // TODO:SSSOCPaulCote - Can't have hardcoded port here. Must somehow link config to this method
+	conn, err := grpc.Dial(":3567", opts...) // TODO:SSSOCPaulCote - Can't have hardcoded port here. Must somehow link config to this method
 	if err != nil {
 		fatal(fmt.Errorf("Unable to connect to RPC server: %v", err))
 	}

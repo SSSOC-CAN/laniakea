@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -37,6 +38,9 @@ var (
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	// Starting main server
 	err := server.Start()
 	if err != nil {
@@ -48,7 +52,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Get TLS config
 	server.logger.Info().Msg("Loading TLS configuration...")
-	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, cfg.TLSKeyPath)
+	serverOpts, _, _, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Could not load TLS configuration: %v", err))
 		return err
@@ -81,18 +85,20 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer db.Close()
 
 	// Instantiating Macaroon Service
-	macaroonService, err := macaroons.InitService(db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd")
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Macaroon service: %v", err))
 		return err
 	}
 	defer macaroonService.Close()
-	err = genMacaroons(
-		ctx, macaroonService, server.cfg.AdminMacPath,
-	)
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to create macaroons: %v", err))
-		return err
+	if !cert.FileExists(server.cfg.AdminMacPath) {
+		err = genMacaroons(
+			ctx, macaroonService, server.cfg.AdminMacPath,
+		)
+		if err != nil {
+			server.logger.Error().Msg(fmt.Sprintf("Unable to create macaroons: %v", err))
+			return err
+		}
 	}
 	grpc_interceptor.AddMacaroonService(macaroonService)
 
@@ -109,7 +115,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	return nil
 }
 
-func bakeMacaroons(ctx context.Context, svc *macaroons.Service, permissions []bakery.op) ([]byte, error) {
+func bakeMacaroons(ctx context.Context, svc *macaroons.Service, permissions []bakery.Op) ([]byte, error) {
 	mac, err := svc.NewMacaroon(ctx, macaroons.DefaultRootKeyID, permissions...)
 	if err != nil {
 		return nil, err
@@ -117,7 +123,7 @@ func bakeMacaroons(ctx context.Context, svc *macaroons.Service, permissions []ba
 	return mac.M().MarshalBinary()
 }
 
-func genMacaroons(ctx context.Context, svc *macaroons.Service, adinmFile string) error {
+func genMacaroons(ctx context.Context, svc *macaroons.Service, adminFile string) error {
 	adminBytes, err := bakeMacaroons(ctx, svc, adminPermissions())
 	if err != nil {
 		return err

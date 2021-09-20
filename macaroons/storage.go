@@ -1,6 +1,7 @@
 package macaroons
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"github.com/btcsuite/btcwallet/snacl"
@@ -9,10 +10,15 @@ import (
 
 var (
 	rootKeyBucketName = []byte("macrootkeys")
+	RootKeyIDContextKey = contextKey{"rootkeyid"}
 	DefaultRootKeyID = []byte("0")
 	encryptionKeyID = []byte("enckey")
 	ErrAlreadyUnlocked = fmt.Errorf("Macaroon store already unlocked")
 )
+
+type contextKey struct {
+	Name string
+}
 
 type RootKeyStorage struct{
 	bolt.DB
@@ -22,7 +28,7 @@ type RootKeyStorage struct{
 }
 
 // InitRootKeyStorage initializes the top level bucket within the bbolt db for macaroons
-func InitRootKeyStorage(db *bolt.DB) (*RootKeyStorage, error) {
+func InitRootKeyStorage(db bolt.DB) (*RootKeyStorage, error) {
 	if err := db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists(rootKeyBucketName)
 		return err
@@ -35,6 +41,41 @@ func InitRootKeyStorage(db *bolt.DB) (*RootKeyStorage, error) {
 	}, nil
 }
 
+// Get returns the root key for the given id. If the item is not there, it returns an error
+func (r *RootKeyStorage) Get(_ context.Context, id []byte) ([]byte, error) {
+	var dbKey []byte
+	err := r.DB.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(rootKeyBucketName) // get the rootkey bucket
+		if bucket == nil {
+			return fmt.Errorf("Root key bucket not found")
+		}
+		dbKey = bucket.Get(id) //get the encryption key kv pair
+		return nil
+	})
+	return dbKey, err
+}
+
+// Implements RootKey from the bakery.RootKeyStorage interface
+func (r* RootKeyStorage) RootKey(_ context.Context) ([]byte, []byte, error) {
+	r.encKeyMutex.Lock()
+	defer r.encKeyMutex.Unlock()
+	if r.encKey != nil {
+		return nil, nil, ErrAlreadyUnlocked
+	}
+	id := encryptionKeyID
+	var dbKey []byte
+	err := r.DB.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(rootKeyBucketName) // get the rootkey bucket
+		if bucket == nil {
+			return fmt.Errorf("Root key bucket not found")
+		}
+		dbKey = bucket.Get(encryptionKeyID) //get the encryption key kv pair
+		return nil
+	})
+	return dbKey, id, err
+}
+
+// CreateUnlock sets an encryption key if one isn't already set or checks if the password is correct for the existing encryption key.
 func (r *RootKeyStorage) CreateUnlock(password *[]byte) error {
 	r.encKeyMutex.Lock()
 	defer r.encKeyMutex.Unlock()
