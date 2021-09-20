@@ -4,20 +4,24 @@ import (
 	"context"
 	"fmt"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
 var (
 	macaroonWhitelist = map[string]struct{}{
 		"/fmtrpc.Fmt/StopDaemon":        {},
 	}
+	RootKeyIDContextKey = contextKey{"rootkeyid"}
 )
 
 // GrpcInteceptor struct is a data structure with attributes relevant to creating the gRPC interceptor
 type GrpcInterceptor struct {
 	noMacaroons bool
 	log *zerolog.Logger
+	svc *macaroons.Service
 }
 
 // NewGrpcInterceptor instantiates a new GrpcInterceptor struct
@@ -159,3 +163,9 @@ func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInt
 		return handler(srv, ss)
 	}
 }
+
+// Adds the macaroon service provided to GrpcInterceptor struct attributes
+func (i *GrpcInteceptor) AddMacaroonService(service *macaroons.Service) {
+	i.svc = service
+}
+
