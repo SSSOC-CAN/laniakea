@@ -47,7 +47,7 @@ var (
 			MacaroonDBPath: default_macaroon_db_file,
 			TLSCertPath: default_tls_cert_path,
 			TLSKeyPath: default_tls_key_path,
-			AdminMacPath: default_admin_macaroon_path
+			AdminMacPath: default_admin_macaroon_path,
 		}
 	}
 )
@@ -70,6 +70,9 @@ func InitConfig() (Config, error) {
 		config = check_yaml_config(config)
 	}
 	config.MacaroonDBPath = default_macaroon_db_file
+	config.TLSCertPath = default_tls_cert_path
+	config.TLSKeyPath = default_tls_key_path
+	config.AdminMacPath = default_admin_macaroon_path
 	return config, nil
 }
 

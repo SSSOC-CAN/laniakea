@@ -14,13 +14,13 @@ var (
 	macaroonWhitelist = map[string]struct{}{
 		"/fmtrpc.Fmt/StopDaemon":        {},
 	}
-	RootKeyIDContextKey = contextKey{"rootkeyid"}
 )
 
 // GrpcInteceptor struct is a data structure with attributes relevant to creating the gRPC interceptor
 type GrpcInterceptor struct {
 	noMacaroons bool
 	log *zerolog.Logger
+	permissionMap map[string][]bakery.Op
 	svc *macaroons.Service
 }
 
@@ -28,6 +28,7 @@ type GrpcInterceptor struct {
 func NewGrpcInterceptor(log *zerolog.Logger, noMacaroons bool) *GrpcInterceptor {
 	return &GrpcInterceptor{
 		noMacaroons: noMacaroons,
+		permissionMap: make(map[string][]bakery.Op),
 		log: log,
 	}
 }
@@ -61,6 +62,26 @@ func (i *GrpcInterceptor) CreateGrpcOptions() []grpc.ServerOption {
 	return serverOpts
 }
 
+// AddPermission adds a new macaroon rule for the given method
+func (i *GrpcInterceptor) AddPermission(method string, ops []bakery.Op) error {
+	if _, ok := i.permissionMap[method]; ok {
+		return fmt.Errorf("Detected duplicate macaroon constraints for path: %v", method)
+	}
+	i.permissionMap[method] = ops
+	return nil
+}
+
+// Permissions returns the current set of macaroon permissions
+func (i *GrpcInterceptor) Permissions() map[string][]bakery.Op {
+	c := make(map[string][]bakery.Op)
+	for k, v := range i.permissionMap {
+		s := make([]bakery.Op, len(v))
+		copy(s, v)
+		c[k] = s
+	}
+	return c
+}
+
 // checkMacaroon validates that the context contains the macaroon needed to
 // invoke the given RPC method.
 func (i *GrpcInterceptor) checkMacaroon(ctx context.Context,
@@ -73,39 +94,38 @@ func (i *GrpcInterceptor) checkMacaroon(ctx context.Context,
 
 	// Check whether the method is whitelisted, if so we'll allow it
 	// regardless of macaroons.
-	// _, ok := macaroonWhitelist[fullMethod]
-	// if ok {
-	// 	return nil
-	// }
+	_, ok := macaroonWhitelist[fullMethod]
+	if ok {
+		return nil
+	}
 
 	// r.RLock()
-	// svc := r.svc
+	svc := i.svc
 	// r.RUnlock()
 
-	// // If the macaroon service is not yet active, we cannot allow
-	// // the call.
-	// if svc == nil {
-	// 	return fmt.Errorf("unable to determine macaroon permissions")
-	// }
+	// If the macaroon service is not yet active, we cannot allow
+	// the call.
+	if svc == nil {
+		return fmt.Errorf("unable to determine macaroon permissions")
+	}
 
 	// r.RLock()
-	// uriPermissions, ok := r.permissionMap[fullMethod]
+	uriPermissions, ok := i.permissionMap[fullMethod]
 	// r.RUnlock()
-	// if !ok {
-	// 	return fmt.Errorf("%s: unknown permissions required for method",
-	// 		fullMethod)
-	// }
+	if !ok {
+		return fmt.Errorf("%s: unknown permissions required for method",
+			fullMethod)
+	}
 
-	// // Find out if there is an external validator registered for
-	// // this method. Fall back to the internal one if there isn't.
-	// validator, ok := svc.ExternalValidators[fullMethod]
-	// if !ok {
-	// 	validator = svc
-	// }
+	// Find out if there is an external validator registered for
+	// this method. Fall back to the internal one if there isn't.
+	validator, ok := svc.ExternalValidators[fullMethod]
+	if !ok {
+		validator = svc
+	}
 
-	// // Now that we know what validator to use, let it do its work.
-	// return validator.ValidateMacaroon(ctx, uriPermissions, fullMethod)
-	return nil
+	// Now that we know what validator to use, let it do its work.
+	return validator.ValidateMacaroon(ctx, uriPermissions, fullMethod)
 }
 
 // logUnaryServerInterceptor is a simple UnaryServerInterceptor that will
@@ -165,7 +185,7 @@ func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInt
 }
 
 // Adds the macaroon service provided to GrpcInterceptor struct attributes
-func (i *GrpcInteceptor) AddMacaroonService(service *macaroons.Service) {
+func (i *GrpcInterceptor) AddMacaroonService(service *macaroons.Service) {
 	i.svc = service
 }
 
