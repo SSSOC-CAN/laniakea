@@ -16,7 +16,10 @@ type Config struct {
 	LogFileDir 		string	`yaml:"LogFileDir"`
 	ConsoleOutput	bool	`yaml:"ConsoleOutput"`
 	GrpcPort		int64	`yaml:"GrpcPort"`
-	MacaroonDBDir	string
+	MacaroonDBPath	string
+	TLSCertPath		string
+	TLSKeyPath		string
+	AdminMacPath	string
 }
 
 // default_config returns the default configuration
@@ -31,14 +34,20 @@ var (
 		}
 		return home_dir+"/.fmtd"
 	}
-	default_macaroon_db_file string = default_log_dir()+"/macaroon"
+	default_macaroon_db_file string = default_log_dir()+"/macaroon.db"
+	default_tls_cert_path string = default_log_dir()+"/tls.cert"
+	default_tls_key_path string = default_log_dir()+"/tls.key"
+	default_admin_macaroon_path string = default_log_dir()+"/admin.macaroon"
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
 			ConsoleOutput: false,
 			GrpcPort: default_grpc_port,
-			MacaroonDBDir: default_macaroon_db_file,
+			MacaroonDBPath: default_macaroon_db_file,
+			TLSCertPath: default_tls_cert_path,
+			TLSKeyPath: default_tls_key_path,
+			AdminMacPath: default_admin_macaroon_path
 		}
 	}
 )
@@ -60,7 +69,7 @@ func InitConfig() (Config, error) {
 		// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
 		config = check_yaml_config(config)
 	}
-	config.MacaroonDBDir = default_macaroon_db_file
+	config.MacaroonDBPath = default_macaroon_db_file
 	return config, nil
 }
 

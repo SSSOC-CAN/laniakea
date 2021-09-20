@@ -8,6 +8,27 @@ import (
 	color "github.com/mgutz/ansi"
 )
 
+// a wrapper for zerolog.Logger type in order to have zerolog.Logger be interfaceable with badger.Logger
+type kvdbLogger struct {
+	zerolog.Logger
+}
+
+func (l *kvdbLogger) Errorf(format string, v ...interface{}) {
+	l.Error().Msgf(format, v)
+}
+
+func (l *kvdbLogger) Warningf(format string, v ...interface{}) {
+	l.Warn().Msgf(format, v)
+}
+
+func (l *kvdbLogger) Infof(format string, v ...interface{}) {
+	l.Info().Msgf(format, v)
+}
+
+func (l *kvdbLogger) Debugf(format string, v ...interface{}) {
+	l.Debug().Msgf(format, v)
+}
+
 // subLogger is a thin-wrapper for the `zerolog.Logger` struct
 type subLogger struct {
 	SubLogger zerolog.Logger
