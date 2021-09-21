@@ -15,6 +15,7 @@ const (
 
 type getPasswordFunc func(prompt string) ([]byte, error)
 
+// decryptMacaroon will take a password and derive the priv key using the provided password to then decrypt the macaroon 
 func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 	keyData, err := base64.StdEncoding.DecodeString(keyBase64)
 	if err != nil {
@@ -40,6 +41,7 @@ func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 	return macBytes, nil
 }
 
+// loadMacaroon takes a password prompting function and hex encoded macaroon and returns an instantiated macaroon object
 func loadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon, error) {
 	if len(strings.TrimSpace(macHex)) == 0 {
 		return nil, fmt.Errorf("macaroon data is empty")

@@ -93,6 +93,7 @@ func main() {
 	}
 }
 
+// readPassword prompts the user for a password in the command line
 func readPassword(text string) ([]byte, error) {
 	fmt.Print(text)
 	pw, err := terminal.ReadPassword(int(syscall.Stdin))

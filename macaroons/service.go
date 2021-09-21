@@ -39,36 +39,11 @@ func InitService(db bolt.DB, location string) (*Service, error) {
 		Key: nil,
 	}
 	service := bakery.New(bakeryParams)
-	// checker := service.Checker.FirstPartyCaveatChecker.(*checkers.Checker)
-	// for _, check := range checks {
-	// 	cond, fun := check()
-	// 	if !isRegistered(checker, cond) {
-	// 		checker.Register(cond, "std", fun)
-	// 	}
-	// }
 	return &Service{
 		Bakery: *service,
 		rks: rks,
 		ExternalValidators: make(map[string]MacaroonValidator),
 	}, nil
-}
-
-// isRegistered checks to see if the required checker has already been
-// registered in order to avoid a panic caused by double registration.
-func isRegistered(c *checkers.Checker, name string) bool {
-	if c == nil {
-		return false
-	}
-
-	for _, info := range c.Info() {
-		if info.Name == name &&
-			info.Prefix == "" &&
-			info.Namespace == "std" {
-			return true
-		}
-	}
-
-	return false
 }
 
 // RegisterExternalValidator registers a custom, external macaroon validator for
