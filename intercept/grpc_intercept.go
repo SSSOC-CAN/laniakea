@@ -11,8 +11,9 @@ import (
 )
 
 var (
+	// List of commands that don't need macaroons
 	macaroonWhitelist = map[string]struct{}{
-		"/fmtrpc.Fmt/StopDaemon":        {},
+		"/fmtrpc.Fmt/TestCommand":        {},
 	}
 )
 
@@ -62,6 +63,16 @@ func (i *GrpcInterceptor) CreateGrpcOptions() []grpc.ServerOption {
 	return serverOpts
 }
 
+func (i *GrpcInterceptor) AddPermissions(perms map[string][]bakery.Op) error {
+	for m, ops := range perms {
+		err := i.AddPermission(m, ops)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // AddPermission adds a new macaroon rule for the given method
 func (i *GrpcInterceptor) AddPermission(method string, ops []bakery.Op) error {
 	if _, ok := i.permissionMap[method]; ok {
@@ -98,20 +109,15 @@ func (i *GrpcInterceptor) checkMacaroon(ctx context.Context,
 	if ok {
 		return nil
 	}
-
-	// r.RLock()
 	svc := i.svc
-	// r.RUnlock()
 
 	// If the macaroon service is not yet active, we cannot allow
 	// the call.
 	if svc == nil {
-		return fmt.Errorf("unable to determine macaroon permissions")
+		return fmt.Errorf("Unable to determine macaroon permissions")
 	}
 
-	// r.RLock()
 	uriPermissions, ok := i.permissionMap[fullMethod]
-	// r.RUnlock()
 	if !ok {
 		return fmt.Errorf("%s: unknown permissions required for method",
 			fullMethod)
@@ -189,3 +195,16 @@ func (i *GrpcInterceptor) AddMacaroonService(service *macaroons.Service) {
 	i.svc = service
 }
 
+// MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
+func MainGrpcServerPermissions() map[string][]bakery.Op {
+	return map[string][]bakery.Op{
+		"/fmtrpc.Fmt/StopDaemon": {{
+			Entity: "fmtd",
+			Action:	"write",
+		}},
+		"/fmtrpc.Fmt/AdminTest": {{
+			Entity: "fmtd",
+			Action: "read",
+		}},
+	}
+}

@@ -86,3 +86,13 @@ func (s *RpcServer) StopDaemon(_ context.Context, _*fmtrpc.StopRequest) (*fmtrpc
 	s.interceptor.RequestShutdown()
 	return &fmtrpc.StopResponse{}, nil
 }
+
+// AdminTest will return a string only if the client has the admin macaroon
+func (s *RpcServer) AdminTest(_ context.Context, _*fmtrpc.AdminTestRequest) (*fmtrpc.AdminTestResponse, error) {
+	return &fmtrpc.AdminTestResponse{Msg: "This is an admin test"}, nil
+}
+
+// TestCommand will return a string for any macaroon
+func (s *RpcServer) TestCommand(_ context.Context, _*fmtrpc.TestRequest) (*fmtrpc.TestResponse, error) {
+	return &fmtrpc.TestResponse{Msg: "This is a regular test"}, nil
+}

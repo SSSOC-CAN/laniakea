@@ -30,9 +30,14 @@ func AddConstraints(mac *macaroon.Macaroon, cs ...Constraint) (*macaroon.Macaroo
 // to the amount of seconds given.
 func TimeoutConstraint(seconds int64) func(*macaroon.Macaroon) error {
 	return func(mac *macaroon.Macaroon) error {
-		macaroonTimeout := time.Duration(seconds)
-		requestTimeout := time.Now().Add(time.Second * macaroonTimeout)
-		caveat := checkers.TimeBeforeCaveat(requestTimeout)
+		caveat := TimeoutCaveat(seconds)
 		return mac.AddFirstPartyCaveat([]byte(caveat.Condition))
 	}
+}
+
+// TimeoutCaveat is a wrapper function which returns a checkers.Caveat struct
+func TimeoutCaveat(seconds int64) checkers.Caveat {
+	macaroonTimeout := time.Duration(seconds)
+	requestTimeout := time.Now().Add(time.Second * macaroonTimeout)
+	return checkers.TimeBeforeCaveat(requestTimeout)
 }

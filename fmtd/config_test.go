@@ -56,6 +56,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 		TLSCertPath: default_tls_cert_path,
 		TLSKeyPath: default_tls_key_path,
 		AdminMacPath: default_admin_macaroon_path,
+		TestMacPath: test_macaroon_path,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -107,6 +108,7 @@ func TestDefaultConfig(t *testing.T) {
 		TLSCertPath: default_tls_cert_path,
 		TLSKeyPath: default_tls_key_path,
 		AdminMacPath: default_admin_macaroon_path,
+		TestMacPath: test_macaroon_path,
 	}
 	if d_config != default_config() {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())

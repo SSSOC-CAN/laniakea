@@ -42,6 +42,7 @@ func getClientConn(ctx *cli.Context) *grpc.ClientConn {
 	if err != nil {
 		fatal(fmt.Errorf("Could not load config: %v", err))
 	}
+	//get TLS credentials from TLS certificate file
 	creds, err := credentials.NewClientTLSFromFile(config.TLSCertPath, "")
 	if err != nil {
 		fatal(err)
@@ -49,6 +50,7 @@ func getClientConn(ctx *cli.Context) *grpc.ClientConn {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 	}
+	// grab Macaroon data and load it into macaroon.Macaroon struct
 	adminMac, err := os.ReadFile(config.AdminMacPath)
 	if err != nil {
 		fatal(fmt.Errorf("Could not read macaroon at %v: %v", config.AdminMacPath, err))
@@ -58,8 +60,9 @@ func getClientConn(ctx *cli.Context) *grpc.ClientConn {
 	if err != nil {
 		fatal(fmt.Errorf("Could not load macaroon; %v", err))
 	}
+	// Add constraints to our macaroon
 	macConstraints := []macaroons.Constraint{
-		macaroons.TimeoutConstraint(defaultMacaroonTimeout),
+		macaroons.TimeoutConstraint(defaultMacaroonTimeout), // prevent a replay attack
 	}
 	constrainedMac, err := macaroons.AddConstraints(mac, macConstraints...)
 	if err != nil {
