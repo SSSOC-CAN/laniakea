@@ -8,6 +8,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -91,7 +92,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer macaroonService.Close()
-	if !cert.FileExists(server.cfg.AdminMacPath) {
+	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err = genMacaroons(
 			ctx, macaroonService, server.cfg.AdminMacPath,
 		)
