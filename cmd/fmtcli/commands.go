@@ -27,6 +27,7 @@ func getContext() context.Context {
 	return ctxc
 }
 
+// printRespJSON will convert a proto response as a string and print it
 func printRespJSON(resp proto.Message) {
 	jsonMarshaler := &protojson.MarshalOptions{
 		Multiline: true,
