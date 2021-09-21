@@ -11,9 +11,21 @@ service Fmt {
     a graceful shutdown of the daemon.
     */
     rpc StopDaemon (StopRequest) returns (StopResponse);
+    rpc AdminTest (AdminTestRequest) returns (AdminTestResponse);
+    rpc TestCommand (TestRequest) returns (TestResponse);
 }
 
 message StopRequest {
 }
 message StopResponse {
+}
+message AdminTestRequest {
+}
+message AdminTestResponse {
+    string msg = 1;
+}
+message TestRequest {
+}
+message TestResponse {
+    string msg = 1;
 }

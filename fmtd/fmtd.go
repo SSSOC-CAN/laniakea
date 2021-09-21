@@ -12,10 +12,15 @@ import (
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
+	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 )
 
 var (
 	readPermissions = []bakery.Op{
+		{
+			Entity: "fmtd",
+			Action: "read",
+		},
 		{
 			Entity: "macaroon",
 			Action: "read",
@@ -71,6 +76,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Creating gRPC server and Server options
 	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, false)
+	err = grpc_interceptor.AddPermissions(intercept.MainGrpcServerPermissions())
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
 	serverOpts = append(serverOpts, rpcServerOpts...)
 	grpc_server := grpc.NewServer(serverOpts...)
@@ -92,13 +98,23 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer macaroonService.Close()
+
+	// Baking Macaroons
 	if !utils.FileExists(server.cfg.AdminMacPath) {
-		err = genMacaroons(
-			ctx, macaroonService, server.cfg.AdminMacPath,
+		err := genMacaroons(
+			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), false, 0,
 		)
 		if err != nil {
-			server.logger.Error().Msg(fmt.Sprintf("Unable to create macaroons: %v", err))
+			server.logger.Error().Msg(fmt.Sprintf("Unable to create admin macaroon: %v", err))
 			return err
+		}
+	}
+	if !utils.FileExists(server.cfg.TestMacPath) {
+		err := genMacaroons(
+			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, true, 120,
+		)
+		if err != nil {
+			server.logger.Error().Msg(fmt.Sprintf("Unable to create test macaroon: %v", err))
 		}
 	}
 	grpc_interceptor.AddMacaroonService(macaroonService)
@@ -116,27 +132,36 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	return nil
 }
 
-func bakeMacaroons(ctx context.Context, svc *macaroons.Service, permissions []bakery.Op) ([]byte, error) {
-	mac, err := svc.NewMacaroon(ctx, macaroons.DefaultRootKeyID, permissions...)
+// bakeMacaroons is a wrapper function around the NewMacaroon method of the macaroons.Service struct
+func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, noTimeOutCaveat bool, seconds int64) ([]byte, error) {
+	mac, err := svc.NewMacaroon(
+		ctx,
+		macaroons.DefaultRootKeyID,
+		noTimeOutCaveat,
+		[]checkers.Caveat{macaroons.TimeoutCaveat(seconds)},
+		perms...,
+	)
 	if err != nil {
 		return nil, err
 	}
 	return mac.M().MarshalBinary()
 }
 
-func genMacaroons(ctx context.Context, svc *macaroons.Service, adminFile string) error {
-	adminBytes, err := bakeMacaroons(ctx, svc, adminPermissions())
+// genMacaroons will create the macaroon files specified if not already created
+func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, noTimeOutCaveat bool, seconds int64) error {
+	macBytes, err := bakeMacaroons(ctx, svc, perms, noTimeOutCaveat, seconds)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(adminFile, adminBytes, 0755)
+	err = ioutil.WriteFile(macFile, macBytes, 0755)
 	if err != nil {
-		_ = os.Remove(adminFile)
+		_ = os.Remove(macFile)
 		return err
 	}
 	return nil
 }
 
+// adminPermissions returns the permissions associated with the admin macaroon
 func adminPermissions() []bakery.Op {
 	admin := make([]bakery.Op, len(readPermissions)+len(writePermissions))
 	copy(admin[:len(readPermissions)], readPermissions)

@@ -20,6 +20,7 @@ type Config struct {
 	TLSCertPath		string
 	TLSKeyPath		string
 	AdminMacPath	string
+	TestMacPath		string
 }
 
 // default_config returns the default configuration
@@ -38,6 +39,7 @@ var (
 	default_tls_cert_path string = default_log_dir()+"/tls.cert"
 	default_tls_key_path string = default_log_dir()+"/tls.key"
 	default_admin_macaroon_path string = default_log_dir()+"/admin.macaroon"
+	test_macaroon_path string = default_log_dir()+"/test.macaroon"
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
@@ -48,6 +50,7 @@ var (
 			TLSCertPath: default_tls_cert_path,
 			TLSKeyPath: default_tls_key_path,
 			AdminMacPath: default_admin_macaroon_path,
+			TestMacPath: test_macaroon_path,
 		}
 	}
 )
@@ -73,6 +76,7 @@ func InitConfig() (Config, error) {
 	config.TLSCertPath = default_tls_cert_path
 	config.TLSKeyPath = default_tls_key_path
 	config.AdminMacPath = default_admin_macaroon_path
+	config.TestMacPath = test_macaroon_path
 	return config, nil
 }
 

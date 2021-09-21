@@ -22,6 +22,8 @@ type FmtClient interface {
 	//StopDaemon will send a shutdown request to the interrupt handler, triggering
 	//a graceful shutdown of the daemon.
 	StopDaemon(ctx context.Context, in *StopRequest, opts ...grpc.CallOption) (*StopResponse, error)
+	AdminTest(ctx context.Context, in *AdminTestRequest, opts ...grpc.CallOption) (*AdminTestResponse, error)
+	TestCommand(ctx context.Context, in *TestRequest, opts ...grpc.CallOption) (*TestResponse, error)
 }
 
 type fmtClient struct {
@@ -41,6 +43,24 @@ func (c *fmtClient) StopDaemon(ctx context.Context, in *StopRequest, opts ...grp
 	return out, nil
 }
 
+func (c *fmtClient) AdminTest(ctx context.Context, in *AdminTestRequest, opts ...grpc.CallOption) (*AdminTestResponse, error) {
+	out := new(AdminTestResponse)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/AdminTest", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) TestCommand(ctx context.Context, in *TestRequest, opts ...grpc.CallOption) (*TestResponse, error) {
+	out := new(TestResponse)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/TestCommand", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FmtServer is the server API for Fmt service.
 // All implementations must embed UnimplementedFmtServer
 // for forward compatibility
@@ -49,6 +69,8 @@ type FmtServer interface {
 	//StopDaemon will send a shutdown request to the interrupt handler, triggering
 	//a graceful shutdown of the daemon.
 	StopDaemon(context.Context, *StopRequest) (*StopResponse, error)
+	AdminTest(context.Context, *AdminTestRequest) (*AdminTestResponse, error)
+	TestCommand(context.Context, *TestRequest) (*TestResponse, error)
 	mustEmbedUnimplementedFmtServer()
 }
 
@@ -58,6 +80,12 @@ type UnimplementedFmtServer struct {
 
 func (UnimplementedFmtServer) StopDaemon(context.Context, *StopRequest) (*StopResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopDaemon not implemented")
+}
+func (UnimplementedFmtServer) AdminTest(context.Context, *AdminTestRequest) (*AdminTestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AdminTest not implemented")
+}
+func (UnimplementedFmtServer) TestCommand(context.Context, *TestRequest) (*TestResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TestCommand not implemented")
 }
 func (UnimplementedFmtServer) mustEmbedUnimplementedFmtServer() {}
 
@@ -90,6 +118,42 @@ func _Fmt_StopDaemon_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Fmt_AdminTest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AdminTestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).AdminTest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/AdminTest",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).AdminTest(ctx, req.(*AdminTestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_TestCommand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).TestCommand(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/TestCommand",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).TestCommand(ctx, req.(*TestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Fmt_ServiceDesc is the grpc.ServiceDesc for Fmt service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +164,14 @@ var Fmt_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopDaemon",
 			Handler:    _Fmt_StopDaemon_Handler,
+		},
+		{
+			MethodName: "AdminTest",
+			Handler:    _Fmt_AdminTest_Handler,
+		},
+		{
+			MethodName: "TestCommand",
+			Handler:    _Fmt_TestCommand_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
