@@ -1,3 +1,24 @@
+/*
+Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
 package macaroons
 
 import (
@@ -51,16 +72,34 @@ func InitRootKeyStorage(db bolt.DB) (*RootKeyStorage, error) {
 
 // Get returns the root key for the given id. If the item is not there, it returns an error
 func (r *RootKeyStorage) Get(_ context.Context, id []byte) ([]byte, error) {
-	var dbKey []byte
-	err := r.DB.Update(func(tx *bolt.Tx) error {
+	r.encKeyMutex.RLock()
+	defer r.encKeyMutex.RUnlock()
+	if r.encKey == nil {
+		return nil, ErrStoreLocked
+	}
+	var rootKey []byte
+	err := r.DB.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(rootKeyBucketName) // get the rootkey bucket
 		if bucket == nil {
 			return fmt.Errorf("Root key bucket not found")
 		}
-		dbKey = bucket.Get(id) //get the encryption key kv pair
+		dbKey := bucket.Get(id) //get the encryption key kv pair
+		if len(dbKey) == 0 {
+			return fmt.Errorf("Root key with id %s doesn't exist", string(id))
+		}
+		decKey, err := r.encKey.Decrypt(dbKey)
+		if err != nil {
+			return err
+		}
+		rootKey = make([]byte, len(decKey))
+		copy(rootKey[:], decKey)
 		return nil
 	})
-	return dbKey, err
+	if err != nil {
+		rootKey = nil
+		return nil, err
+	}
+	return rootKey, nil
 }
 
 // RootKeyIDFromContext retrieves the root key ID from context using the key

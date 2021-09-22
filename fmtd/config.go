@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
 	"reflect"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -29,11 +29,12 @@ type Config struct {
 var (
 	default_grpc_port int64 = 7777
 	default_log_dir = func() string {
-		home_dir, err := os.UserHomeDir() // this should be OS agnostic
-		if err != nil {
-			log.Fatal(err)
-		}
-		return home_dir+"/.fmtd"
+		// home_dir, err := os.UserHomeDir() // this should be OS agnostic
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		// return home_dir+"/.fmtd"
+		return utils.AppDataDir("fmtd", false)
 	}
 	default_macaroon_db_file string = default_log_dir()+"/macaroon.db"
 	default_tls_cert_path string = default_log_dir()+"/tls.cert"
