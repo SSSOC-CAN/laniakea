@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 )
@@ -23,6 +24,7 @@ type RpcServer struct {
 	cfg *Config
 	quit chan struct{}
 	SubLogger *zerolog.Logger
+	unlockService *unlocker.UnlockerService
 }
 
 // NewRpcServer creates an instance of the GrpcServer struct
@@ -38,6 +40,10 @@ func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerol
 // AddGrpcServer adds a gRPC server to the attributes of the RpcServer struct
 func (r *RpcServer) AddGrpcServer(server *grpc.Server) {
 	r.GrpcServer = server
+}
+
+func (r *RpcServer) AddUnlockerService(s *unlocker.UnlockerService) {
+	r.unlockService = s
 }
 
 // RegisterWithGrpcServer registers the rpcServer with the root gRPC server.

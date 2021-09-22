@@ -29,15 +29,24 @@ func fatal(err error) {
 
 // getClient returns the FmtClient instance from the fmtrpc package as well as a cleanup function
 func getClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
-	conn := getClientConn(ctx)
+	conn := getClientConn(ctx, false)
 	cleanUp := func() {
 		conn.Close()
 	}
 	return fmtrpc.NewFmtClient(conn), cleanUp
 }
 
+//getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
+func getUnlockerClient(ctx *cli.Context) (fmtrpc.UnlockerClient, func()) {
+	conn := getClientConn(ctx, true)
+	cleanUp := func() {
+		conn.Close()
+	}
+	return fmtrpc.NewUnlockerClient(conn), cleanUp
+}
+
 // getClientConn returns the grpc Client connection for use in instantiating FmtClient
-func getClientConn(ctx *cli.Context) *grpc.ClientConn {
+func getClientConn(ctx *cli.Context, skipMacaroons bool) *grpc.ClientConn {
 	config, err := fmtd.InitConfig()
 	if err != nil {
 		fatal(fmt.Errorf("Could not load config: %v", err))
@@ -50,26 +59,28 @@ func getClientConn(ctx *cli.Context) *grpc.ClientConn {
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 	}
-	// grab Macaroon data and load it into macaroon.Macaroon struct
-	adminMac, err := os.ReadFile(config.AdminMacPath)
-	if err != nil {
-		fatal(fmt.Errorf("Could not read macaroon at %v: %v", config.AdminMacPath, err))
+	if !skipMacaroons {
+		// grab Macaroon data and load it into macaroon.Macaroon struct
+		adminMac, err := os.ReadFile(config.AdminMacPath)
+		if err != nil {
+			fatal(fmt.Errorf("Could not read macaroon at %v: %v", config.AdminMacPath, err))
+		}
+		macHex := hex.EncodeToString(adminMac)
+		mac, err := loadMacaroon(readPassword, macHex)
+		if err != nil {
+			fatal(fmt.Errorf("Could not load macaroon; %v", err))
+		}
+		// Add constraints to our macaroon
+		macConstraints := []macaroons.Constraint{
+			macaroons.TimeoutConstraint(defaultMacaroonTimeout), // prevent a replay attack
+		}
+		constrainedMac, err := macaroons.AddConstraints(mac, macConstraints...)
+		if err != nil {
+			fatal(err)
+		}
+		cred := macaroons.NewMacaroonCredential(constrainedMac)
+		opts = append(opts, grpc.WithPerRPCCredentials(cred))
 	}
-	macHex := hex.EncodeToString(adminMac)
-	mac, err := loadMacaroon(readPassword, macHex)
-	if err != nil {
-		fatal(fmt.Errorf("Could not load macaroon; %v", err))
-	}
-	// Add constraints to our macaroon
-	macConstraints := []macaroons.Constraint{
-		macaroons.TimeoutConstraint(defaultMacaroonTimeout), // prevent a replay attack
-	}
-	constrainedMac, err := macaroons.AddConstraints(mac, macConstraints...)
-	if err != nil {
-		fatal(err)
-	}
-	cred := macaroons.NewMacaroonCredential(constrainedMac)
-	opts = append(opts, grpc.WithPerRPCCredentials(cred))
 	genericDialer := utils.ClientAddressDialer(strconv.FormatInt(config.GrpcPort, 10))
 	opts = append(opts, grpc.WithContextDialer(genericDialer))
 	opts = append(opts, grpc.WithDefaultCallOptions(maxMsgRecvSize))
@@ -87,6 +98,9 @@ func main() {
 	app.Usage = "Control panel for the Facility Management Tool Daemon (fmtd)"
 	app.Commands = []cli.Command{
 		stopCommand,
+		adminTestCommand,
+		testCommand,
+		loginCommand,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)
