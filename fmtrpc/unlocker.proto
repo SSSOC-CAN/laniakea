@@ -5,8 +5,8 @@ package fmtrpc;
 option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 service Unlocker{
-    /*
-    Login is used when fmtd is first booted.
+    /* fmtcli: `Login`
+    Login will prompt the user to provide a password and send the response to the unlocker service for authentication.
     */
     rpc Login (LoginRequest) returns (LoginResponse);
 }

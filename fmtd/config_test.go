@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 // TestInitConfigNoYAML ensures that if no .yaml is found, a default config is produced
 func TestInitConfigNoYAML(t *testing.T) {
-	home_dir, err := os.UserHomeDir() // this should be OS agnostic
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	if _, err = os.Stat(home_dir+"/.fmtd/config.yaml"); err == nil {
-		err = os.Remove(home_dir+"/.fmtd/config.yaml")
+	home_dir := utils.AppDataDir("fmtd", false)
+	if _, err := os.Stat(home_dir+"/config.yaml"); err == nil {
+		err = os.Remove(home_dir+"/config.yaml")
 		if err != nil {
 			t.Errorf("%s", err)
 		}
@@ -30,18 +28,15 @@ func TestInitConfigNoYAML(t *testing.T) {
 // TestInitConfigFromYAML ensures that a InitConfig properly reads config files
 func TestInitConfigFromYAML(t *testing.T) {
 	// first check if config.yaml exists
-	home_dir, err := os.UserHomeDir() // this should be OS agnostic
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	config_file, err := os.OpenFile(home_dir+"/.fmtd/config.yaml", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
+	home_dir := utils.AppDataDir("fmtd", false)
+	config_file, err := os.OpenFile(home_dir+"/config.yaml", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
 	if err != nil {
 		// might have to create the .fmtd directory and try again
-		err = os.Mkdir(home_dir+"/.fmtd", 0775)
+		err = os.Mkdir(home_dir, 0775)
 		if err != nil {
 			t.Errorf("%s", err)
 		}
-		config_file, err = os.OpenFile(home_dir+"/.fmtd/config.yaml", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
+		config_file, err = os.OpenFile(home_dir+"/config.yaml", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
 		if err != nil {
 			t.Errorf("%s", err)
 		}
@@ -87,11 +82,8 @@ func TestInitConfigFromYAML(t *testing.T) {
 
 // TestDefaultLogDir tests that default_log_dir returns the expected default log directory
 func TestDefaultLogDir(t *testing.T) {
-	home_dir, err := os.UserHomeDir() // this should be OS agnostic
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	log_dir := home_dir+"/.fmtd"
+	home_dir := utils.AppDataDir("fmtd", false)
+	log_dir := home_dir
 	if log_dir != default_log_dir() {
 		t.Errorf("default_log_dir not returning expected directory. Expected: %s\tReceived: %s", log_dir, default_log_dir())
 	}
