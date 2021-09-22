@@ -72,11 +72,6 @@ func InitConfig() (Config, error) {
 		// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
 		config = check_yaml_config(config)
 	}
-	config.MacaroonDBPath = default_macaroon_db_file
-	config.TLSCertPath = default_tls_cert_path
-	config.TLSKeyPath = default_tls_key_path
-	config.AdminMacPath = default_admin_macaroon_path
-	config.TestMacPath = test_macaroon_path
 	return config, nil
 }
 
@@ -127,6 +122,30 @@ func check_yaml_config(config Config) Config {
 		case "GrpcPort":
 			if f.Int() == 0 { // This may end up being a range of values
 				change_field(f, default_grpc_port)
+			}
+		case "MacaroonDBPath":
+			if f.String() == "" {
+				change_field(f, default_macaroon_db_file)
+			}
+		case "TLSCertPath":
+			if f.String() == "" {
+				change_field(f, default_tls_cert_path)
+				tls_key := v.FieldByName("TLSKeyPath")
+				change_field(tls_key, default_tls_key_path)
+			}
+		case "TLSKeyPath":
+			if f.String() == "" {
+				change_field(f, default_tls_key_path)
+				tls_cert := v.FieldByName("TLSCertPath")
+				change_field(tls_cert, default_tls_cert_path)
+			}
+		case "AdminMacPath":
+			if f.String() == "" {
+				change_field(f, default_admin_macaroon_path)
+			}
+		case "TestMacPath":
+			if f.String() == "" {
+				change_field(f, test_macaroon_path)
 			}
 		}
 	}

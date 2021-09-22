@@ -13,6 +13,7 @@ import (
 
 var (
 	PermissionEntityCustomURI = "uri"
+	ErrMissingRootKeyID = fmt.Errorf("Missing root key ID")
 )
 
 type MacaroonValidator interface {
@@ -27,7 +28,7 @@ type Service struct {
 }
 
 // InitService returns initializes the rootkeystorage for the Macaroon service and returns the initialized service
-func InitService(db bolt.DB, location string) (*Service, error) {
+func InitService(db bolt.DB, location string, checks ...Checker) (*Service, error) {
 	rks, err := InitRootKeyStorage(db)
 	if err != nil {
 		return nil, err
@@ -44,6 +45,19 @@ func InitService(db bolt.DB, location string) (*Service, error) {
 		rks: rks,
 		ExternalValidators: make(map[string]MacaroonValidator),
 	}, nil
+}
+
+// isRegistered checks to see if the required checker has already been registered to avoid duplicates
+func isRegistered(c *checkers.Checker, name string) bool {
+	if c == nil {
+		return false
+	}
+	for _, info := range c.Info() {
+		if info.Name == name && info.Prefix == "" && info.Namespace == "std" {
+			return true
+		}
+	}
+	return false
 }
 
 // RegisterExternalValidator registers a custom, external macaroon validator for
@@ -96,7 +110,7 @@ func (svc *Service) ValidateMacaroon(ctx context.Context,
 	if err != nil {
 		return err
 	}
-
+	fmt.Printf("Macaroon location: %v\nid: %v\ncaveats: %v\nsig: %v\n=", mac.Location(), mac.Id(), mac.Caveats(), mac.Signature())
 	// Check the method being called against the permitted operation, the
 	// expiration time and IP address and return the result.
 	authChecker := svc.Checker.Auth(macaroon.Slice{mac})
@@ -136,7 +150,7 @@ func ContextWithRootKeyId(ctx context.Context, value interface{}) context.Contex
 // NewMacaroon is a wrapper around the Oven.NewMacaroon method and returns a freshly baked macaroon
 func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, noCaveats bool, cav []checkers.Caveat, ops ...bakery.Op) (*bakery.Macaroon, error) {
 	if len(rootKeyId) == 0 {
-		return nil, fmt.Errorf("Missing root key ID")
+		return nil, ErrMissingRootKeyID
 	}
 	ctx = ContextWithRootKeyId(ctx, rootKeyId)
 	if !noCaveats {

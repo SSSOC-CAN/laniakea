@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package fmtrpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
+
+service Unlocker{
+    /*
+    Login is used when fmtd is first booted.
+    */
+    rpc Login (LoginRequest) returns (LoginResponse);
+}
+
+message LoginRequest {
+    bytes password = 1;
+}
+message LoginResponse {
+    string msg = 1;
+}

@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"syscall"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/urfave/cli"
+	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -102,5 +104,40 @@ func test(ctx *cli.Context) error {
 		return err
 	}
 	printRespJSON(testResp)
+	return nil
+}
+
+func readPasswordFromTerminal(msg string) ([]byte, error) {
+	fmt.Print(msg)
+	pw, err := terminal.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	return pw, err
+}
+
+var loginCommand = cli.Command{
+	Name: "login",
+	Usage: "Login into the FMTD",
+	Description: `
+	When invoked, user will be prompted to enter a password. Either create one or use an existing one.`,
+	Action: login,
+}
+
+// login is the wrapper around the UnlockerClient.Login method
+func login(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getUnlockerClient(ctx)
+	defer cleanUp()
+	pw, err := readPasswordFromTerminal("Input password: ")
+	if err != nil {
+		return err
+	}
+	loginReq := &fmtrpc.LoginRequest{
+		Password: pw,
+	}
+	loginResp, err := client.Login(ctxc, loginReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(loginResp)
 	return nil
 }

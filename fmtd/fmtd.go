@@ -8,6 +8,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
@@ -40,6 +41,7 @@ var (
 			Action: "write",
 		},
 	}
+	tempPwd = []byte("abcdefgh")
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
@@ -72,7 +74,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize RPC server: %v", err))
 		return err
 	}
-	server.logger.Info().Msg("RPC Server Initialized")
+	server.logger.Info().Msg("RPC Server Initialized.")
 
 	// Creating gRPC server and Server options
 	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, false)
@@ -84,22 +86,63 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer rpcServer.GrpcServer.Stop()
 
 	// Starting bbolt kvdb
+	server.logger.Info().Msg("Opening database...")
 	db, err := bolt.Open(server.cfg.MacaroonDBPath, 0755, nil)
 	if err != nil {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize Macaroon DB: %v", err))
 		return err
 	}
+	server.logger.Info().Msg("Database successfully opened.")
 	defer db.Close()
 
+	// Instantiate Unlocker Service and register with gRPC server
+	server.logger.Info().Msg("Initializing unlocker service...")
+	unlockerService, err := unlocker.InitUnlockerService(*db)
+	if err != nil {
+		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize unlocker service: %v", err))
+		return err
+	}
+	unlockerService.RegisterWithGrpcServer(grpc_server)
+	rpcServer.AddUnlockerService(unlockerService)
+	server.logger.Info().Msg("Unlocker service initialized.")
+
+	//Starting RPC and gRPC Servers
+	server.logger.Info().Msg("Starting RPC server...")
+	err = rpcServer.Start()
+	if err != nil {
+		server.logger.Fatal().Msg(fmt.Sprintf("Could not start RPC server: %v", err))
+		return err
+	}
+	server.logger.Info().Msg("RPC Server Started")
+	defer rpcServer.Stop()
+
+	// Wait for password
+	server.logger.Info().Msg("Waiting for password. Use `fmtcli login` to login.")
+	pwd, err := waitForPassword(unlockerService, interceptor.ShutdownChannel())
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
+	}
+	server.logger.Info().Msg("Login successful")
 	// Instantiating Macaroon Service
+	server.logger.Info().Msg("Initiating macaroon service...")
 	macaroonService, err := macaroons.InitService(*db, "fmtd")
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Macaroon service: %v", err))
 		return err
 	}
+	server.logger.Info().Msg("Macaroon service initialized.")
 	defer macaroonService.Close()
 
+	// Unlock Macaroon Store
+	server.logger.Info().Msg("Unlocking macaroon store...")
+	err = macaroonService.CreateUnlock(pwd)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to unlock macaroon store: %v", err))
+		return err
+	}
+	server.logger.Info().Msg("Macaroon store unlocked.")
 	// Baking Macaroons
+	server.logger.Info().Msg("Baking macaroons...")
 	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err := genMacaroons(
 			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), false, 0,
@@ -117,16 +160,8 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 			server.logger.Error().Msg(fmt.Sprintf("Unable to create test macaroon: %v", err))
 		}
 	}
+	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
-
-	//Starting RPC and gRPC Servers
-	err = rpcServer.Start()
-	if err != nil {
-		server.logger.Fatal().Msg(fmt.Sprintf("Could not start RPC server: %v", err))
-		return err
-	}
-	server.logger.Info().Msg("RPC Server Started")
-	defer rpcServer.Stop()
 
 	<-interceptor.ShutdownChannel()
 	return nil
@@ -167,4 +202,17 @@ func adminPermissions() []bakery.Op {
 	copy(admin[:len(readPermissions)], readPermissions)
 	copy(admin[len(readPermissions):], writePermissions)
 	return admin
+}
+
+// waitForPassword hangs until a password is provided or a shutdown request is receieved
+func waitForPassword(u *unlocker.UnlockerService, shutdownChan <-chan struct{}) (*[]byte, error) {
+	select {
+	case msg := <-u.LoginMsgs:
+		if msg.Err != nil {
+			return nil, msg.Err
+		}
+		return msg.Password, nil
+	case <-shutdownChan:
+		return nil, fmt.Errorf("Shutting Down")
+	}
 }
