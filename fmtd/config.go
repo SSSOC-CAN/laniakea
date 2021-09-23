@@ -6,21 +6,25 @@ import (
 	"log"
 	"path/filepath"
 	"reflect"
+	"time"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	yaml "gopkg.in/yaml.v2"
 )
 
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir	bool 	`yaml:"DefaultLogDir"`
-	LogFileDir 		string	`yaml:"LogFileDir"`
-	ConsoleOutput	bool	`yaml:"ConsoleOutput"`
-	GrpcPort		int64	`yaml:"GrpcPort"`
+	DefaultLogDir	bool 		`yaml:"DefaultLogDir"`
+	LogFileDir 		string		`yaml:"LogFileDir"`
+	ConsoleOutput	bool		`yaml:"ConsoleOutput"`
+	GrpcPort		int64		`yaml:"GrpcPort"`
+	RestPort		int64		`yaml:"RestPort"`
 	MacaroonDBPath	string
 	TLSCertPath		string
 	TLSKeyPath		string
 	AdminMacPath	string
 	TestMacPath		string
+	WSPingInterval	time.Duration
+	WSPongWait		time.Duration
 }
 
 // default_config returns the default configuration
@@ -28,6 +32,7 @@ type Config struct {
 // default_grpc_port is the the default grpc port
 var (
 	default_grpc_port int64 = 7777
+	default_rest_port int64 = 8080
 	default_log_dir = func() string {
 		// home_dir, err := os.UserHomeDir() // this should be OS agnostic
 		// if err != nil {
@@ -41,17 +46,22 @@ var (
 	default_tls_key_path string = default_log_dir()+"/tls.key"
 	default_admin_macaroon_path string = default_log_dir()+"/admin.macaroon"
 	test_macaroon_path string = default_log_dir()+"/test.macaroon"
+	default_ws_ping_interval = time.Second * 30
+	default_ws_pong_wait = time.Second * 5
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
 			ConsoleOutput: false,
 			GrpcPort: default_grpc_port,
+			RestPort: default_rest_port,
 			MacaroonDBPath: default_macaroon_db_file,
 			TLSCertPath: default_tls_cert_path,
 			TLSKeyPath: default_tls_key_path,
 			AdminMacPath: default_admin_macaroon_path,
 			TestMacPath: test_macaroon_path,
+			WSPingInterval: default_ws_ping_interval,
+			WSPongWait: default_ws_pong_wait,
 		}
 	}
 )
@@ -100,6 +110,12 @@ func change_field(field reflect.Value, new_value interface{}) {
 				} else {
 					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: int64", new_value))
 				}
+			case reflect.TypeOf(time.Duration).Kind():
+				if v, ok := new_value.(time.Duration); ok {
+					field.Set(v)
+				} else {
+					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: time.Duration", new_value))
+				}
 			}
 		}
 	}
@@ -124,6 +140,10 @@ func check_yaml_config(config Config) Config {
 			if f.Int() == 0 { // This may end up being a range of values
 				change_field(f, default_grpc_port)
 			}
+		case "RestPort":
+			if f.Int() == 0 { // This may end up being a range of values
+				change_field(f, default_rest_port)
+			}
 		case "MacaroonDBPath":
 			if f.String() == "" {
 				change_field(f, default_macaroon_db_file)
@@ -147,6 +167,22 @@ func check_yaml_config(config Config) Config {
 		case "TestMacPath":
 			if f.String() == "" {
 				change_field(f, test_macaroon_path)
+			}
+		case "WSPingInterval":
+			fieldValue := f.Interface()
+			switch v := fieldValue.(type) {
+			case time.Duration:
+				if fieldValue == nil {
+					change_field(f, default_ws_ping_interval)
+				}
+			}
+		case "WSPongWait":
+			fieldValue := f.Interface()
+			switch v := fieldValue.(type) {
+			case time.Duration:
+				if fieldValue == nil {
+					change_field(f, default_ws_pong_wait)
+				}
 			}
 		}
 	}

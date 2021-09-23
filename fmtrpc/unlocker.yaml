@@ -1,0 +1,8 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: fmtrpc.Unlocker.Login
+      post: "/v1/login"
+      body: "*"

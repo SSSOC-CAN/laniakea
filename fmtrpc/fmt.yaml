@@ -1,0 +1,12 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: fmtrpc.Fmt.StopDaemon
+      post: "/v1/stop"
+      body: "*"
+    - selector: fmtrpc.Fmt.AdminTest
+      get: "/v1/admin/test"
+    - selector: fmtrpc.Fmt.TestCommand
+      get: "/v1/test"

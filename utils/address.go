@@ -37,6 +37,31 @@ var (
 // network.
 type TCPResolver = func(network, addr string) (*net.TCPAddr, error)
 
+// NormalizeAddresses returns a new slice with all the passed addresses
+// normalized with the given default port and all duplicates removed.
+func NormalizeAddresses(addrs []string, defaultPort string,
+	tcpResolver TCPResolver) ([]net.Addr, error) {
+
+	result := make([]net.Addr, 0, len(addrs))
+	seen := map[string]struct{}{}
+
+	for _, addr := range addrs {
+		parsedAddr, err := ParseAddressString(
+			addr, defaultPort, tcpResolver,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := seen[parsedAddr.String()]; !ok {
+			result = append(result, parsedAddr)
+			seen[parsedAddr.String()] = struct{}{}
+		}
+	}
+
+	return result, nil
+}
+
 // ParseAddressString converts an address in string format to a net.Addr that is
 // compatible with fmtd. UDP is not supported because fmtd needs reliable
 // connections. We accept a custom function to resolve any TCP addresses so
