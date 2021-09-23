@@ -25,14 +25,22 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net"
+	"net/http"
 	"os"
+	"strconv"
+	"strings"
+	"sync"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 )
@@ -81,7 +89,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Get TLS config
 	server.logger.Info().Msg("Loading TLS configuration...")
-	serverOpts, _, _, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath)
+	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Could not load TLS configuration: %v", err))
 		return err
@@ -105,6 +113,15 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_server := grpc.NewServer(serverOpts...)
 	rpcServer.AddGrpcServer(grpc_server)
 	defer rpcServer.GrpcServer.Stop()
+
+	// Starting REST proxy
+	stopProxy, err := startRestProxy(
+		server.cfg, &rpcServer, restDialOpts, restListen,
+	)
+	if err != nil {
+		return err
+	}
+	defer stopProxy()
 
 	// Starting bbolt kvdb
 	server.logger.Info().Msg("Opening database...")
@@ -236,4 +253,82 @@ func waitForPassword(u *unlocker.UnlockerService, shutdownChan <-chan struct{}) 
 	case <-shutdownChan:
 		return nil, fmt.Errorf("Shutting Down")
 	}
+}
+
+// startRestProxy starts the given REST proxy on the listeners found in the config.
+func startRestProxy(cfg *Config, rpcServer *RpcServer, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
+	restProxyDestNet, err := utils.NormalizeAddresses([]string{fmt.Sprintf("localhost:%d", cfg.GrpcPort)}, strconv.FormatInt(cfg.GrpcPort, 10), net.ResolveTCPAddr)
+	if err != nil {
+		return nil, err
+	}
+	restProxyDest := restProxyDestNet[0].String()
+	switch {
+	case strings.Contains(restProxyDest, "0.0.0.0"):
+		restProxyDest = strings.Replace(restProxyDest, "0.0.0.0", "127.0.0.1", 1)
+	case strings.Contains(restProxyDest, "[::]"):
+		restProxyDest = strings.Replace(restProxyDest, "[::]", "[::1]", 1)
+	}
+	var shutdownFuncs []func()
+	shutdown := func() {
+		for _, shutdownFn := range shutdownFuncs {
+			shutdownFn()
+		}
+	}
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	shutdownFuncs = append(shutdownFuncs, cancel)
+
+	customMarshalerOption := proxy.WithMarshalerOption(
+		proxy.MIMEWildcard, &proxy.JSONPb{
+			MarshalOptions: protojson.MarshalOptions{
+				UseProtoNames: true,
+				EmitUnpopulated: true,
+			},
+		},
+	)
+	mux := proxy.NewServeMux(customMarshalerOption)
+
+	err = fmtrpc.RegisterUnlockerHandlerFromEndpoint(
+		ctx, mux, restProxyDest, restDialOpts,
+	)
+	if err != nil {
+		return nil, err
+	}
+	err = rpcServer.RegisterWithRestProxy(
+		ctx, mux, restDialOpts, restProxyDest,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// Wrap the default grpc-gateway handler with the WebSocket handler.
+	restHandler := fmtrpc.NewWebSocketProxy(
+		mux, rpcServer.SubLogger, cfg.WSPingInterval, cfg.WSPongWait,
+	)
+	var wg sync.WaitGroup
+	restEndpoints, err := utils.NormalizeAddresses([]string{fmt.Sprintf("localhost:%d", cfg.RestPort)}, strconv.FormatInt(cfg.RestPort, 10), net.ResolveTCPAddr)
+	if err != nil {
+		rpcServer.SubLogger.Error().Msg(fmt.Sprintf("Unable to normalize address %s: %v", fmt.Sprintf("localhost:%d", cfg.RestPort), err))
+	}
+	restEndpoint := restEndpoints[0]
+	lis, err := restListen(restEndpoint)
+	if err != nil {
+		rpcServer.SubLogger.Error().Msg(fmt.Sprintf("gRPC proxy unable to listen on %s: %v", restEndpoint, err))
+	}
+	shutdownFuncs = append(shutdownFuncs, func() {
+		err := lis.Close()
+		if err != nil {
+			rpcServer.SubLogger.Error().Msg(fmt.Sprintf("Error closing listerner: %v", err))
+		}
+	})
+	wg.Add(1)
+	go func() {
+		rpcServer.SubLogger.Info().Msg(fmt.Sprintf("gRPC proxy started and listenign at %s", lis.Addr()))
+		wg.Done()
+		err := http.Serve(lis, restHandler)
+		if err != nil && !fmtrpc.IsClosedConnError(err) {
+			rpcServer.SubLogger.Error().Msg(fmt.Sprintf("%v", err))
+		}
+	}()
+	wg.Wait()
+	return shutdown, nil
 }
