@@ -96,19 +96,204 @@ func (*StopResponse) Descriptor() ([]byte, []int) {
 	return file_fmt_proto_rawDescGZIP(), []int{1}
 }
 
+type AdminTestRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *AdminTestRequest) Reset() {
+	*x = AdminTestRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_fmt_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AdminTestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminTestRequest) ProtoMessage() {}
+
+func (x *AdminTestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_fmt_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminTestRequest.ProtoReflect.Descriptor instead.
+func (*AdminTestRequest) Descriptor() ([]byte, []int) {
+	return file_fmt_proto_rawDescGZIP(), []int{2}
+}
+
+type AdminTestResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Msg string `protobuf:"bytes,1,opt,name=msg,proto3" json:"msg,omitempty"`
+}
+
+func (x *AdminTestResponse) Reset() {
+	*x = AdminTestResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_fmt_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AdminTestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminTestResponse) ProtoMessage() {}
+
+func (x *AdminTestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_fmt_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminTestResponse.ProtoReflect.Descriptor instead.
+func (*AdminTestResponse) Descriptor() ([]byte, []int) {
+	return file_fmt_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AdminTestResponse) GetMsg() string {
+	if x != nil {
+		return x.Msg
+	}
+	return ""
+}
+
+type TestRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *TestRequest) Reset() {
+	*x = TestRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_fmt_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestRequest) ProtoMessage() {}
+
+func (x *TestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_fmt_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestRequest.ProtoReflect.Descriptor instead.
+func (*TestRequest) Descriptor() ([]byte, []int) {
+	return file_fmt_proto_rawDescGZIP(), []int{4}
+}
+
+type TestResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Msg string `protobuf:"bytes,1,opt,name=msg,proto3" json:"msg,omitempty"`
+}
+
+func (x *TestResponse) Reset() {
+	*x = TestResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_fmt_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestResponse) ProtoMessage() {}
+
+func (x *TestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_fmt_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestResponse.ProtoReflect.Descriptor instead.
+func (*TestResponse) Descriptor() ([]byte, []int) {
+	return file_fmt_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TestResponse) GetMsg() string {
+	if x != nil {
+		return x.Msg
+	}
+	return ""
+}
+
 var File_fmt_proto protoreflect.FileDescriptor
 
 var file_fmt_proto_rawDesc = []byte{
 	0x0a, 0x09, 0x66, 0x6d, 0x74, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x06, 0x66, 0x6d, 0x74,
 	0x72, 0x70, 0x63, 0x22, 0x0d, 0x0a, 0x0b, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65,
 	0x73, 0x74, 0x22, 0x0e, 0x0a, 0x0c, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x32, 0x3e, 0x0a, 0x03, 0x46, 0x6d, 0x74, 0x12, 0x37, 0x0a, 0x0a, 0x53, 0x74, 0x6f,
-	0x70, 0x44, 0x61, 0x65, 0x6d, 0x6f, 0x6e, 0x12, 0x13, 0x2e, 0x66, 0x6d, 0x74, 0x72, 0x70, 0x63,
-	0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x66,
-	0x6d, 0x74, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x42, 0x22, 0x5a, 0x20, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
-	0x2f, 0x53, 0x53, 0x53, 0x4f, 0x43, 0x2d, 0x43, 0x41, 0x4e, 0x2f, 0x66, 0x6d, 0x74, 0x64, 0x2f,
-	0x66, 0x6d, 0x74, 0x72, 0x70, 0x63, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x73, 0x65, 0x22, 0x12, 0x0a, 0x10, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x54, 0x65, 0x73, 0x74, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x25, 0x0a, 0x11, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x54,
+	0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x6d,
+	0x73, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6d, 0x73, 0x67, 0x22, 0x0d, 0x0a,
+	0x0b, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x20, 0x0a, 0x0c,
+	0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x10, 0x0a, 0x03,
+	0x6d, 0x73, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6d, 0x73, 0x67, 0x32, 0xba,
+	0x01, 0x0a, 0x03, 0x46, 0x6d, 0x74, 0x12, 0x37, 0x0a, 0x0a, 0x53, 0x74, 0x6f, 0x70, 0x44, 0x61,
+	0x65, 0x6d, 0x6f, 0x6e, 0x12, 0x13, 0x2e, 0x66, 0x6d, 0x74, 0x72, 0x70, 0x63, 0x2e, 0x53, 0x74,
+	0x6f, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x66, 0x6d, 0x74, 0x72,
+	0x70, 0x63, 0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x40, 0x0a, 0x09, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x54, 0x65, 0x73, 0x74, 0x12, 0x18, 0x2e, 0x66,
+	0x6d, 0x74, 0x72, 0x70, 0x63, 0x2e, 0x41, 0x64, 0x6d, 0x69, 0x6e, 0x54, 0x65, 0x73, 0x74, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x19, 0x2e, 0x66, 0x6d, 0x74, 0x72, 0x70, 0x63, 0x2e,
+	0x41, 0x64, 0x6d, 0x69, 0x6e, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x38, 0x0a, 0x0b, 0x54, 0x65, 0x73, 0x74, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64,
+	0x12, 0x13, 0x2e, 0x66, 0x6d, 0x74, 0x72, 0x70, 0x63, 0x2e, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x66, 0x6d, 0x74, 0x72, 0x70, 0x63, 0x2e, 0x54,
+	0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x22, 0x5a, 0x20, 0x67,
+	0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x53, 0x53, 0x53, 0x4f, 0x43, 0x2d,
+	0x43, 0x41, 0x4e, 0x2f, 0x66, 0x6d, 0x74, 0x64, 0x2f, 0x66, 0x6d, 0x74, 0x72, 0x70, 0x63, 0x62,
+	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -123,16 +308,24 @@ func file_fmt_proto_rawDescGZIP() []byte {
 	return file_fmt_proto_rawDescData
 }
 
-var file_fmt_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_fmt_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_fmt_proto_goTypes = []interface{}{
-	(*StopRequest)(nil),  // 0: fmtrpc.StopRequest
-	(*StopResponse)(nil), // 1: fmtrpc.StopResponse
+	(*StopRequest)(nil),       // 0: fmtrpc.StopRequest
+	(*StopResponse)(nil),      // 1: fmtrpc.StopResponse
+	(*AdminTestRequest)(nil),  // 2: fmtrpc.AdminTestRequest
+	(*AdminTestResponse)(nil), // 3: fmtrpc.AdminTestResponse
+	(*TestRequest)(nil),       // 4: fmtrpc.TestRequest
+	(*TestResponse)(nil),      // 5: fmtrpc.TestResponse
 }
 var file_fmt_proto_depIdxs = []int32{
 	0, // 0: fmtrpc.Fmt.StopDaemon:input_type -> fmtrpc.StopRequest
-	1, // 1: fmtrpc.Fmt.StopDaemon:output_type -> fmtrpc.StopResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: fmtrpc.Fmt.AdminTest:input_type -> fmtrpc.AdminTestRequest
+	4, // 2: fmtrpc.Fmt.TestCommand:input_type -> fmtrpc.TestRequest
+	1, // 3: fmtrpc.Fmt.StopDaemon:output_type -> fmtrpc.StopResponse
+	3, // 4: fmtrpc.Fmt.AdminTest:output_type -> fmtrpc.AdminTestResponse
+	5, // 5: fmtrpc.Fmt.TestCommand:output_type -> fmtrpc.TestResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -168,6 +361,54 @@ func file_fmt_proto_init() {
 				return nil
 			}
 		}
+		file_fmt_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AdminTestRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_fmt_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AdminTestResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_fmt_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TestRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_fmt_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TestResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -175,7 +416,7 @@ func file_fmt_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_fmt_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

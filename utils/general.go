@@ -19,40 +19,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
-syntax = "proto3";
+package utils
 
-package fmtrpc;
+import (
+	"os"
+)
 
-option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
-
-// Fmt is the main RPC server of the daemon.
-service Fmt {
-    /* fmtcli: `stop`
-    StopDaemon will send a shutdown request to the interrupt handler, triggering
-    a graceful shutdown of the daemon.
-    */
-    rpc StopDaemon (StopRequest) returns (StopResponse);
-    /* fmtcli: `admin-test`
-    AdminTest will send a string response if the proper macaroon is provided.
-    */
-    rpc AdminTest (AdminTestRequest) returns (AdminTestResponse);
-    /* fmtcli: `test`
-    TestCommand will send a string response regardless if a macaroon is provided or not.
-    */
-    rpc TestCommand (TestRequest) returns (TestResponse);
-}
-
-message StopRequest {
-}
-message StopResponse {
-}
-message AdminTestRequest {
-}
-message AdminTestResponse {
-    string msg = 1;
-}
-message TestRequest {
-}
-message TestResponse {
-    string msg = 1;
+// FileExists reports whether the named file or directory exists.
+// This function is taken from https://github.com/lightningnetwork/lnd
+func FileExists(name string) bool {
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
 }
