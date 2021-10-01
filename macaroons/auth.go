@@ -19,39 +19,43 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
-package fmtd
+package macaroons
 
 import (
-	"sync/atomic"
-	"github.com/rs/zerolog"
+	"context"
+	"encoding/hex"
+	macaroon "gopkg.in/macaroon.v2"
 )
 
-// Server is the object representing the state of the server
-type Server struct {
-	Active 		int32 // atomic
-	Stopping	int32 // atomic
-	cfg			*Config
-	logger		*zerolog.Logger
+type MacaroonCredential struct {
+	*macaroon.Macaroon
 }
 
-// InitServer creates a new instance of the server and returns a pointer to it
-func InitServer(config *Config, logger *zerolog.Logger) (*Server, error) {
-	return &Server{
-		cfg: config,
-		logger: logger,
-	}, nil
+// RequireTransportSecurity implements the PerRPCCredentials interface.
+func (m MacaroonCredential) RequireTransportSecurity() bool {
+	return true
 }
 
-// Start starts the server. Returns an error if any issues occur
-func (s *Server) Start() error {
-	s.logger.Info().Msg("Starting Daemon...")
-	atomic.StoreInt32(&s.Active, 1)
-	return nil
+// GetRequestMetadata implements the PerRPCCredentials interface. This method
+// is required in order to pass the wrapped macaroon into the gRPC context.
+// With this, the macaroon will be available within the request handling scope
+// of the ultimate gRPC server implementation.
+func (m MacaroonCredential) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+
+	macBytes, err := m.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	md := make(map[string]string)
+	md["macaroon"] = hex.EncodeToString(macBytes)
+	return md, nil
 }
 
-// Stop stops the server. Returns an error if any issues occur
-func (s *Server) Stop() error {
-	s.logger.Info().Msg("Stopping Daemon...")
-	atomic.StoreInt32(&s.Stopping, 1)
-	return nil
+// NewMacaroonCredential returns a copy of the passed macaroon wrapped in a
+// MacaroonCredential struct which implements PerRPCCredentials.
+func NewMacaroonCredential(m *macaroon.Macaroon) MacaroonCredential {
+	ms := MacaroonCredential{}
+	ms.Macaroon = m.Clone()
+	return ms
 }

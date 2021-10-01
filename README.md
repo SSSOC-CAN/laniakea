@@ -143,6 +143,14 @@ And then in another, run `fmtcli` followed by a supported command. For example,
 $ fmtcli stop
 ```
 
+### Adding New Commands and Compiling Protos
+In the `fmtrpc` directory are the proto files for the RPC server. When new commands are created, the protos must be recompilled:
+```
+$ protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative fmt.proto
+```
+
+Write the proxy command in the `rpcserver.go` file and then define it's permissions in `grpc_intercept.go`. For fmtcli access, write a proxy in `commands.go`.
+
 ## Release Strategy
 
 *TBD*

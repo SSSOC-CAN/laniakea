@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"path/filepath"
 	"reflect"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -16,6 +16,11 @@ type Config struct {
 	LogFileDir 		string	`yaml:"LogFileDir"`
 	ConsoleOutput	bool	`yaml:"ConsoleOutput"`
 	GrpcPort		int64	`yaml:"GrpcPort"`
+	MacaroonDBPath	string
+	TLSCertPath		string
+	TLSKeyPath		string
+	AdminMacPath	string
+	TestMacPath		string
 }
 
 // default_config returns the default configuration
@@ -24,18 +29,29 @@ type Config struct {
 var (
 	default_grpc_port int64 = 7777
 	default_log_dir = func() string {
-		home_dir, err := os.UserHomeDir() // this should be OS agnostic
-		if err != nil {
-			log.Fatal(err)
-		}
-		return home_dir+"/.fmtd"
+		// home_dir, err := os.UserHomeDir() // this should be OS agnostic
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		// return home_dir+"/.fmtd"
+		return utils.AppDataDir("fmtd", false)
 	}
+	default_macaroon_db_file string = default_log_dir()+"/macaroon.db"
+	default_tls_cert_path string = default_log_dir()+"/tls.cert"
+	default_tls_key_path string = default_log_dir()+"/tls.key"
+	default_admin_macaroon_path string = default_log_dir()+"/admin.macaroon"
+	test_macaroon_path string = default_log_dir()+"/test.macaroon"
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
 			ConsoleOutput: false,
 			GrpcPort: default_grpc_port,
+			MacaroonDBPath: default_macaroon_db_file,
+			TLSCertPath: default_tls_cert_path,
+			TLSKeyPath: default_tls_key_path,
+			AdminMacPath: default_admin_macaroon_path,
+			TestMacPath: test_macaroon_path,
 		}
 	}
 )
@@ -107,6 +123,30 @@ func check_yaml_config(config Config) Config {
 		case "GrpcPort":
 			if f.Int() == 0 { // This may end up being a range of values
 				change_field(f, default_grpc_port)
+			}
+		case "MacaroonDBPath":
+			if f.String() == "" {
+				change_field(f, default_macaroon_db_file)
+			}
+		case "TLSCertPath":
+			if f.String() == "" {
+				change_field(f, default_tls_cert_path)
+				tls_key := v.FieldByName("TLSKeyPath")
+				change_field(tls_key, default_tls_key_path)
+			}
+		case "TLSKeyPath":
+			if f.String() == "" {
+				change_field(f, default_tls_key_path)
+				tls_cert := v.FieldByName("TLSCertPath")
+				change_field(tls_cert, default_tls_cert_path)
+			}
+		case "AdminMacPath":
+			if f.String() == "" {
+				change_field(f, default_admin_macaroon_path)
+			}
+		case "TestMacPath":
+			if f.String() == "" {
+				change_field(f, test_macaroon_path)
 			}
 		}
 	}
