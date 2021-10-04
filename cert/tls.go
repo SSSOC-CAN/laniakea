@@ -142,27 +142,18 @@ func GenCertPair(org, certFile, keyFile string, certValidity time.Duration) erro
 	if err != nil {
 		return fmt.Errorf("Failed to encode private key: %v", err)
 	}
-	fmt.Printf("WE HERE %v\n%v\n", certFile, keyFile)
 	if _, err = os.OpenFile(certFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775); err != nil {
 		return err
 	}
 	if err = os.WriteFile(certFile, certBuf.Bytes(), 0755); err != nil {
 		return err
 	}
-	// if err = ioutil.WriteFile(certFile, certBuf.Bytes(), 0755); err != nil {
-	// 	fmt.Println("We should be here")
-	// 	return err
-	// }
 	if _, err = os.OpenFile(keyFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775); err != nil {
 		return err
 	}
 	if err = os.WriteFile(keyFile, keyBuf.Bytes(), 0755); err != nil {
 		return err
 	}
-	// if err = ioutil.WriteFile(keyFile, keyBuf.Bytes(), 0755); err != nil {
-	// 	os.Remove(certFile)
-	// 	return err
-	// }
 	return nil
 }
 

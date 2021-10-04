@@ -83,6 +83,8 @@ func InitConfig() (Config, error) {
 		// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
 		config = check_yaml_config(config)
 	}
+	config.WSPingInterval = default_ws_ping_interval
+	config.WSPongWait = default_ws_pong_wait
 	return config, nil
 }
 
@@ -109,12 +111,6 @@ func change_field(field reflect.Value, new_value interface{}) {
 					field.SetInt(v)
 				} else {
 					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: int64", new_value))
-				}
-			case reflect.TypeOf(time.Duration).Kind():
-				if v, ok := new_value.(time.Duration); ok {
-					field.Set(v)
-				} else {
-					log.Fatal(fmt.Sprintf("Type of new_value: %v does not match the type of the field: time.Duration", new_value))
 				}
 			}
 		}
@@ -167,22 +163,6 @@ func check_yaml_config(config Config) Config {
 		case "TestMacPath":
 			if f.String() == "" {
 				change_field(f, test_macaroon_path)
-			}
-		case "WSPingInterval":
-			fieldValue := f.Interface()
-			switch v := fieldValue.(type) {
-			case time.Duration:
-				if fieldValue == nil {
-					change_field(f, default_ws_ping_interval)
-				}
-			}
-		case "WSPongWait":
-			fieldValue := f.Interface()
-			switch v := fieldValue.(type) {
-			case time.Duration:
-				if fieldValue == nil {
-					change_field(f, default_ws_pong_wait)
-				}
 			}
 		}
 	}

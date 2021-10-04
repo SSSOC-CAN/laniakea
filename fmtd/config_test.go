@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
