@@ -47,11 +47,14 @@ func TestInitConfigFromYAML(t *testing.T) {
 		LogFileDir: "/home/vagrant/documents",
 		ConsoleOutput: true,
 		GrpcPort: 3567,
+		RestPort: 8080,
 		MacaroonDBPath: default_macaroon_db_file,
 		TLSCertPath: default_tls_cert_path,
 		TLSKeyPath: default_tls_key_path,
 		AdminMacPath: default_admin_macaroon_path,
 		TestMacPath: test_macaroon_path,
+		WSPingInterval: default_ws_ping_interval,
+		WSPongWait: default_ws_pong_wait,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -96,11 +99,14 @@ func TestDefaultConfig(t *testing.T) {
 		LogFileDir: default_log_dir(),
 		ConsoleOutput: false,
 		GrpcPort: 7777,
+		RestPort: 8080,
 		MacaroonDBPath: default_macaroon_db_file,
 		TLSCertPath: default_tls_cert_path,
 		TLSKeyPath: default_tls_key_path,
 		AdminMacPath: default_admin_macaroon_path,
 		TestMacPath: test_macaroon_path,
+		WSPingInterval: default_ws_ping_interval,
+		WSPongWait: default_ws_pong_wait,
 	}
 	if d_config != default_config() {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())
