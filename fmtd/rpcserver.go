@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
@@ -70,6 +71,16 @@ func (r *RpcServer) AddUnlockerService(s *unlocker.UnlockerService) {
 // RegisterWithGrpcServer registers the rpcServer with the root gRPC server.
 func (s *RpcServer) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	fmtrpc.RegisterFmtServer(grpcServer, s)
+	return nil
+}
+
+func( s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+	err := fmtrpc.RegisterFmtHandlerFromEndpoint(
+		ctx, mux, restProxyDest, restDialOpts,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

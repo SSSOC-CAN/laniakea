@@ -144,9 +144,22 @@ $ fmtcli stop
 ```
 
 ### Adding New Commands and Compiling Protos
-In the `fmtrpc` directory are the proto files for the RPC server. When new commands are created, the protos must be recompilled:
+In the `fmtrpc` directory are the proto files for the RPC server. When new commands are created, the protos must be recompiled:
 ```
 $ protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative fmt.proto
+```
+The REST reverse proxy and OpenAPI file are compiled as follows:
+```
+$ protoc --grpc-gateway_out=. --grpc-gateway_opt=logtostderr=true --grpc-gateway_opt=paths=source_relative --grpc-gateway_opt=grpc_api_configuration=fmt.yaml fmt.proto
+$ protoc --openapiv2_out=. --openapiv2_opt=logtostderr=true --openapiv2_opt=grpc_api_configuration=fmt.yaml --openapiv2_opt=json_names_for_fields=false fmt.proto
+```
+
+For REST proxy and OpenAPI commands to work, some dependencies are needed and are installed as follows:
+```
+$ go get github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway \
+     github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2 \
+     google.golang.org/protobuf/cmd/protoc-gen-go \
+     google.golang.org/grpc/cmd/protoc-gen-go-grpc
 ```
 
 Write the proxy command in the `rpcserver.go` file and then define it's permissions in `grpc_intercept.go`. For fmtcli access, write a proxy in `commands.go`.
