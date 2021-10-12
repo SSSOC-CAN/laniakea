@@ -33,6 +33,7 @@ import (
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -196,10 +197,26 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		)
 		if err != nil {
 			server.logger.Error().Msg(fmt.Sprintf("Unable to create test macaroon: %v", err))
+			return err
 		}
 	}
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
+
+	// Start Recording Data from Fluke
+	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
+		return err
+	}
+	err = flukeService.Start()
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to start Fluke service: %v", err))
+		return err
+	}
+	defer flukeService.Stop()
+	server.logger.Info().Msg("Fluke service started.")
+	flukeService.StartRecording()
 
 	<-interceptor.ShutdownChannel()
 	return nil

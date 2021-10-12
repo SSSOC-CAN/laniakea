@@ -1,66 +1,67 @@
-package main
+/*
+The MIT License (MIT)
+
+Copyright © 2018 Kalkfabrik Netstal AG, <info@kfn.ch>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the “Software”), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+// Package drivers contains all the code to communicate with Fluke DAQ software over OPC DA
+package drivers
 
 import (
-	//"bufio"
 	"fmt"
-	"net"
-	"sync"
-	// "os"
-	// "strings"
+	"github.com/konimarti/opc"
 )
 
-var (
-	flukeOutputfile = "C:\\Users\\Michael Graham\\Downloads\\H_Test.csv"
-	mylocalIp = "192.168.0.202"
-	flukeIp = "192.168.0.201"
-	flukePort1 = "4369"
-	flukePort2 = "3490"
-)
+// GetAllTags returns a slice of all detected tags
+func GetAllTags() ([]string, error) {
+	b, err := opc.CreateBrowser(
+		flukeOPCServerName,
+		[]string{flukeOPCServerHost},
+	)
+	if err != nil {
+		return []string{}, err
+	}
+	return opc.CollectTags(b), nil
+}
 
 func main() {
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(server_addr string) {
-		defer wg.Done()
-		_, err := net.Dial("tcp", server_addr)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-	}(flukeIp+":"+flukePort1)
-	wg.Wait()
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	os.Exit(1)
-	// }
-	// for {
-	// 	reader := bufio.NewReader(os.Stdin)
-	// 	fmt.Print(">> ")
-	// 	text, _ := reader.ReadString('\n')
-	// 	fmt.Fprintf(c, text+"\n")
+	b, _ := opc.CreateBrowser(
+		flukeOPCServerName,
+		[]string{flukeOPCServerHost},
+	)
+	//opc.PrettyPrint(b)
+	listOTags := opc.CollectTags(b)
+	
+	c, _ := opc.NewConnection(
+		flukeOPCServerName,
+		[]string{flukeOPCServerHost},
+		listOTags,
+	)
+	defer c.Close()
+	reading := c.Read()
+	fmt.Println(reading["Instrument 01.Module 3.Channel 304"].Value)
 
-	// 	message, _ := bufio.NewReader(c).ReadString('\n')
-	// 	fmt.Print("->: " + message)
-	// 	if strings.TrimSpace(string(text)) == "STOP" {
-	// 		fmt.Println("TCP client exiting...")
-	// 		return
-	// 	}
-	// }
-	// l, err := net.Listen("tcp", mylocalIp+":"+flukePort1)
-	// if err != nil {
-	// 	fmt.Println("Error listening:", err.Error())
-	// 	os.Exit(1)
-	// }
-	// defer l.Close()
-	// fmt.Println("Listening on "+mylocalIp+":"+flukePort1)
-	// for {
-	// 	conn, err := l.Accept()
-	// 	if err != nil {
-	// 		fmt.Println("Error accepting: ", err.Error())
-	// 		os.Exit(1)
-	// 	}
-	// 	go handleRequest(conn)
-	// }
+	for _, t := range listOTags {
+		fmt.Printf("%s: %v\n", t, c.ReadItem(t))
+	}
 }
 
                   

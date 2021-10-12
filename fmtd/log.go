@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"github.com/mattn/go-colorable"
-	"github.com/rs/zerolog"
 	color "github.com/mgutz/ansi"
+	"github.com/rs/zerolog"
 )
 
 // subLogger is a thin-wrapper for the `zerolog.Logger` struct
