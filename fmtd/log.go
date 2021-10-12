@@ -3,7 +3,9 @@ package fmtd
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
+	"github.com/mattn/go-colorable"
 	"github.com/rs/zerolog"
 	color "github.com/mgutz/ansi"
 )
@@ -51,7 +53,12 @@ func InitLogger(config *Config) (zerolog.Logger, error) {
 	
 	
 	if config.ConsoleOutput {
-		output := zerolog.ConsoleWriter{Out: os.Stderr}
+		output := zerolog.NewConsoleWriter()
+		if runtime.GOOS == "windows" {
+			output.Out = colorable.NewColorableStdout()
+		} else {
+			output.Out = os.Stderr
+		}
 		output.FormatLevel = func(i interface{}) string {
 			var msg string
 			switch v := i.(type) {
