@@ -1,6 +1,7 @@
 package drivers
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -10,7 +11,9 @@ import (
 	"time"
 	"github.com/konimarti/opc"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"google.golang.org/grpc"
 )
 
 type Tag struct {
@@ -170,6 +173,7 @@ var (
 
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
+	fmtrpc.UnimplementedDataCollectorServer
 	Active 		int32 // atomic
 	Stopping	int32 // atomic
 	Logger		*zerolog.Logger
@@ -177,10 +181,11 @@ type FlukeService struct {
 	tagMap		map[int]Tag
 	connection	opc.Connection
 	QuitChan	chan struct{}
+	outputDir	string
 }
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
-func NewFlukeService(logger *zerolog.Logger) (*FlukeService, error) {
+func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, error) {
 	tags, err := GetAllTags()
 	if err != nil {
 		return nil, fmt.Errorf("Could not retrieve all tags: %v", err)
@@ -190,7 +195,14 @@ func NewFlukeService(logger *zerolog.Logger) (*FlukeService, error) {
 		tags: tags,
 		tagMap: defaultTagMap(tags),
 		QuitChan: make(chan struct{}),
+		outputDir: outputDir,
 	}, nil
+}
+
+// RegisterWithGrpcServer registers the gRPC server to the unlocker service
+func (s *FlukeService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
+	fmtrpc.RegisterDataCollectorServer(grpcServer, s)
+	return nil
 }
 
 // Start starts the service. Returns an error if any issues occur
@@ -211,7 +223,7 @@ func (s *FlukeService) Start() error {
 		return err
 	}
 	s.connection = c
-	s.Logger.Info().Msg("Fluke Servic started.")
+	s.Logger.Info().Msg("Fluke Service started.")
 	return nil
 }
 
@@ -231,9 +243,9 @@ func (s *FlukeService) Stop() error {
 }
 
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message  
-func (s *FlukeService) StartRecording(outputDir string) error {
+func (s *FlukeService) startRecording(pol_int int64) error {
 	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", outputDir, current_time.Day(), current_time.Month(), current_time.Year())
+	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
 	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
@@ -256,7 +268,7 @@ func (s *FlukeService) StartRecording(outputDir string) error {
 	if err != nil {
 		return err
 	}
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	go func() {
@@ -271,6 +283,7 @@ func (s *FlukeService) StartRecording(outputDir string) error {
 				ticker.Stop()
 				file.Close()
 				writer.Flush()
+				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			}
 		}
@@ -292,4 +305,25 @@ func (s *FlukeService) Record(writer *csv.Writer, idxs []int) error {
 		return err
 	}
 	return nil
+}
+
+// StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
+func (s *FlukeService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
+	err := s.startRecording(req.PollingInterval)
+	if err != nil {
+		return &fmtrpc.RecordResponse{
+			Msg: fmt.Sprintf("Could not start data recording: %v", err),
+		}, err
+	}
+	return &fmtrpc.RecordResponse{
+		Msg: "Data recording successfully started.",
+	}, nil
+}
+
+// StopRecording is called by gRPC client and CLI to end data recording process
+func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
+	close(s.QuitChan)
+	return &fmtrpc.StopRecResponse{
+		Msg: "Data recording successfully stopped.",
+	}, nil
 }

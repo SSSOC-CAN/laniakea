@@ -204,7 +204,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_interceptor.AddMacaroonService(macaroonService)
 
 	// Start Recording Data from Fluke
-	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger)
+	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
 		return err
@@ -215,9 +215,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer flukeService.Stop()
-	err = flukeService.StartRecording(server.cfg.DataOutputDir)
+	err = flukeService.RegisterWithGrpcServer(grpc_server) // TODO:SSSOCPaulCote - This has to happen before the gRPC server is started
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to start recording data from Fluke: %v", err))
+		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
 	}
 	<-interceptor.ShutdownChannel()
