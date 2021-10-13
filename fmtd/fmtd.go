@@ -215,8 +215,11 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer flukeService.Stop()
-	flukeService.StartRecording(server.cfg.DataOutputDir)
-
+	err = flukeService.StartRecording(server.cfg.DataOutputDir)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to start recording data from Fluke: %v", err))
+		return err
+	}
 	<-interceptor.ShutdownChannel()
 	return nil
 }

@@ -173,6 +173,7 @@ type FlukeService struct {
 	tags		[]string
 	tagMap		map[int]Tag
 	connection	opc.Connection
+	QuitChan	chan struct{}
 }
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
@@ -185,6 +186,7 @@ func NewFlukeService(logger *zerolog.Logger) (*FlukeService, error) {
 		Logger: logger,
 		tags: tags,
 		tagMap: defaultTagMap(tags),
+		QuitChan: make(chan struct{}),
 	}, nil
 }
 
@@ -209,21 +211,21 @@ func (s *FlukeService) Start() error {
 func (s *FlukeService) Stop() error {
 	s.Logger.Info().Msg("Stopping Fluke Service...")
 	atomic.StoreInt32(&s.Stopping, 1)
+	close(s.QuitChan)
 	s.connection.Close()
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
 
-// StartRecording starts the recording process by creating a csv file and inserting the header row into the file
+// StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message  
 func (s *FlukeService) StartRecording(outputDir string) error {
 	current_time := time.Now()
-	file, err := os.Create(fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", outputDir, current_time.Day(), current_time.Month(), current_time.Year()))
+	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", outputDir, current_time.Day(), current_time.Month(), current_time.Year())
+	file, err := os.Create(file_name)
 	if err != nil {
 		return fmt.Errorf("Could not create file %s: %v", file, err)
 	}
-	defer file.Close()
 	writer := csv.NewWriter(file)
-	defer writer.Flush()
 	// headers
 	headerData := []string{"Timestamp"}
 	idxs := make([]int, 0, len(s.tagMap))
@@ -238,12 +240,36 @@ func (s *FlukeService) StartRecording(outputDir string) error {
 	if err != nil {
 		return err
 	}
+	ticker := time.NewTicker(10 * time.Second)
 	// the actual data
+	s.Logger.Info().Msg("Starting data recording...")
+	go func() {
+		for {
+			select {
+			case <- ticker.C:
+				err = s.Record(writer, idxs)
+				if err != nil {
+					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
+				}
+			case <- s.QuitChan:
+				ticker.Stop()
+				file.Close()
+				writer.Flush()
+				return
+			}
+		}
+	}()
+	return nil
+}
+
+// Record records the live data from Fluke and inserts it into a csv file
+func (s *FlukeService) Record(writer *csv.Writer, idxs []int) error {
+	current_time := time.Now()
 	data := []string{fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())}
 	for _, i := range idxs {
 		data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
 	}
-	err = writer.Write(data)
+	err := writer.Write(data)
 	if err != nil {
 		return err
 	}
