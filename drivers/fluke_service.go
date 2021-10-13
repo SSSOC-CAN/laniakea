@@ -56,6 +56,8 @@ var (
 		for i, t := range tags {
 			var str string
 			switch {
+			case i == 0:
+				str = "Scan"
 			case i < 41 && i > 0: // first 40 channels are customer channels
 				
 				str = customerChannelString+strconv.Itoa(i)
@@ -202,6 +204,11 @@ func (s *FlukeService) Start() error {
 	if err != nil {
 		return err
 	}
+	// Start scanning
+	err = c.Write(s.tagMap[0].tag, true)
+	if err != nil {
+		return err
+	}
 	s.connection = c
 	s.Logger.Info().Msg("Fluke Servic started.")
 	return nil
@@ -212,6 +219,11 @@ func (s *FlukeService) Stop() error {
 	s.Logger.Info().Msg("Stopping Fluke Service...")
 	atomic.StoreInt32(&s.Stopping, 1)
 	close(s.QuitChan)
+	// Stop scanning
+	err := s.connection.Write(s.tagMap[0].tag, false)
+	if err != nil {
+		return err
+	}
 	s.connection.Close()
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
@@ -234,7 +246,9 @@ func (s *FlukeService) StartRecording(outputDir string) error {
 	}
 	sort.Ints(idxs)
 	for _, i := range idxs {
-		headerData = append(headerData, s.tagMap[i].name)
+		if i != 0 {
+			headerData = append(headerData, s.tagMap[i].name)
+		}
 	}
 	err = writer.Write(headerData)
 	if err != nil {
@@ -267,7 +281,9 @@ func (s *FlukeService) Record(writer *csv.Writer, idxs []int) error {
 	current_time := time.Now()
 	data := []string{fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())}
 	for _, i := range idxs {
-		data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
+		if i != 0 {
+			data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
+		}
 	}
 	err := writer.Write(data)
 	if err != nil {
