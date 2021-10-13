@@ -4,13 +4,18 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
-	"regexp"
+	"sort"
 	"strconv"
 	"sync/atomic"
 	"time"
 	"github.com/konimarti/opc"
 	"github.com/rs/zerolog"
 )
+
+type Tag struct {
+	name	string
+	tag		string
+}
 
 var (
 	customerChannelString = "customer channel "
@@ -29,7 +34,7 @@ var (
 	coldfingerStr = "Coldfinger"
 	platenLeftRearStr = "Platen (L.S. Rear)"
 	platenLeftFrontStr = "Platen (L.S. Front)"
-	platenRightFronStr = "Platen (R.S. Front)"
+	platenRightFrontStr = "Platen (R.S. Front)"
 	platenRightRearStr = "Platen (R.S. Rear)"
 	platenRetStr = "Platen (Return S-bend)"
 	mainSupRearStr = "Main (Supply man Rear)"
@@ -46,108 +51,115 @@ var (
 	computedOne = "CustSup_Current"
 	pressureStr = "Pressure_Test"
 	unusedStr = "Unused"
-	customerModulePattern = "Instrument 01.Module [1-2]"
-	customerChannelPattern = "Channel ([0-9]{2}([0-9]))"
-	channelStr = "Channel"
-	defaultTagMap = func(tags []string) (map[string]string, err) {
-		rM, err := regexp.Compile(customerModulePattern)
-		if err != nil {
-			return nil, err
-		}
-		tagMap := make(map[string]string)
+	defaultTagMap = func(tags []string) map[int]Tag {
+		tagMap := make(map[int]Tag)
 		for i, t := range tags {
-			if rM.MatchString(t) { // first 2 modules are customer channels
-				rC, err := regexp.Compile(customerChannelPattern)
-				if err != nil {
-					return nil, err
-				}
-				s := rC.FindStringSubmatch(t)
-				channelNum, err := strconv.Atoi(s[1])
-				if err != nil {
-					return nil, err
-				}
-				number, err := strconv.Atoi(s[2])
-				if err != nil {
-					return nil, err
-				}
-				if channelNum < 200 {
-					tagMap[customerChannelString+s[2]] = t
-				} else {
-					tagMap[customerChannelString+strconv.Itoa(number+19)] = t
-				}
-			}
+			var str string
 			switch {
-			case i < 40: // first 40 channels are customer channels
-				tagMap[customerChannelString+strconv.Itoa(i+1)] = t
-			case i == 42:
-				tagMap[coldfingerSup] = t
+			case i < 41 && i > 0: // first 40 channels are customer channels
+				
+				str = customerChannelString+strconv.Itoa(i)
 			case i == 43:
-				tagMap[coldfingerRet] = t
+				
+				str = coldfingerSup
 			case i == 44:
-				tagMap[coldfingerFin] = t
-			case i == 65:
-				tagMap[platenIn] = t
+				
+				str = coldfingerRet
+			case i == 45:
+				
+				str = coldfingerFin
 			case i == 66:
-				tagMap[platenOut] = t
-			case i == 80:
-				tagMap[customerSupply+" - "+voltageString] = t
-			case i < 94 && i > 80:
-				tagMap[couponString+strconv.Itoa(i-79)+" - "+voltageString] = t
-			case i == 94:
-				tagMap[couponString+strconv.Itoa(1)+" - "+voltageString] = t
-			case i == 100:
-				tagMap[rearShroudSupStr] = t
+				
+				str = platenIn
+			case i == 67:
+				
+				str = platenOut
+			case i == 81:
+				
+				str = customerSupply+" - "+voltageString
+			case i < 95 && i > 81:
+				
+				str = couponString+strconv.Itoa(i-80)+" - "+voltageString
+			case i == 95:
+				
+				str = couponString+strconv.Itoa(1)+" - "+voltageString
 			case i == 101:
-				tagMap[rearShroudUpStr] = t
+				
+				str = rearShroudSupStr
 			case i == 102:
-				tagMap[rearShroudRetStr] = t
+				
+				str = rearShroudUpStr
 			case i == 103:
-				tagMap[coldfingerStr] = t
+				
+				str = rearShroudRetStr
 			case i == 104:
-				tagMap[platenLeftRearStr] = t
+				
+				str = coldfingerStr
 			case i == 105:
-				tagMap[platenLeftFrontStr] = t
+				
+				str = platenLeftRearStr
 			case i == 106:
-				tagMap[platenRightFronStr] = t
+				
+				str = platenLeftFrontStr
 			case i == 107:
-				tagMap[platenRightRearStr] = t
+				
+				str = platenRightFrontStr
 			case i == 108:
-				tagMap[platenRetStr] = t
+				
+				str = platenRightRearStr
 			case i == 109:
-				tagMap[mainSupRearStr] = t
+				
+				str = platenRetStr
 			case i == 110:
-				tagMap[mainSupFrontStr] = t
+				
+				str = mainSupRearStr
 			case i == 111:
-				tagMap[mainRetFrontStr] = t
+				
+				str = mainSupFrontStr
 			case i == 112:
-				tagMap[mainRetRearStr] = t
+				
+				str = mainRetFrontStr
 			case i == 113:
-				tagMap[frontDoorSupStr] = t
+				
+				str = mainRetRearStr
 			case i == 114:
-				tagMap[frontDoorRetStr] = t
+				
+				str = frontDoorSupStr
 			case i == 115:
-				tagMap[frontDoorSkinStr] = t
+				
+				str = frontDoorRetStr
 			case i == 116:
-				tagMap[rearSkinStr] = t
+				
+				str = frontDoorSkinStr
 			case i == 117:
-				tagMap[mainShroudRearStr] = t
+				
+				str = rearSkinStr
 			case i == 118:
-				tagMap[mainShroudFrontStr] = t
+				
+				str = mainShroudRearStr
 			case i == 119:
-				tagMap[platenSupStr] = t
+				
+				str = mainShroudFrontStr
 			case i == 120:
-				tagMap[computedOne] = t
+				
+				str = platenSupStr
 			case i == 121:
-				tagMap[pressureStr] = t
-			case i > 121 && i < 135:
-				tagMap[couponString+strconv.Itoa(i-119)+" - Current"] = t
-			case i == 135:
-				tagMap[couponString+strconv.Itoa(1)+" - Current"] = t
-			default:
-				tagMap[unusedStr] = t
+				
+				str = computedOne
+			case i == 122:
+				
+				str = pressureStr
+			case i > 122 && i < 136:
+				
+				str = couponString+strconv.Itoa(i-121)+" - Current"
+			case i == 136:
+				str = couponString+strconv.Itoa(1)+" - Current"
+			}
+			if str != "" {
+				tagMap[i] = Tag{name: str, tag: t}
 			}
 		}
-		return tagMap, nil
+		return tagMap
 	}
 	flukeOPCServerName = "Fluke.DAQ.OPC"
 	flukeOPCServerHost = "localhost"
@@ -159,7 +171,7 @@ type FlukeService struct {
 	Stopping	int32 // atomic
 	Logger		*zerolog.Logger
 	tags		[]string
-	tagMap		map[string]string
+	tagMap		map[int]Tag
 	connection	opc.Connection
 }
 
@@ -169,20 +181,16 @@ func NewFlukeService(logger *zerolog.Logger) (*FlukeService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Could not retrieve all tags: %v", err)
 	}
-	tMap, err := defaultTagMap(tags)
-	if err != nil {
-		return nil, fmt.Errorf("Could not create default tag map: %v", err)
-	}
 	return &FlukeService{
 		Logger: logger,
 		tags: tags,
-		tagMap: ,
+		tagMap: defaultTagMap(tags),
 	}, nil
 }
 
 // Start starts the service. Returns an error if any issues occur
 func (s *FlukeService) Start() error {
-	s.Logger.Info().Msg("Starting Fuke...")
+	s.Logger.Info().Msg("Starting Fluke Service...")
 	atomic.StoreInt32(&s.Active, 1)
 	c, err := opc.NewConnection(
 		flukeOPCServerName,
@@ -193,14 +201,16 @@ func (s *FlukeService) Start() error {
 		return err
 	}
 	s.connection = c
+	s.Logger.Info().Msg("Fluke Servic started.")
 	return nil
 }
 
 // Stop stops the service. Returns an error if any issues occur
 func (s *FlukeService) Stop() error {
-	s.Logger.Info().Msg("Stopping Daemon...")
+	s.Logger.Info().Msg("Stopping Fluke Service...")
 	atomic.StoreInt32(&s.Stopping, 1)
 	s.connection.Close()
+	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
 
@@ -215,20 +225,21 @@ func (s *FlukeService) StartRecording() error {
 	defer writer.Flush()
 	// headers
 	headerData := []string{"Timestamp"}
-	for name, _ := range s.tagMap {
-		if name != unusedStr {
-			headerData = append(headerData, name)
-		}
+	idxs := make([]int, 0, len(s.tagMap))
+	for idx, _ := range s.tagMap{
+		idxs = append(idxs, idx)
+	}
+	sort.Ints(idxs)
+	for _, i := range idxs {
+		headerData = append(headerData, s.tagMap[i].name)
 	}
 	err = writer.Write(headerData)
 	if err != nil {
 		return err
 	}
 	data := []string{fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())}
-	for name, tag := range s.tagMap {
-		if name != unusedStr {
-			data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(tag).Value))
-		}
+	for _, i := range idxs {
+		data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
 	}
 	err = writer.Write(data)
 	if err != nil {

@@ -215,7 +215,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer flukeService.Stop()
-	server.logger.Info().Msg("Fluke service started.")
 	flukeService.StartRecording()
 
 	<-interceptor.ShutdownChannel()
