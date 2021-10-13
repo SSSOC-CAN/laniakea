@@ -214,9 +214,10 @@ func (s *FlukeService) Stop() error {
 	return nil
 }
 
-func (s *FlukeService) StartRecording() error {
+// StartRecording starts the recording process by creating a csv file and inserting the header row into the file
+func (s *FlukeService) StartRecording(outputDir string) error {
 	current_time := time.Now()
-	file, err := os.Create(fmt.Sprintf("%02d-%02d-%d-fluke.csv", current_time.Day(), current_time.Month(), current_time.Year()))
+	file, err := os.Create(fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", outputDir, current_time.Day(), current_time.Month(), current_time.Year()))
 	if err != nil {
 		return fmt.Errorf("Could not create file %s: %v", file, err)
 	}
@@ -237,6 +238,7 @@ func (s *FlukeService) StartRecording() error {
 	if err != nil {
 		return err
 	}
+	// the actual data
 	data := []string{fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())}
 	for _, i := range idxs {
 		data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
