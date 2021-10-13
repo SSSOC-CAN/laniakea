@@ -229,5 +229,13 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "fmtd",
 			Action: "read",
 		}},
+		"/fmtrpc.DataCollector/StartRecording": {{
+			Entity: "fmtd",
+			Action: "write",
+		}},
+		"/fmtrpc.DataCollector/StopRecording": {{
+			Entity: "fmtd",
+			Action: "write",
+		}},
 	}
 }
