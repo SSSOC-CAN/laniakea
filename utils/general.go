@@ -23,6 +23,8 @@ package utils
 
 import (
 	"os"
+	"path/filepath"
+	"strconv"
 )
 
 // FileExists reports whether the named file or directory exists.
@@ -34,4 +36,14 @@ func FileExists(name string) bool {
 		}
 	}
 	return true
+}
+
+func UniqueFileName(path string) string {
+	counter := 0
+	for FileExists(path) {
+		counter++
+		ext := filepath.Ext(path)
+		path = path[:len(path)-len(ext)]+" ("+strconv.Itoa(counter)+")"+ext
+	}
+	return path
 }

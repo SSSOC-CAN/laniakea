@@ -10,6 +10,7 @@ import (
 	"time"
 	"github.com/konimarti/opc"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 type Tag struct {
@@ -233,6 +234,7 @@ func (s *FlukeService) Stop() error {
 func (s *FlukeService) StartRecording(outputDir string) error {
 	current_time := time.Now()
 	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", outputDir, current_time.Day(), current_time.Month(), current_time.Year())
+	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
 		return fmt.Errorf("Could not create file %s: %v", file, err)
