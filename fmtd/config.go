@@ -18,6 +18,7 @@ type Config struct {
 	ConsoleOutput	bool		`yaml:"ConsoleOutput"`
 	GrpcPort		int64		`yaml:"GrpcPort"`
 	RestPort		int64		`yaml:"RestPort"`
+	DataOutputDir	string		`yaml:"DataOutputDir"`
 	MacaroonDBPath	string
 	TLSCertPath		string
 	TLSKeyPath		string
@@ -46,6 +47,7 @@ var (
 	default_tls_key_path string = default_log_dir()+"/tls.key"
 	default_admin_macaroon_path string = default_log_dir()+"/admin.macaroon"
 	test_macaroon_path string = default_log_dir()+"/test.macaroon"
+	default_data_output_dir string = default_log_dir()
 	default_ws_ping_interval = time.Second * 30
 	default_ws_pong_wait = time.Second * 5
 	default_config = func() Config {
@@ -55,6 +57,7 @@ var (
 			ConsoleOutput: false,
 			GrpcPort: default_grpc_port,
 			RestPort: default_rest_port,
+			DataOutputDir: default_data_output_dir,
 			MacaroonDBPath: default_macaroon_db_file,
 			TLSCertPath: default_tls_cert_path,
 			TLSKeyPath: default_tls_key_path,
@@ -163,6 +166,10 @@ func check_yaml_config(config Config) Config {
 		case "TestMacPath":
 			if f.String() == "" {
 				change_field(f, test_macaroon_path)
+			}
+		case "DataOutputDir":
+			if f.String() == "" {
+				change_field(f, default_data_output_dir)
 			}
 		}
 	}
