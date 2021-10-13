@@ -1,0 +1,130 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "collector.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "DataCollector"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/start/recording": {
+      "post": {
+        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from Fluke software and writing it.",
+        "operationId": "DataCollector_StartRecording",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcRecordResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcRecordRequest"
+            }
+          }
+        ],
+        "tags": [
+          "DataCollector"
+        ]
+      }
+    },
+    "/v1/stop/recording": {
+      "get": {
+        "summary": "fmtcli: `stop-record`\nStopRecording will end tje recording of data from Fluke software.",
+        "operationId": "DataCollector_StopRecording",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcStopRecResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "DataCollector"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "fmtrpcRecordRequest": {
+      "type": "object",
+      "properties": {
+        "polling_interval": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "fmtrpcRecordResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcStopRecResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

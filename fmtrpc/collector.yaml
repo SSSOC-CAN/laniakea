@@ -1,0 +1,10 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: fmtrpc.DataCollector.StartRecording
+      post: "/v1/start/recording"
+      body: "*"
+    - selector: fmtrpc.DataCollector.StopRecording
+      get: "/v1/stop/recording"
