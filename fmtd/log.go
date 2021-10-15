@@ -73,6 +73,8 @@ func InitLogger(config *Config) (zerolog.Logger, error) {
 					msg = color.Color(strings.ToUpper("["+x+"]"), "red")
 				case "error":
 					msg = color.Color(strings.ToUpper("["+x+"]"), "red")
+				case "warn":
+					msg = color.Color(strings.ToUpper("["+x+"]"), "yellow")
 				case "debug":
 					msg = color.Color(strings.ToUpper("["+x+"]"), "yellow")
 				case "trace":

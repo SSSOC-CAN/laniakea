@@ -43,7 +43,14 @@ func UniqueFileName(path string) string {
 	for FileExists(path) {
 		counter++
 		ext := filepath.Ext(path)
-		path = path[:len(path)-len(ext)]+" ("+strconv.Itoa(counter)+")"+ext
+		if counter > 1 && counter < 10 {
+			path = path[:len(path)-len(ext)-4]+" ("+strconv.Itoa(counter)+")"+ext
+		} else if counter > 10 {
+			path = path[:len(path)-len(ext)-5]+" ("+strconv.Itoa(counter)+")"+ext
+		} else {
+			path = path[:len(path)-len(ext)]+" ("+strconv.Itoa(counter)+")"+ext
+		}
+		
 	}
 	return path
 }

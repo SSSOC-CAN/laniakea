@@ -14,5 +14,5 @@
 # output files
 *.csv
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# shell scripts
+*.sh
