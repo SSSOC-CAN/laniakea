@@ -246,13 +246,13 @@ func (s *FlukeService) Stop() error {
 
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
 func (s *FlukeService) startRecording(pol_int int64) error {
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return fmt.Errorf("Could not start recording. Data recording already started")
-	}
 	if pol_int < minPollingInterval && pol_int != 0 {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", minPollingInterval)
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = DefaultPollingInterval
+	}
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+		return fmt.Errorf("Could not start recording. Data recording already started")
 	}
 	current_time := time.Now()
 	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
