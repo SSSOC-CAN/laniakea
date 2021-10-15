@@ -24,12 +24,12 @@ package main
 import (
 	"fmt"
 	"os"
+
 	"github.com/SSSOC-CAN/fmtd/fmtd"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 )
 
 // main is the entry point for fmt daemon.
-// TODO:SSSOCPaulCote - Refactor some of this into server.Start()
 func main() {
 	shutdownInterceptor, err := intercept.InitInterceptor()
 	if err != nil {
@@ -56,5 +56,5 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	
+
 }
