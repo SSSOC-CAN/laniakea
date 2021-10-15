@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/konimarti/opc"
@@ -175,15 +176,18 @@ var (
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
 	fmtrpc.UnimplementedDataCollectorServer
-	Active     int32 // atomic
-	Stopping   int32 // atomic
-	Recording  int32 // atomic
-	Logger     *zerolog.Logger
-	tags       []string
-	tagMap     map[int]Tag
-	connection opc.Connection
-	QuitChan   chan struct{}
-	outputDir  string
+	data.DataProvider
+	Active     				int32 // atomic
+	Stopping   				int32 // atomic
+	Recording  				int32 // atomic
+	Logger     				*zerolog.Logger
+	name					string
+	tags       				[]string
+	tagMap     				map[int]Tag
+	connection 				opc.Connection
+	QuitChan   				chan struct{}
+	outputDir  				string
+	OutgoingDataChannels	[]chan []byte
 }
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
@@ -198,6 +202,8 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
 		outputDir: outputDir,
+		OutgoingDataChannels: make([]chan []byte),
+		name:	"FLUKE",
 	}, nil
 }
 
@@ -304,15 +310,27 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 // record records the live data from Fluke and inserts it into a csv file
 func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	current_time := time.Now()
-	data := []string{fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())}
+	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
+	data := []string{current_time_str}
+	dataBytes := data.Encode(current_time_str)
 	for _, i := range idxs {
+		reading := s.connection.ReadItem(s.tagMap[i].tag)
+		if len(s.OutgoingDataChannels) != 0 {
+			dataBytes = append(dataBytes, data.Encode(s.tagMap[i].tag))
+			dataBytes = append(dataBytes, data.Encode(reading.Value))
+		}
 		if i != 0 {
-			data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
+			data = append(data, fmt.Sprintf("%g", reading.Value))
 		}
 	}
 	err := writer.Write(data)
 	if err != nil {
 		return err
+	}
+	if len(s.OutgoingDataChannels) != 0 {
+		for _, outChan := range s.OutgoingDataChannels {
+			outChan <- dataBytes
+		}
 	}
 	return nil
 }
@@ -343,4 +361,21 @@ func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReq
 	return &fmtrpc.StopRecResponse{
 		Msg: "Data recording successfully stopped.",
 	}, nil
+}
+
+// RegisterWithBufferService satisfies the DataProvider interface. It will register the provided outgoing data channel with the FlukeService
+func (s *FlukeService) RegisterWithBufferService(outgoingChan chan []byte) {
+	s.OutgoingDataChannels = append(s.OutgoingDataChannels, outgoingChan)
+}
+
+// ServiceName satisfies the DataProvider interface. It returns the name of the service.
+func (s *FlukeService) ServiceName() string {
+	return s.name
+}
+
+// SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
+func (s *FlukeService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
+	if s.Recording != 1 {
+		return fmt.Errorf("Data not currently being recorded. Cannot stream data until recording has started.")
+	}
 }
