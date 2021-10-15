@@ -51,7 +51,7 @@
     },
     "/v1/stop/recording": {
       "get": {
-        "summary": "fmtcli: `stop-record`\nStopRecording will end tje recording of data from Fluke software.",
+        "summary": "fmtcli: `stop-record`\nStopRecording will end the recording of data from Fluke software.",
         "operationId": "DataCollector_StopRecording",
         "responses": {
           "200": {
@@ -71,9 +71,70 @@
           "DataCollector"
         ]
       }
+    },
+    "/v1/subscribe/datastream": {
+      "get": {
+        "summary": "fmtcli: `subscribe-data-stream`\nSubscribeDataStream returns a uni-directional stream (server -\u003e client) of data being recorded from the Fluke DAQ.",
+        "operationId": "DataCollector_SubscribeDataStream",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/fmtrpcRealTimeData"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of fmtrpcRealTimeData"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "DataCollector"
+        ]
+      }
     }
   },
   "definitions": {
+    "fmtrpcDataField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "fmtrpcRealTimeData": {
+      "type": "object",
+      "properties": {
+        "is_scanning": {
+          "type": "boolean"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/fmtrpcDataField"
+          }
+        }
+      }
+    },
     "fmtrpcRecordRequest": {
       "type": "object",
       "properties": {

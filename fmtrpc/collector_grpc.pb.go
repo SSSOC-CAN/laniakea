@@ -22,8 +22,11 @@ type DataCollectorClient interface {
 	//StartRecording will begin recording data from Fluke software and writing it.
 	StartRecording(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*RecordResponse, error)
 	// fmtcli: `stop-record`
-	//StopRecording will end tje recording of data from Fluke software.
+	//StopRecording will end the recording of data from Fluke software.
 	StopRecording(ctx context.Context, in *StopRecRequest, opts ...grpc.CallOption) (*StopRecResponse, error)
+	// fmtcli: `subscribe-data-stream`
+	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
+	SubscribeDataStream(ctx context.Context, in *SubscribeDataRequest, opts ...grpc.CallOption) (DataCollector_SubscribeDataStreamClient, error)
 }
 
 type dataCollectorClient struct {
@@ -52,6 +55,38 @@ func (c *dataCollectorClient) StopRecording(ctx context.Context, in *StopRecRequ
 	return out, nil
 }
 
+func (c *dataCollectorClient) SubscribeDataStream(ctx context.Context, in *SubscribeDataRequest, opts ...grpc.CallOption) (DataCollector_SubscribeDataStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &DataCollector_ServiceDesc.Streams[0], "/fmtrpc.DataCollector/SubscribeDataStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &dataCollectorSubscribeDataStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type DataCollector_SubscribeDataStreamClient interface {
+	Recv() (*RealTimeData, error)
+	grpc.ClientStream
+}
+
+type dataCollectorSubscribeDataStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *dataCollectorSubscribeDataStreamClient) Recv() (*RealTimeData, error) {
+	m := new(RealTimeData)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // DataCollectorServer is the server API for DataCollector service.
 // All implementations must embed UnimplementedDataCollectorServer
 // for forward compatibility
@@ -60,8 +95,11 @@ type DataCollectorServer interface {
 	//StartRecording will begin recording data from Fluke software and writing it.
 	StartRecording(context.Context, *RecordRequest) (*RecordResponse, error)
 	// fmtcli: `stop-record`
-	//StopRecording will end tje recording of data from Fluke software.
+	//StopRecording will end the recording of data from Fluke software.
 	StopRecording(context.Context, *StopRecRequest) (*StopRecResponse, error)
+	// fmtcli: `subscribe-data-stream`
+	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
+	SubscribeDataStream(*SubscribeDataRequest, DataCollector_SubscribeDataStreamServer) error
 	mustEmbedUnimplementedDataCollectorServer()
 }
 
@@ -74,6 +112,9 @@ func (UnimplementedDataCollectorServer) StartRecording(context.Context, *RecordR
 }
 func (UnimplementedDataCollectorServer) StopRecording(context.Context, *StopRecRequest) (*StopRecResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopRecording not implemented")
+}
+func (UnimplementedDataCollectorServer) SubscribeDataStream(*SubscribeDataRequest, DataCollector_SubscribeDataStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeDataStream not implemented")
 }
 func (UnimplementedDataCollectorServer) mustEmbedUnimplementedDataCollectorServer() {}
 
@@ -124,6 +165,27 @@ func _DataCollector_StopRecording_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _DataCollector_SubscribeDataStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeDataRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DataCollectorServer).SubscribeDataStream(m, &dataCollectorSubscribeDataStreamServer{stream})
+}
+
+type DataCollector_SubscribeDataStreamServer interface {
+	Send(*RealTimeData) error
+	grpc.ServerStream
+}
+
+type dataCollectorSubscribeDataStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *dataCollectorSubscribeDataStreamServer) Send(m *RealTimeData) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // DataCollector_ServiceDesc is the grpc.ServiceDesc for DataCollector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -140,6 +202,12 @@ var DataCollector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _DataCollector_StopRecording_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SubscribeDataStream",
+			Handler:       _DataCollector_SubscribeDataStream_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "collector.proto",
 }
