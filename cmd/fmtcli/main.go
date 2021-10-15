@@ -48,13 +48,22 @@ func fatal(err error) {
 	os.Exit(1)
 }
 
-// getClient returns the FmtClient instance from the fmtrpc package as well as a cleanup function
-func getClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
+// getFmtClient returns the FmtClient instance from the fmtrpc package as well as a cleanup function
+func getFmtClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
 	conn := getClientConn(ctx, false)
 	cleanUp := func() {
 		conn.Close()
 	}
 	return fmtrpc.NewFmtClient(conn), cleanUp
+}
+
+//getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
+func getDataCollectorClient(ctx *cli.Context) (fmtrpc.DataCollectorClient, func()) {
+	conn := getClientConn(ctx, false)
+	cleanUp := func() {
+		conn.Close()
+	}
+	return fmtrpc.NewDataCollectorClient(conn), cleanUp
 }
 
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
@@ -122,6 +131,8 @@ func main() {
 		adminTestCommand,
 		testCommand,
 		loginCommand,
+		startRecording,
+		stopRecording,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

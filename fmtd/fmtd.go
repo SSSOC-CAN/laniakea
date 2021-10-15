@@ -33,6 +33,7 @@ import (
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -112,16 +113,20 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	serverOpts = append(serverOpts, rpcServerOpts...)
 	grpc_server := grpc.NewServer(serverOpts...)
 	rpcServer.AddGrpcServer(grpc_server)
-	defer rpcServer.GrpcServer.Stop()
 
-	// Starting REST proxy
-	stopProxy, err := startRestProxy(
-		server.cfg, &rpcServer, restDialOpts, restListen,
-	)
+	// Instantiate Fluke service and register with gRPC server but NOT start
+	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
+	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
 	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
 		return err
 	}
-	defer stopProxy()
+	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer) // TODO:SSSOCPaulCote - This has to happen before the gRPC server is started
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
+		return err
+	}
+	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
 	// Starting bbolt kvdb
 	server.logger.Info().Msg("Opening database...")
@@ -140,7 +145,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize unlocker service: %v", err))
 		return err
 	}
-	unlockerService.RegisterWithGrpcServer(grpc_server)
+	unlockerService.RegisterWithGrpcServer(rpcServer.GrpcServer)
 	rpcServer.AddUnlockerService(unlockerService)
 	server.logger.Info().Msg("Unlocker service initialized.")
 
@@ -151,8 +156,17 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not start RPC server: %v", err))
 		return err
 	}
-	server.logger.Info().Msg("RPC Server Started")
 	defer rpcServer.Stop()
+	server.logger.Info().Msg("RPC Server Started")
+
+	// Starting REST proxy
+	stopProxy, err := startRestProxy(
+		server.cfg, &rpcServer, restDialOpts, restListen,
+	)
+	if err != nil {
+		return err
+	}
+	defer stopProxy()
 
 	// Wait for password
 	server.logger.Info().Msg("Waiting for password. Use `fmtcli login` to login.")
@@ -161,6 +175,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
 	}
 	server.logger.Info().Msg("Login successful")
+
 	// Instantiating Macaroon Service
 	server.logger.Info().Msg("Initiating macaroon service...")
 	macaroonService, err := macaroons.InitService(*db, "fmtd")
@@ -196,11 +211,20 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		)
 		if err != nil {
 			server.logger.Error().Msg(fmt.Sprintf("Unable to create test macaroon: %v", err))
+			return err
 		}
 	}
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
 
+	// Start Recording Data from Fluke
+	err = flukeService.Start()
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to start Fluke service: %v", err))
+		return err
+	}
+	defer flukeService.Stop()
+	
 	<-interceptor.ShutdownChannel()
 	return nil
 }
@@ -322,7 +346,7 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, restDialOpts []grpc.DialO
 	})
 	wg.Add(1)
 	go func() {
-		rpcServer.SubLogger.Info().Msg(fmt.Sprintf("gRPC proxy started and listenign at %s", lis.Addr()))
+		rpcServer.SubLogger.Info().Msg(fmt.Sprintf("gRPC proxy started and listening at %s", lis.Addr()))
 		wg.Done()
 		err := http.Serve(lis, restHandler)
 		if err != nil && !fmtrpc.IsClosedConnError(err) {

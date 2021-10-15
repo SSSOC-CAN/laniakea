@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package fmtrpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
+
+service DataCollector {
+    /* fmtcli: `start-record`
+    StartRecording will begin recording data from Fluke software and writing it.
+    */
+    rpc StartRecording (RecordRequest) returns (RecordResponse);
+    /* fmtcli: `stop-record`
+    StopRecording will end tje recording of data from Fluke software.
+    */
+    rpc StopRecording (StopRecRequest) returns (StopRecResponse);
+}
+
+message RecordRequest {
+    int64 polling_interval = 1;
+}
+
+message RecordResponse {
+    string msg = 1;
+}
+
+message StopRecRequest {
+}
+
+message StopRecResponse {
+    string msg = 1;
+}
