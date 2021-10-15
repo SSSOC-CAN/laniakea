@@ -54,7 +54,6 @@ var (
 	platenSupStr          = "Platen (Supply S-bend)"
 	computedOne           = "CustSup_Current"
 	pressureStr           = "Pressure_Test"
-	unusedStr             = "Unused"
 	defaultTagMap         = func(tags []string) map[int]Tag {
 		tagMap := make(map[int]Tag)
 		for i, t := range tags {
@@ -252,7 +251,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	}
 	if pol_int < minPollingInterval && pol_int != 0 {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", minPollingInterval)
-	} else if pol_int == 0 {
+	} else if pol_int == 0 { //No polling interval provided
 		pol_int = DefaultPollingInterval
 	}
 	current_time := time.Now()

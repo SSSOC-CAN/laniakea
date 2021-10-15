@@ -26,7 +26,6 @@ SOFTWARE.
 package drivers
 
 import (
-	"fmt"
 	"github.com/konimarti/opc"
 )
 
@@ -41,27 +40,3 @@ func GetAllTags() ([]string, error) {
 	}
 	return opc.CollectTags(b), nil
 }
-
-func main() {
-	b, _ := opc.CreateBrowser(
-		flukeOPCServerName,
-		[]string{flukeOPCServerHost},
-	)
-	//opc.PrettyPrint(b)
-	listOTags := opc.CollectTags(b)
-	
-	c, _ := opc.NewConnection(
-		flukeOPCServerName,
-		[]string{flukeOPCServerHost},
-		listOTags,
-	)
-	defer c.Close()
-	reading := c.Read()
-	fmt.Println(reading["Instrument 01.Module 3.Channel 304"].Value)
-
-	for _, t := range listOTags {
-		fmt.Printf("%s: %v\n", t, c.ReadItem(t))
-	}
-}
-
-                  
