@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/urfave/cli"
@@ -53,9 +54,9 @@ func getContext() context.Context {
 // printRespJSON will convert a proto response as a string and print it
 func printRespJSON(resp proto.Message) {
 	jsonMarshaler := &protojson.MarshalOptions{
-		Multiline: true,
+		Multiline:     true,
 		UseProtoNames: true,
-		Indent: "    ",
+		Indent:        "    ",
 	}
 	jsonStr := jsonMarshaler.Format(resp)
 	// if err != nil {
@@ -66,17 +67,17 @@ func printRespJSON(resp proto.Message) {
 }
 
 var stopCommand = cli.Command{
-	Name: "stop",
+	Name:  "stop",
 	Usage: "Stop and shutdown the daemon",
 	Description: `
 	Gracefully stop all daemon subprocesses before stopping the daemon itself. This is equivalent to stopping it using CTRL-C.`,
 	Action: stopDaemon,
 }
 
-// stopDaemon is the proxy command between fmtcli and gRPC equivalent. 
+// stopDaemon is the proxy command between fmtcli and gRPC equivalent.
 func stopDaemon(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getClient(ctx) //This command returns the proto generated FmtClient instance
+	client, cleanUp := getFmtClient(ctx) //This command returns the proto generated FmtClient instance
 	defer cleanUp()
 
 	_, err := client.StopDaemon(ctxc, &fmtrpc.StopRequest{})
@@ -87,7 +88,7 @@ func stopDaemon(ctx *cli.Context) error {
 }
 
 var adminTestCommand = cli.Command{
-	Name: "admin-test",
+	Name:  "admin-test",
 	Usage: "Test command for the admin macaroon",
 	Description: `
 	A test command which returns a string only if the admin macaroon is provided.`,
@@ -97,7 +98,7 @@ var adminTestCommand = cli.Command{
 // Proxy command for the fmtcli
 func adminTest(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getClient(ctx)
+	client, cleanUp := getFmtClient(ctx)
 	defer cleanUp()
 	testResp, err := client.AdminTest(ctxc, &fmtrpc.AdminTestRequest{})
 	if err != nil {
@@ -108,7 +109,7 @@ func adminTest(ctx *cli.Context) error {
 }
 
 var testCommand = cli.Command{
-	Name: "test",
+	Name:  "test",
 	Usage: "Test command",
 	Description: `
 	A test command which returns a string for any macaroon provided.`,
@@ -118,7 +119,7 @@ var testCommand = cli.Command{
 // Proxy command for the fmtcli
 func test(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getClient(ctx)
+	client, cleanUp := getFmtClient(ctx)
 	defer cleanUp()
 	testResp, err := client.TestCommand(ctxc, &fmtrpc.TestRequest{})
 	if err != nil {
@@ -137,7 +138,7 @@ func readPasswordFromTerminal(msg string) ([]byte, error) {
 }
 
 var loginCommand = cli.Command{
-	Name: "login",
+	Name:  "login",
 	Usage: "Login into the FMTD",
 	Description: `
 	When invoked, user will be prompted to enter a password. Either create one or use an existing one.`,
@@ -161,5 +162,60 @@ func login(ctx *cli.Context) error {
 		return err
 	}
 	printRespJSON(loginResp)
+	return nil
+}
+
+var startRecording = cli.Command{
+	Name:  "start-record",
+	Usage: "Start recording data in realtime.",
+	Description: `
+	This command starts the process of recording data from the Fluke DAQ into a timestamped csv file.`,
+	Flags: []cli.Flag{
+		cli.Int64Flag{
+			Name:  "polling_interval",
+			Usage: "If set, then the time between polls to the DAQ will be set to the specified amount in seconds.",
+		},
+	},
+	Action: startRecord,
+}
+
+// startRecord is the CLI wrapper around the FlukeService StartRecording method
+func startRecord(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getDataCollectorClient(ctx)
+	defer cleanUp()
+	var polling_interval int64
+	if ctx.NumFlags() != 0 {
+		polling_interval = ctx.Int64("polling_interval")
+	}
+	recordRequest := &fmtrpc.RecordRequest{
+		PollingInterval: polling_interval,
+	}
+	recordResponse, err := client.StartRecording(ctxc, recordRequest)
+	if err != nil {
+		return err
+	}
+	printRespJSON(recordResponse)
+	return nil
+}
+
+var stopRecording = cli.Command{
+	Name:  "stop-record",
+	Usage: "Stop recording data.",
+	Description: `
+	This command stops the process of recording data from the Fluke DAQ into a timestamped csv file.`,
+	Action: stopRecord,
+}
+
+// stopRecord is the CLI wrapper around the FlukeService StopRecording method
+func stopRecord(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getDataCollectorClient(ctx)
+	defer cleanUp()
+	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(recordResponse)
 	return nil
 }

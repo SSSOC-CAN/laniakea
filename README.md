@@ -129,11 +129,24 @@ $ go test -v ./...
 ```
 
 ### Compiling Binaries
+
+#### Linux
 A Makefile has been created to simplify the process. It's important that this project be in the expected location (i.e. $GOPATH/src/github.com/SSSOC-CAN/fmtd). Simply run the following from the root directory to compile binaries
 ```
 $ make install
 ```
 
+#### Windows
+The Go OPC library we're using requires binaries to be executed with the `386` architecture. To compile, make sure `GOARCH` is set to `386` and not `amd64`.
+```
+# In Gitbash
+$ export GOARCH="386"
+$ GO111MODULE=on go install -v github.com/SSSOC-CAN/fmtd/cmd/fmtd
+$ GO111MODULE=on go install -v github.com/SSSOC-CAN/fmtd/cmd/fmtcli
+$ rm $GOPATH/bin/fmtd.exe $GOPATH/bin/fmtcli.exe
+$ cp $GOPATH/bin/windows_386/fmtd.exe $GOPATH/bin
+$ cp $GOPATH/bin/windows_386/fmtcli.exe $GOPATH/bin
+```
 To manually test fmtd and fmtcli, have one terminal window open and run
 ```
 $ fmtd

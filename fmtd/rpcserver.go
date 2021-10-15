@@ -116,6 +116,7 @@ func (s *RpcServer) Stop() (error) {
 		return nil
 	}
 	close(s.quit)
+	s.GrpcServer.Stop()
 	return nil
 }
 
