@@ -8,3 +8,5 @@ http:
       body: "*"
     - selector: fmtrpc.DataCollector.StopRecording
       get: "/v1/stop/recording"
+    - selector: fmtrpc.DataCollector.SubscribeDataStream
+      get: "/v1/subscribe/datastream"
