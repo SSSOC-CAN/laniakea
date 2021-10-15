@@ -10,9 +10,13 @@ service DataCollector {
     */
     rpc StartRecording (RecordRequest) returns (RecordResponse);
     /* fmtcli: `stop-record`
-    StopRecording will end tje recording of data from Fluke software.
+    StopRecording will end the recording of data from Fluke software.
     */
     rpc StopRecording (StopRecRequest) returns (StopRecResponse);
+    /* fmtcli: `subscribe-data-stream`
+    SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
+    */
+    rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
 }
 
 message RecordRequest {
@@ -28,4 +32,18 @@ message StopRecRequest {
 
 message StopRecResponse {
     string msg = 1;
+}
+
+message SubscribeDataRequest {
+}
+
+message DataField {
+    string name = 1;
+    double value = 2;
+}
+
+message RealTimeData {
+    bool is_scanning = 1;
+    string timestamp = 2;
+    map<int64, DataField> data = 3;
 }
