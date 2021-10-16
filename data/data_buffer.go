@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var (
-	STRING_FIELD = 1
-	FLOAT64_FIELD = 2
+	STRING_FIELD byte = 1
+	FLOAT64_FIELD byte = 2
+	defaultBufferingPeriod int = 3
 )
 
 type DataField struct {
@@ -22,15 +24,15 @@ type DataFrame struct {
 	Data		map[int64]DataField
 }
 
-type DataSubscription struct {
-	DataStream	chan *DataFrame
-	CancelChan	chan struct{}
+type DataProviderInfo struct {
+	PollingInterval	int64
+	IncomingChan	chan []byte
+	OutgoingChan	chan *DataFrame
 }
 
 type DataBuffer struct {
 	Running					int32 //used atomically
-	IncomingDataChannels	map[string]chan []byte
-	OutgoingDataChannels	map[string]chan *DataFrame
+	DataProviders			map[string]DataProviderInfo
 	Quit					chan struct{}
 
 }
@@ -38,8 +40,7 @@ type DataBuffer struct {
 //NewDataBuffer returns an instantiated DataBuffer struct
 func NewDataBuffer() *DataBuffer {
 	return &DataBuffer{
-		IncomingDataChannels: make(map[string]chan []byte),
-		OutgoingDataChannels: make(map[string]chan *DataFrame),
+		DataProviders: make(map[string]DataProviderInfo),
 		Quit: make(chan struct{}),
 	}
 }
@@ -49,6 +50,7 @@ func (b *DataBuffer) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&b.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start Data Buffer Service.")
 	}
+	b.buffer(defaultBufferingPeriod)
 	return nil
 }
 
@@ -57,42 +59,56 @@ func (b *DataBuffer) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&b.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop Data Buffer Service.")
 	}
-	for _, inChan := range b.IncomingDataChannels {
-		close(inChan)
-	}
-	for _, outChan := range b.OutgoingDataChannels {
-		close(outChan)
+	for _, p := range b.DataProviders {
+		close(p.IncomingChan)
+		close(p.OutgoingChan)
 	}
 	close(b.Quit)
 	return nil
 }
 
-// RegisterDataProvider creates a new Incoming data channel, appends it to the map of incoming data channels and also gives the channel to the data provider. Additionally, it creates a new outgoing channel and appends that to the map of outgoing channels
-func (b *DataBuffer) RegisterDataProvider(dataProvider *DataProvider) error {
-	if _, ok := b.IncomingDataChannels[dataProvider.ServiceName()]; ok {
-		return fmt.Errorf("Data provider already registered with Data Buffer.")
-	}
-	newIncomingChan := make(chan []byte)
-	newOutgoingChan := make(chan *DataFrame)
-	dataProvider.RegisterWithBufferService(newIncomingChan)
-	b.IncomingDataChannels[dataProvider.ServiceName()] = newOutgoingChan
-}
-
 // SubscribeSingleStream returns the outgoing channel for the specified service name
 func (b *DataBuffer) SubscribeSingleStream(name string) (chan *DataFrame, error) {
-	if outChan, ok := b.OutgoingDataChannels[name]; !ok {
-		nil, return fmt.Errorf("No such channel exists: %s", name)
+	if _, ok := b.DataProviders[name]; !ok {
+		return nil, fmt.Errorf("No such data provider registered with data buffer service: %s", name)
 	}
-	return b.OutgoingDataChannels[name], nil
+	return b.DataProviders[name].OutgoingChan, nil
 }
 
-func (b *DataBuffer) buffer() {
+// buffer creates goroutines for each incoming, outgoing data pair and decodes the incoming bytes into outgoing DataFrames
+func (b *DataBuffer) buffer(bufferPeriod int) {
 	var wg sync.WaitGroup
-	for name, inChan := range b.IncomingDataChannels {
+	buf := make([]*DataFrame, bufferPeriod)
+	for _, p := range b.DataProviders {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			b.OutgoingDataChannels[name] <- Decode(inChan)
-		}
+			for i := 0; i < bufferPeriod; i++ {
+				select {
+				case rawData := <-p.IncomingChan:
+					tmp, err := Decode(rawData)
+					if err != nil {
+						return // not sure what should happen here
+					}
+					buf[i] = tmp
+				case <-b.Quit:
+					return
+				}
+			}
+			for i := 0; i < bufferPeriod; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					current_time := time.Now()
+					poleTime := current_time.Add(time.Duration(p.PollingInterval) * time.Second)
+					p.OutgoingChan <- buf[i]
+					ct2 := time.Now()
+					if ct2.Before(poleTime) {
+						time.Sleep(poleTime.Sub(ct2))
+					}
+				}()	
+			}
+		}()
 	}
+	wg.Wait()
 }
