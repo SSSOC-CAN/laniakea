@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -176,19 +177,23 @@ var (
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
 	fmtrpc.UnimplementedDataCollectorServer
-	data.DataProvider
 	Active     				int32 // atomic
 	Stopping   				int32 // atomic
 	Recording  				int32 // atomic
 	Logger     				*zerolog.Logger
 	name					string
+	pollingInterval			int64
 	tags       				[]string
 	tagMap     				map[int]Tag
 	connection 				opc.Connection
 	QuitChan   				chan struct{}
 	outputDir  				string
 	OutgoingDataChannels	[]chan []byte
+	DataBufferService		*data.DataBuffer
 }
+
+// A compile time check to ensure FlukeService fully implements the DataProvider interface
+var _ data.DataProvider = (*FlukeService)(nil)
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
 func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, error) {
@@ -196,13 +201,14 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 	if err != nil {
 		return nil, fmt.Errorf("Could not retrieve all tags: %v", err)
 	}
+	var newSliceOutChans []chan []byte
 	return &FlukeService{
 		Logger:    logger,
 		tags:      tags,
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
 		outputDir: outputDir,
-		OutgoingDataChannels: make([]chan []byte),
+		OutgoingDataChannels: newSliceOutChans,
 		name:	"FLUKE",
 	}, nil
 }
@@ -260,6 +266,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = DefaultPollingInterval
 	}
+	s.pollingInterval = pol_int
 	current_time := time.Now()
 	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
 	file_name = utils.UniqueFileName(file_name)
@@ -311,26 +318,32 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	current_time := time.Now()
 	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
-	data := []string{current_time_str}
+	dataString := []string{current_time_str}
 	dataBytes := data.Encode(current_time_str)
 	for _, i := range idxs {
 		reading := s.connection.ReadItem(s.tagMap[i].tag)
 		if len(s.OutgoingDataChannels) != 0 {
-			dataBytes = append(dataBytes, data.Encode(s.tagMap[i].tag))
-			dataBytes = append(dataBytes, data.Encode(reading.Value))
+			dataBytes = append(dataBytes, data.Encode(s.tagMap[i].tag)...)
+			dataBytes = append(dataBytes, data.Encode(reading.Value)...)
 		}
 		if i != 0 {
-			data = append(data, fmt.Sprintf("%g", reading.Value))
+			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
 		}
 	}
-	err := writer.Write(data)
+	err := writer.Write(dataString)
 	if err != nil {
 		return err
 	}
 	if len(s.OutgoingDataChannels) != 0 {
+		var wg sync.WaitGroup
 		for _, outChan := range s.OutgoingDataChannels {
-			outChan <- dataBytes
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				outChan <- dataBytes
+			}()
 		}
+		wg.Wait()
 	}
 	return nil
 }
@@ -363,19 +376,69 @@ func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReq
 	}, nil
 }
 
-// RegisterWithBufferService satisfies the DataProvider interface. It will register the provided outgoing data channel with the FlukeService
-func (s *FlukeService) RegisterWithBufferService(outgoingChan chan []byte) {
-	s.OutgoingDataChannels = append(s.OutgoingDataChannels, outgoingChan)
+// RegisterWithBufferService satisfies the DataProvider interface. It provides the bufService with new incoming and outgoing channels along with a polling interval
+func (s FlukeService) RegisterWithBufferService(bufService *data.DataBuffer) error {
+	if _, ok := bufService.DataProviders[s.ServiceName()]; !ok {
+		return fmt.Errorf("%v data provider already registered with Data Buffer.", s.ServiceName())
+	}
+	newIncomingChan := make(chan []byte)
+	newOutgoingChan := make(chan *data.DataFrame)
+	s.OutgoingDataChannels = append(s.OutgoingDataChannels, newIncomingChan)
+	bufService.DataProviders[s.ServiceName()] = data.DataProviderInfo{
+		PollingInterval: s.PollingInterval(),
+		IncomingChan: newIncomingChan,
+		OutgoingChan: newOutgoingChan,
+	}
+	s.DataBufferService = bufService
+	return nil
 }
 
 // ServiceName satisfies the DataProvider interface. It returns the name of the service.
-func (s *FlukeService) ServiceName() string {
+func (s FlukeService) ServiceName() string {
 	return s.name
+}
+
+// PollingInterval satisfies the DataProvider interface. It returns the polling interval.
+func (s FlukeService) PollingInterval() int64 {
+	return s.pollingInterval
+}
+
+func ToRPCDataField(d map[int64]data.DataField) map[int64]*fmtrpc.DataField {
+	newDataField := make(map[int64]*fmtrpc.DataField)
+	for i, field := range d {
+		newDataField[i] = &fmtrpc.DataField{
+			Name: field.Name,
+			Value: field.Value,
+		}
+	}
+	return newDataField
 }
 
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *FlukeService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	if s.Recording != 1 {
 		return fmt.Errorf("Data not currently being recorded. Cannot stream data until recording has started.")
+	}
+	// if atomic.LoadInt32(&s.DataBufferService.Running) != 1 {
+	// 	return fmt.Errorf("Data Buffer service not running. Cannot stream data")
+	// }
+	for {
+		select {
+		case newDataFrame := <-s.DataBufferService.DataProviders[s.name].OutgoingChan:
+			RTD := &fmtrpc.RealTimeData{
+				IsScanning: newDataFrame.IsScanning,
+				Timestamp: newDataFrame.Timestamp,
+				Data: ToRPCDataField(newDataFrame.Data),
+			}
+			if err := updateStream.Send(RTD); err != nil {
+				return err
+			}
+		case <-updateStream.Context().Done():
+			return updateStream.Context().Err()
+		case <-s.QuitChan:
+			return nil
+		case <-s.DataBufferService.Quit:
+			return nil
+		}
 	}
 }
