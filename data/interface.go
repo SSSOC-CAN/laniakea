@@ -9,7 +9,6 @@ import (
 type DataProvider interface {
 	RegisterWithBufferService(*DataBuffer) error
 	ServiceName() string
-	PollingInterval() int64
 }
 
 // Encode encodes different data types into bytes using BigEndian byte order
