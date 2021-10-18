@@ -337,11 +337,6 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 			Timestamp: current_time_str,
 			Data: dataField,
 		}
-		// s.wg.Add(1)
-		// go func() {
-		// 	defer s.wg.Done()
-		// 	s.BuffedChan <- dataFrame
-		// }()
 		s.BuffedChan <- dataFrame
 		s.Logger.Info().Msg("After pushing into channel")
 	}
