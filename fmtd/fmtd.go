@@ -33,7 +33,6 @@ import (
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
@@ -77,7 +76,6 @@ var (
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
-	var BufferedServices []data.DataProvider
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -116,15 +114,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_server := grpc.NewServer(serverOpts...)
 	rpcServer.AddGrpcServer(grpc_server)
 
-	// Instantiate and Start Data Buffer Service
-	bufService := data.NewDataBuffer(&NewSubLogger(server.logger, "BUFF").SubLogger)
-	err = bufService.Start(ctx)
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to start Data Buffering service: %v", err))
-		return err
-	}
-	defer bufService.Stop()
-
 	// Instantiate Fluke service and register with gRPC server but NOT start
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
 	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
@@ -133,7 +122,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
-	BufferedServices = append(BufferedServices, *flukeService)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
@@ -236,14 +224,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer flukeService.Stop()
-
-	// Register Data providers with Data Buffer Service
-	for _, s := range BufferedServices {
-		err := s.RegisterWithBufferService(bufService)
-		if err != nil {
-			server.logger.Warn().Msg(fmt.Sprintf("%s service already registered with Data Buffer.", s.ServiceName()))
-		}
-	}
 	
 	<-interceptor.ShutdownChannel()
 	return nil
