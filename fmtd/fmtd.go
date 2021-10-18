@@ -116,6 +116,15 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_server := grpc.NewServer(serverOpts...)
 	rpcServer.AddGrpcServer(grpc_server)
 
+	// Instantiate and Start Data Buffer Service
+	bufService := data.NewDataBuffer(&NewSubLogger(server.logger, "BUFF").SubLogger)
+	err = bufService.Start(ctx)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to start Data Buffering service: %v", err))
+		return err
+	}
+	defer bufService.Stop()
+
 	// Instantiate Fluke service and register with gRPC server but NOT start
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
 	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
@@ -228,21 +237,13 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	defer flukeService.Stop()
 
-	// Instantiate and Start Data Buffer Service
-	bufService := data.NewDataBuffer()
+	// Register Data providers with Data Buffer Service
 	for _, s := range BufferedServices {
 		err := s.RegisterWithBufferService(bufService)
 		if err != nil {
 			server.logger.Warn().Msg(fmt.Sprintf("%s service already registered with Data Buffer.", s.ServiceName()))
 		}
 	}
-	server.logger.Info().Msg("Starting Data Buffering service...")
-	err = bufService.Start()
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to start Data Buffering service: %v", err))
-		return err
-	}
-	server.logger.Info().Msg("Data Buffering service successfully started.")
 	
 	<-interceptor.ShutdownChannel()
 	return nil

@@ -7,7 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
-	"sync"
+	//"sync"
 	"sync/atomic"
 	"time"
 
@@ -180,6 +180,7 @@ type FlukeService struct {
 	Active     				int32 // atomic
 	Stopping   				int32 // atomic
 	Recording  				int32 // atomic
+	Listeners				int32 // atomic
 	Logger     				*zerolog.Logger
 	name					string
 	pollingInterval			int64
@@ -188,6 +189,7 @@ type FlukeService struct {
 	connection 				opc.Connection
 	QuitChan   				chan struct{}
 	outputDir  				string
+	IncomingBuffChan		chan *data.DataFrame
 	OutgoingDataChannels	[]chan []byte
 	DataBufferService		*data.DataBuffer
 }
@@ -322,7 +324,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	dataBytes := data.Encode(current_time_str)
 	for _, i := range idxs {
 		reading := s.connection.ReadItem(s.tagMap[i].tag)
-		if len(s.OutgoingDataChannels) != 0 {
+		if atomic.LoadInt32(&s.Listeners) != 0 {
 			dataBytes = append(dataBytes, data.Encode(s.tagMap[i].tag)...)
 			dataBytes = append(dataBytes, data.Encode(reading.Value)...)
 		}
@@ -334,16 +336,12 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	if err != nil {
 		return err
 	}
-	if len(s.OutgoingDataChannels) != 0 {
-		var wg sync.WaitGroup
+	if atomic.LoadInt32(&s.Listeners) != 0 {
+		s.Logger.Info().Msg("Sending raw data to data buffer")
 		for _, outChan := range s.OutgoingDataChannels {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				outChan <- dataBytes
-			}()
+			outChan <- dataBytes // the receivers should already be listening
 		}
-		wg.Wait()
+		s.Logger.Info().Msg("Raw data sent and received")
 	}
 	return nil
 }
@@ -378,29 +376,27 @@ func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReq
 
 // RegisterWithBufferService satisfies the DataProvider interface. It provides the bufService with new incoming and outgoing channels along with a polling interval
 func (s FlukeService) RegisterWithBufferService(bufService *data.DataBuffer) error {
-	if _, ok := bufService.DataProviders[s.ServiceName()]; !ok {
+	if _, ok := bufService.DataProviders[s.ServiceName()]; ok {
 		return fmt.Errorf("%v data provider already registered with Data Buffer.", s.ServiceName())
 	}
-	newIncomingChan := make(chan []byte)
-	newOutgoingChan := make(chan *data.DataFrame)
-	s.OutgoingDataChannels = append(s.OutgoingDataChannels, newIncomingChan)
+	s.Logger.Info().Msg("Registering FLUKE with Data Buffering Service...")
+	newIncomingChan := make(chan *data.DataFrame, 1)
+	newOutgoingChan := make(chan []byte, 1)
+	s.IncomingBuffChan = newIncomingChan
+	s.OutgoingDataChannels = append(s.OutgoingDataChannels, newOutgoingChan)
 	bufService.DataProviders[s.ServiceName()] = data.DataProviderInfo{
-		PollingInterval: s.PollingInterval(),
-		IncomingChan: newIncomingChan,
-		OutgoingChan: newOutgoingChan,
+		IncomingChan: newOutgoingChan, //our outGoing channel is their incoming
+		OutgoingChan: newIncomingChan, // our incoming channel is their outgoing
 	}
 	s.DataBufferService = bufService
+	bufService.NewProvider <- s.ServiceName() //The DataBuffer service listens for new services and creates a new goroutine for buffering
+	s.Logger.Info().Msg("Registeration completed.")
 	return nil
 }
 
 // ServiceName satisfies the DataProvider interface. It returns the name of the service.
 func (s FlukeService) ServiceName() string {
 	return s.name
-}
-
-// PollingInterval satisfies the DataProvider interface. It returns the polling interval.
-func (s FlukeService) PollingInterval() int64 {
-	return s.pollingInterval
 }
 
 func ToRPCDataField(d map[int64]data.DataField) map[int64]*fmtrpc.DataField {
@@ -419,25 +415,27 @@ func (s *FlukeService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, upd
 	if s.Recording != 1 {
 		return fmt.Errorf("Data not currently being recorded. Cannot stream data until recording has started.")
 	}
-	// if atomic.LoadInt32(&s.DataBufferService.Running) != 1 {
-	// 	return fmt.Errorf("Data Buffer service not running. Cannot stream data")
-	// }
+	_ = atomic.AddInt32(&s.Listeners, 1)
+	s.Logger.Info().Msg("Have a new data listener.")
 	for {
 		select {
-		case newDataFrame := <-s.DataBufferService.DataProviders[s.name].OutgoingChan:
+		case newDataFrame := <-s.IncomingBuffChan:
+			s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
 			RTD := &fmtrpc.RealTimeData{
 				IsScanning: newDataFrame.IsScanning,
 				Timestamp: newDataFrame.Timestamp,
 				Data: ToRPCDataField(newDataFrame.Data),
 			}
 			if err := updateStream.Send(RTD); err != nil {
+				_ = atomic.AddInt32(&s.Listeners, 1)
 				return err
 			}
 		case <-updateStream.Context().Done():
+			_ = atomic.AddInt32(&s.Listeners, 1)
 			return updateStream.Context().Err()
 		case <-s.QuitChan:
-			return nil
-		case <-s.DataBufferService.Quit:
+			atomic.StoreInt32(&s.Listeners, 0)
+			s.DataBufferService.Quit<-struct{}{}
 			return nil
 		}
 	}
