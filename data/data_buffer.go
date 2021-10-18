@@ -6,28 +6,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 )
 
 var (
-	STRING_FIELD byte = 1
-	FLOAT64_FIELD byte = 2
 	defaultBufferingPeriod int = 3
 )
 
-type DataField struct {
-	Name	string
-	Value	float64
-}
-
-type DataFrame struct {
-	IsScanning	bool
-	Timestamp	string
-	Data		map[int64]DataField
-}
-
 type DataProviderInfo struct {
-	IncomingChan	chan []byte
-	OutgoingChan	chan *DataFrame
+	IncomingChan	chan *fmtrpc.RealTimeData
+	OutgoingChan	chan *fmtrpc.RealTimeData
 }
 
 type DataBuffer struct {
@@ -80,14 +68,6 @@ func (b *DataBuffer) Stop() error {
 	return nil
 }
 
-// SubscribeSingleStream returns the outgoing channel for the specified service name
-func (b *DataBuffer) SubscribeSingleStream(name string) (chan *DataFrame, error) {
-	if _, ok := b.DataProviders[name]; !ok {
-		return nil, fmt.Errorf("No such data provider registered with data buffer service: %s", name)
-	}
-	return b.DataProviders[name].OutgoingChan, nil
-}
-
 // buffer creates goroutines for each incoming, outgoing data pair and decodes the incoming bytes into outgoing DataFrames
 func (b *DataBuffer) buffer(ctx context.Context, bufferPeriod int) {
 	for {
@@ -99,25 +79,21 @@ func (b *DataBuffer) buffer(ctx context.Context, bufferPeriod int) {
 			} else {
 				b.wg.Add(1)
 				p := b.DataProviders[newProvider]
-				go func(prov string, in chan []byte, out chan *DataFrame) {
+				go func(prov string, in chan *fmtrpc.RealTimeData, out chan *fmtrpc.RealTimeData) {
 					defer b.wg.Done()
 					var (
-						buf []*DataFrame
+						buf []*fmtrpc.RealTimeData
 					)
 					b.Logger.Info().Msg(fmt.Sprintf("Waiting for raw data from: %s...", prov))
 					for {
 						select {
-						case rawData := <-in:
+						case inData := <-in:
 							b.Logger.Info().Msg(fmt.Sprintf("Received raw data from: %s", prov))
-							tmp, err := Decode(rawData)
-							if err == nil {
-								buf = append(buf, tmp)
-								if len(buf) < bufferPeriod {
-									b.Logger.Info().Msg("Sending decoded data out.")
-									out <- buf[0]
-									buf = buf[1:] //pop
-							} else {
-								b.Logger.Warn().Msg(fmt.Sprintf("Could not decode %v: %v", rawData, err))
+							buf = append(buf, inData)
+							if len(buf) > bufferPeriod {
+								b.Logger.Info().Msg("Sending decoded data out.")
+								out <- buf[0]
+								buf = buf[1:] //pop
 							}
 						case <-ctx.Done():
 							return

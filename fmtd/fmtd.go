@@ -133,7 +133,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
-	BufferedServices = append(BufferedServices, *flukeService)
+	BufferedServices = append(BufferedServices, flukeService)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
