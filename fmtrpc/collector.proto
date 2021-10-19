@@ -43,7 +43,8 @@ message DataField {
 }
 
 message RealTimeData {
-    bool is_scanning = 1;
-    string timestamp = 2;
-    map<int64, DataField> data = 3;
+    string source = 1;
+    bool is_scanning = 2;
+    string timestamp = 3;
+    map<int64, DataField> data = 4;
 }

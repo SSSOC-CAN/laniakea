@@ -1,17 +1,23 @@
 package drivers
-// package main
 
-// import (
-// 	"bufio"
-// 	"fmt"
-// 	"net"
-// 	"os"
-// 	"strings"
-// )
+import (
+	"net"
+)
 
-// var (
-// 	rgaIpPort = "192.168.0.77:10014"
-// )
+var (
+	rgaIPAddr = "192.168.0.77"
+	rgaPort = "10014"
+	rgaServer =rgaIPAddr+":"+rgaPort
+)
+
+//connectToRGA establishes a conncetion with the RGA
+func connectToRGA() (*net.Conn, error) {
+	c, err := net.Dial("tcp", rgaServer)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
 
 // func main() {
 // 	reader := bufio.NewReader(os.Stdin)

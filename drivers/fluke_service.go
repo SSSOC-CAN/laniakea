@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/konimarti/opc"
@@ -174,11 +175,10 @@ var (
 
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
-	fmtrpc.UnimplementedDataCollectorServer
 	Active     				int32 // atomic
 	Stopping   				int32 // atomic
 	Recording  				int32 // atomic
-	Listeners				int32 // atomic
+	Broadcasting			int32 // atomic
 	Logger     				*zerolog.Logger
 	name					string
 	tags       				[]string
@@ -187,6 +187,7 @@ type FlukeService struct {
 	QuitChan   				chan struct{}
 	outputDir  				string
 	BuffedChan				chan *fmtrpc.RealTimeData
+	StartBrodcastChan		chan bool
 }
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
@@ -201,15 +202,8 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
 		outputDir: outputDir,
-		BuffedChan: make(chan *fmtrpc.RealTimeData),
 		name:	"FLUKE",
 	}, nil
-}
-
-// RegisterWithGrpcServer registers the gRPC server to the unlocker service
-func (s *FlukeService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
-	fmtrpc.RegisterDataCollectorServer(grpcServer, s)
-	return nil
 }
 
 // Start starts the service. Returns an error if any issues occur
@@ -230,6 +224,7 @@ func (s *FlukeService) Start() error {
 		return err
 	}
 	s.connection = c
+	go s.CheckIfBroadcasting()
 	s.Logger.Info().Msg("Fluke Service started.")
 	return nil
 }
@@ -246,6 +241,7 @@ func (s *FlukeService) Stop() error {
 	}
 	s.connection.Close()
 	close(s.BuffedChan)
+	close(s.StartBrodcastChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -316,7 +312,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	for _, i := range idxs {
 		reading := s.connection.ReadItem(s.tagMap[i].tag)
 		if i != 0 {
-			if atomic.LoadInt32(&s.Listeners) != 0 {
+			if atomic.LoadInt32(&s.Broadcasting) == 1 {
 				dataField[int64(i)]= &fmtrpc.DataField{
 					Name: s.tagMap[i].name,
 					Value: reading.Value.(float64),
@@ -329,14 +325,15 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	if err != nil {
 		return err
 	}
-	if atomic.LoadInt32(&s.Listeners) != 0 { //only send data down the channel if we have a listener.
+	if atomic.LoadInt32(&s.Broadcasting) == 1 {
 		s.Logger.Info().Msg("Sending raw data to data buffer")
 		dataFrame := &fmtrpc.RealTimeData{
+			Source: s.name,
 			IsScanning: true,
 			Timestamp: current_time_str,
 			Data: dataField,
 		}
-		s.BuffedChan <- dataFrame
+		s.BuffedChan <- dataFrame // may need to go into a goroutine
 		s.Logger.Info().Msg("After pushing into channel")
 	}
 	return nil
@@ -352,53 +349,29 @@ func (s *FlukeService) stopRecording() error {
 	return nil
 }
 
-// StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
-func (s *FlukeService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
-	err := s.startRecording(req.PollingInterval)
-	if err != nil {
-		return &fmtrpc.RecordResponse{
-			Msg: fmt.Sprintf("Could not start data recording: %v", err),
-		}, err
-	}
-	return &fmtrpc.RecordResponse{
-		Msg: "Data recording successfully started.",
-	}, nil
-}
-
-// StopRecording is called by gRPC client and CLI to end data recording process
-func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
-	err := s.stopRecording()
-	if err != nil {
-		return &fmtrpc.StopRecResponse{
-			Msg: "Could not stop data recording. Data recording already stopped.",
-		}, err
-	}
-	return &fmtrpc.StopRecResponse{
-		Msg: "Data recording successfully stopped.",
-	}, nil
-}
-
-// SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
-func (s *FlukeService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
-	if s.Recording != 1 {
-		return fmt.Errorf("Data not currently being recorded. Cannot stream data until recording has started.")
-	}
-	_ = atomic.AddInt32(&s.Listeners, 1)
-	s.Logger.Info().Msg("Have a new data listener.")
+//CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
+func (s *FlukeService) CheckIfBroadcasting() {
 	for {
 		select {
-		case RTD := <-s.BuffedChan:
-			s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
-			if err := updateStream.Send(RTD); err != nil {
-				_ = atomic.AddInt32(&s.Listeners, -1)
-				return err
+		case state := <-s.StartBrodcastChan:
+			if state {
+				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
+					s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
+				}
+			} else {
+				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
+					s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
+				}
 			}
-		case <-updateStream.Context().Done():
-			_ = atomic.AddInt32(&s.Listeners, -1)
-			return updateStream.Context().Err()
 		case <-s.QuitChan:
-			atomic.StoreInt32(&s.Listeners, 0)
-			return nil
+			return
 		}
 	}
+}
+
+// RegisterWithRTDService adds the RTD Service channels to the Fluke Service Struct and incrememnts the number of registered data providers on the RTD
+func (s *FlukeService) RegisterWithRTDService(rtd *data.RTDService) {
+	s.BuffedChan = rtd.DataProviderChan
+	s.StartBrodcastChan = rtd.StartBrodcastChan
+	rtd.RegisterDataProvider()
 }
