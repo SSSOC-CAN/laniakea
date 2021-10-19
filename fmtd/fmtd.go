@@ -114,6 +114,16 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_server := grpc.NewServer(serverOpts...)
 	rpcServer.AddGrpcServer(grpc_server)
 
+	// Instantiate RTD Service
+	server.logger.Info().Msg("Instantiating RTD subservice...")
+	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger)
+	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
+		return err
+	}
+	server.logger.Info().Msg("RTD service instantiated.")
+
 	// Instantiate Fluke service and register with gRPC server but NOT start
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
 	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
@@ -121,11 +131,21 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
 		return err
 	}
-	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	flukeService.RegisterWithRTDService(rtdService)
+
+	// Instantiate RGA service and register with gRPC server but NOT start
+	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate RGA service: %v", err))
+		return err
+	}
+	err = rgaService.RegisterWithGrpcServer(rpcServer.GrpcServer)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
 	}
+	flukeService.RegisterWithRTDService(rtdService)
+
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
 	// Starting bbolt kvdb
@@ -217,7 +237,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
 
-	// Start Recording Data from Fluke
+	// Start Fluke Service TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
 	err = flukeService.Start()
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to start Fluke service: %v", err))
