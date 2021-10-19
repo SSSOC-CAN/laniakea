@@ -7,6 +7,8 @@ fmtd runs on Go 1.17
 
 On Linux:
 
+**NOTE:** As of the time of writing, FMTD will not run properly without Fluke DAQ software running on the machine (exclusive to Windows) 
+
 ```
 $ wget https://golang.org/dl/go1.17.1.linux-amd64.tar.gz
 $ sha256sum go1.17.1.linux-amd64.tar.gz | awk -F " " '{ print $1 }'
