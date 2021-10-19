@@ -43,8 +43,8 @@ func TestInitConfigFromYAML(t *testing.T) {
 	}
 	// write to yaml file
 	d_config := Config{
-		DefaultLogDir: false,
-		LogFileDir: "/home/vagrant/documents",
+		DefaultLogDir: true,
+		LogFileDir: default_log_dir(), // this is not OS agnostic
 		ConsoleOutput: true,
 		GrpcPort: 3567,
 		RestPort: 8080,
