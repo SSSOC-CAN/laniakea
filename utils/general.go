@@ -38,19 +38,19 @@ func FileExists(name string) bool {
 	return true
 }
 
+// UniqueFileName creates a unique file name if the provided one exists
 func UniqueFileName(path string) string {
-	counter := 0
+	counter := 1
 	for FileExists(path) {
-		counter++
 		ext := filepath.Ext(path)
-		if counter > 1 && counter < 10 {
+		if counter > 1 && counter < 11 {
 			path = path[:len(path)-len(ext)-4]+" ("+strconv.Itoa(counter)+")"+ext
-		} else if counter > 10 {
+		} else if counter >= 11 {
 			path = path[:len(path)-len(ext)-5]+" ("+strconv.Itoa(counter)+")"+ext
 		} else {
 			path = path[:len(path)-len(ext)]+" ("+strconv.Itoa(counter)+")"+ext
 		}
-		
+		counter++
 	}
 	return path
 }

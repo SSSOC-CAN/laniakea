@@ -83,6 +83,23 @@ func local_request_DataCollector_StopRecording_0(ctx context.Context, marshaler 
 
 }
 
+func request_DataCollector_SubscribeDataStream_0(ctx context.Context, marshaler runtime.Marshaler, client DataCollectorClient, req *http.Request, pathParams map[string]string) (DataCollector_SubscribeDataStreamClient, runtime.ServerMetadata, error) {
+	var protoReq SubscribeDataRequest
+	var metadata runtime.ServerMetadata
+
+	stream, err := client.SubscribeDataStream(ctx, &protoReq)
+	if err != nil {
+		return nil, metadata, err
+	}
+	header, err := stream.Header()
+	if err != nil {
+		return nil, metadata, err
+	}
+	metadata.HeaderMD = header
+	return stream, metadata, nil
+
+}
+
 // RegisterDataCollectorHandlerServer registers the http handlers for service DataCollector to "mux".
 // UnaryRPC     :call DataCollectorServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -133,6 +150,13 @@ func RegisterDataCollectorHandlerServer(ctx context.Context, mux *runtime.ServeM
 
 		forward_DataCollector_StopRecording_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
 
+	})
+
+	mux.Handle("GET", pattern_DataCollector_SubscribeDataStream_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		err := status.Error(codes.Unimplemented, "streaming calls are not yet supported in the in-process transport")
+		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+		return
 	})
 
 	return nil
@@ -216,6 +240,26 @@ func RegisterDataCollectorHandlerClient(ctx context.Context, mux *runtime.ServeM
 
 	})
 
+	mux.Handle("GET", pattern_DataCollector_SubscribeDataStream_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/fmtrpc.DataCollector/SubscribeDataStream", runtime.WithHTTPPathPattern("/v1/subscribe/datastream"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_DataCollector_SubscribeDataStream_0(rctx, inboundMarshaler, client, req, pathParams)
+		ctx = runtime.NewServerMetadataContext(ctx, md)
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_DataCollector_SubscribeDataStream_0(ctx, mux, outboundMarshaler, w, req, func() (proto.Message, error) { return resp.Recv() }, mux.GetForwardResponseOptions()...)
+
+	})
+
 	return nil
 }
 
@@ -223,10 +267,14 @@ var (
 	pattern_DataCollector_StartRecording_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "start", "recording"}, ""))
 
 	pattern_DataCollector_StopRecording_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "stop", "recording"}, ""))
+
+	pattern_DataCollector_SubscribeDataStream_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "subscribe", "datastream"}, ""))
 )
 
 var (
 	forward_DataCollector_StartRecording_0 = runtime.ForwardResponseMessage
 
 	forward_DataCollector_StopRecording_0 = runtime.ForwardResponseMessage
+
+	forward_DataCollector_SubscribeDataStream_0 = runtime.ForwardResponseStream
 )

@@ -237,5 +237,9 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "fmtd",
 			Action: "write",
 		}},
+		"/fmtrpc.DataCollector/SubscribeDataStream": {{
+			Entity: "fmtd",
+			Action: "read",
+		}},
 	}
 }
