@@ -175,15 +175,18 @@ var (
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
 	fmtrpc.UnimplementedDataCollectorServer
-	Active     int32 // atomic
-	Stopping   int32 // atomic
-	Recording  int32 // atomic
-	Logger     *zerolog.Logger
-	tags       []string
-	tagMap     map[int]Tag
-	connection opc.Connection
-	QuitChan   chan struct{}
-	outputDir  string
+	Active     				int32 // atomic
+	Stopping   				int32 // atomic
+	Recording  				int32 // atomic
+	Listeners				int32 // atomic
+	Logger     				*zerolog.Logger
+	name					string
+	tags       				[]string
+	tagMap     				map[int]Tag
+	connection 				opc.Connection
+	QuitChan   				chan struct{}
+	outputDir  				string
+	BuffedChan				chan *fmtrpc.RealTimeData
 }
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
@@ -198,6 +201,8 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
 		outputDir: outputDir,
+		BuffedChan: make(chan *fmtrpc.RealTimeData),
+		name:	"FLUKE",
 	}, nil
 }
 
@@ -240,6 +245,7 @@ func (s *FlukeService) Stop() error {
 		return err
 	}
 	s.connection.Close()
+	close(s.BuffedChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -259,7 +265,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
-		return fmt.Errorf("Could not create file %s: %v", file, err)
+		return fmt.Errorf("Could not create file %v: %v", file, err)
 	}
 	writer := csv.NewWriter(file)
 	// headers
@@ -304,16 +310,45 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 // record records the live data from Fluke and inserts it into a csv file
 func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	current_time := time.Now()
-	data := []string{fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())}
+	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
+	dataString := []string{current_time_str}
+	dataField := make(map[int64]*fmtrpc.DataField)
 	for _, i := range idxs {
+		reading := s.connection.ReadItem(s.tagMap[i].tag)
 		if i != 0 {
-			data = append(data, fmt.Sprintf("%g", s.connection.ReadItem(s.tagMap[i].tag).Value))
+			if atomic.LoadInt32(&s.Listeners) != 0 {
+				dataField[int64(i)]= &fmtrpc.DataField{
+					Name: s.tagMap[i].name,
+					Value: reading.Value.(float64),
+				}
+			}
+			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
 		}
 	}
-	err := writer.Write(data)
+	err := writer.Write(dataString)
 	if err != nil {
 		return err
 	}
+	if atomic.LoadInt32(&s.Listeners) != 0 { //only send data down the channel if we have a listener.
+		s.Logger.Info().Msg("Sending raw data to data buffer")
+		dataFrame := &fmtrpc.RealTimeData{
+			IsScanning: true,
+			Timestamp: current_time_str,
+			Data: dataField,
+		}
+		s.BuffedChan <- dataFrame
+		s.Logger.Info().Msg("After pushing into channel")
+	}
+	return nil
+}
+
+func (s *FlukeService) stopRecording() error {
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
+		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+	}
+	go func() {
+		s.QuitChan <- struct{}{}
+	}()
 	return nil
 }
 
@@ -332,15 +367,38 @@ func (s *FlukeService) StartRecording(ctx context.Context, req *fmtrpc.RecordReq
 
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
+	err := s.stopRecording()
+	if err != nil {
 		return &fmtrpc.StopRecResponse{
 			Msg: "Could not stop data recording. Data recording already stopped.",
-		}, fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+		}, err
 	}
-	go func() {
-		s.QuitChan <- struct{}{}
-	}()
 	return &fmtrpc.StopRecResponse{
 		Msg: "Data recording successfully stopped.",
 	}, nil
+}
+
+// SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
+func (s *FlukeService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
+	if s.Recording != 1 {
+		return fmt.Errorf("Data not currently being recorded. Cannot stream data until recording has started.")
+	}
+	_ = atomic.AddInt32(&s.Listeners, 1)
+	s.Logger.Info().Msg("Have a new data listener.")
+	for {
+		select {
+		case RTD := <-s.BuffedChan:
+			s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
+			if err := updateStream.Send(RTD); err != nil {
+				_ = atomic.AddInt32(&s.Listeners, -1)
+				return err
+			}
+		case <-updateStream.Context().Done():
+			_ = atomic.AddInt32(&s.Listeners, -1)
+			return updateStream.Context().Err()
+		case <-s.QuitChan:
+			atomic.StoreInt32(&s.Listeners, 0)
+			return nil
+		}
+	}
 }

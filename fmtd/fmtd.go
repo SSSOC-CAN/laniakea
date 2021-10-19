@@ -121,7 +121,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
 		return err
 	}
-	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer) // TODO:SSSOCPaulCote - This has to happen before the gRPC server is started
+	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
