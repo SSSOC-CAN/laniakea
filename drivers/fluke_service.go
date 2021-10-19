@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	//"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/konimarti/opc"
@@ -266,7 +265,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
-		return fmt.Errorf("Could not create file %s: %v", file, err)
+		return fmt.Errorf("Could not create file %v: %v", file, err)
 	}
 	writer := csv.NewWriter(file)
 	// headers
@@ -330,7 +329,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	if err != nil {
 		return err
 	}
-	if atomic.LoadInt32(&s.Listeners) != 0 {
+	if atomic.LoadInt32(&s.Listeners) != 0 { //only send data down the channel if we have a listener.
 		s.Logger.Info().Msg("Sending raw data to data buffer")
 		dataFrame := &fmtrpc.RealTimeData{
 			IsScanning: true,
@@ -340,6 +339,16 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 		s.BuffedChan <- dataFrame
 		s.Logger.Info().Msg("After pushing into channel")
 	}
+	return nil
+}
+
+func (s *FlukeService) stopRecording() error {
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
+		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+	}
+	go func() {
+		s.QuitChan <- struct{}{}
+	}()
 	return nil
 }
 
@@ -358,14 +367,12 @@ func (s *FlukeService) StartRecording(ctx context.Context, req *fmtrpc.RecordReq
 
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *FlukeService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
+	err := s.stopRecording()
+	if err != nil {
 		return &fmtrpc.StopRecResponse{
 			Msg: "Could not stop data recording. Data recording already stopped.",
-		}, fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+		}, err
 	}
-	go func() {
-		s.QuitChan <- struct{}{}
-	}()
 	return &fmtrpc.StopRecResponse{
 		Msg: "Data recording successfully stopped.",
 	}, nil
