@@ -38,6 +38,7 @@ func FileExists(name string) bool {
 	return true
 }
 
+// UniqueFileName creates a unique file name if the provided one exists
 func UniqueFileName(path string) string {
 	counter := 1
 	for FileExists(path) {
