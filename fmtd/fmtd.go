@@ -76,6 +76,7 @@ var (
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
+	var services []*data.Service
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -132,6 +133,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	flukeService.RegisterWithRTDService(rtdService)
+	services = append(services, flukeService)
 
 	// Instantiate RGA service and register with gRPC server but NOT start
 	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir)
@@ -139,12 +141,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate RGA service: %v", err))
 		return err
 	}
-	err = rgaService.RegisterWithGrpcServer(rpcServer.GrpcServer)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
 	}
-	flukeService.RegisterWithRTDService(rtdService)
+	rgaService.RegisterWithRTDService(rtdService)
+	services = append(services, rgaService)
 
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
@@ -238,12 +240,14 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_interceptor.AddMacaroonService(macaroonService)
 
 	// Start Fluke Service TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
-	err = flukeService.Start()
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to start Fluke service: %v", err))
-		return err
+	for _, s := range services {
+		err = s.Start()
+		if err != nil {
+			server.Logger.Error().Msg(fmt.Sprintf("Unable to start %S service: %v", s.Name(), err))
+			return err
+		}
+		defer s.Stop()
 	}
-	defer flukeService.Stop()
 	
 	<-interceptor.ShutdownChannel()
 	return nil
