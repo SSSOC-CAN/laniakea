@@ -7,6 +7,7 @@ http:
       post: "/v1/start/recording"
       body: "*"
     - selector: fmtrpc.DataCollector.StopRecording
-      get: "/v1/stop/recording"
+      post: "/v1/stop/recording"
+      body: "*"
     - selector: fmtrpc.DataCollector.SubscribeDataStream
       get: "/v1/subscribe/datastream"

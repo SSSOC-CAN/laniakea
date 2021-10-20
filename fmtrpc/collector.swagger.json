@@ -18,7 +18,7 @@
   "paths": {
     "/v1/start/recording": {
       "post": {
-        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from Fluke software and writing it.",
+        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from specified service and writing it.",
         "operationId": "DataCollector_StartRecording",
         "responses": {
           "200": {
@@ -50,8 +50,8 @@
       }
     },
     "/v1/stop/recording": {
-      "get": {
-        "summary": "fmtcli: `stop-record`\nStopRecording will end the recording of data from Fluke software.",
+      "post": {
+        "summary": "fmtcli: `stop-record`\nStopRecording will end the recording of data from specified service.",
         "operationId": "DataCollector_StopRecording",
         "responses": {
           "200": {
@@ -67,6 +67,16 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcStopRecRequest"
+            }
+          }
+        ],
         "tags": [
           "DataCollector"
         ]
@@ -121,6 +131,9 @@
     "fmtrpcRealTimeData": {
       "type": "object",
       "properties": {
+        "source": {
+          "type": "string"
+        },
         "is_scanning": {
           "type": "boolean"
         },
@@ -141,6 +154,9 @@
         "polling_interval": {
           "type": "string",
           "format": "int64"
+        },
+        "type": {
+          "$ref": "#/definitions/fmtrpcRecordService"
         }
       }
     },
@@ -149,6 +165,22 @@
       "properties": {
         "msg": {
           "type": "string"
+        }
+      }
+    },
+    "fmtrpcRecordService": {
+      "type": "string",
+      "enum": [
+        "FLUKE",
+        "RGA"
+      ],
+      "default": "FLUKE"
+    },
+    "fmtrpcStopRecRequest": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/fmtrpcRecordService"
         }
       }
     },
