@@ -11,12 +11,12 @@ var (
 )
 
 //connectToRGA establishes a conncetion with the RGA
-func connectToRGA() (*net.Conn, error) {
+func connectToRGA() (net.Conn, error) {
 	c, err := net.Dial("tcp", rgaServer)
 	if err != nil {
 		return nil, err
 	}
-	return &c, nil
+	return c, nil
 }
 
 // func main() {
