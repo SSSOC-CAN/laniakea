@@ -1,7 +1,6 @@
 package drivers
 
 import (
-	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/konimarti/opc"
 	"github.com/rs/zerolog"
-	"google.golang.org/grpc"
 )
 
 type Tag struct {
@@ -187,8 +185,7 @@ type FlukeService struct {
 	QuitChan   				chan struct{}
 	outputDir  				string
 	BuffedChan				chan *fmtrpc.RealTimeData
-	StartBrodcastChan		chan bool
-	RecordingStateChan		chan *data.RecordingState
+	StateChangeChan			chan *data.StateChangeMsg
 }
 
 // A compile time check to make sure that FlukeService fully implements the data.Service interface
@@ -245,8 +242,6 @@ func (s *FlukeService) Stop() error {
 		return err
 	}
 	s.connection.Close()
-	close(s.BuffedChan)
-	close(s.StartBrodcastChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -353,9 +348,6 @@ func (s *FlukeService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 	}
-	go func() {
-		s.QuitChan <- struct{}{}
-	}()
 	return nil
 }
 
@@ -363,43 +355,42 @@ func (s *FlukeService) stopRecording() error {
 func (s *FlukeService) ListenForRTDSignal() {
 	for {
 		select {
-		case bState := <-s.StartBrodcastChan:
-			if bState {
-				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
-					s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
-				}
-			} else {
-				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
-					s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
-				}
-			}
-		case rState := <-s.RecordingStateChan:
-			if rState.RecordState {
-				if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-					s.Logger.Warn().Msg("Could not change recording state.")
-					s.RecordingStateChan <- &data.RecordingState{RecordState: false, ErrMsg: fmt.Errorf("Could not change recording state.")}
+		case msg := <-s.StateChangeChan:
+			switch msg.Type {
+			case data.BROADCASTING:
+				if msg.State {
+					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
+						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: false, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
+					} else {
+						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+					}
 				} else {
+					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
+						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: true, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
+					} else {
+						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+					}
+				}
+			case data.RECORDING:
+				if msg.State {
 					err := s.startRecording(DefaultPollingInterval) // TODO:SSSOCPaulCote - RecordingState data will include polling interval
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
-						s.RecordingStateChan <- &data.RecordingState{RecordState: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.RecordingStateChan <- &data.RecordingState{RecordState: true, ErrMsg: nil}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
-				}
-			} else {
-				if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-					s.Logger.Warn().Msg("Could not change recording state.")
-					s.RecordingStateChan <- &data.RecordingState{RecordState: true, ErrMsg: fmt.Errorf("Could not change recording state.")}
 				} else {
 					err := s.stopRecording()
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
-						s.RecordingStateChan <- &data.RecordingState{RecordState: true, ErrMsg: fmt.Errorf("Could not stop recording: %v", err)}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: fmt.Errorf("Could not stop recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Stopped recording.")
-						s.RecordingStateChan <- &data.RecordingState{RecordState: false, ErrMsg: nil}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: nil}
 					}
 				}
 			}
@@ -411,8 +402,7 @@ func (s *FlukeService) ListenForRTDSignal() {
 
 // RegisterWithRTDService adds the RTD Service channels to the Fluke Service Struct and incrememnts the number of registered data providers on the RTD
 func (s *FlukeService) RegisterWithRTDService(rtd *data.RTDService) {
-	rtd.RegisterDataProvider()
-	s.OutputChan = rtd.DataProviderChan
-	s.StartBrodcastChan = rtd.StartBrodcastChan
-	s.RecordingStateChan = rtd.RecordingStateChans[s.name]
+	rtd.RegisterDataProvider(s.name)
+	s.BuffedChan = rtd.DataProviderChan
+	s.StateChangeChan = rtd.StateChangeChans[s.name]
 }

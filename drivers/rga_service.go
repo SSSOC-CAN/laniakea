@@ -15,11 +15,10 @@ type RGAService struct {
 	Broadcasting		int32 //atomically
 	Logger				*zerolog.Logger
 	OutputChan			chan *fmtrpc.RealTimeData
-	StartBrodcastChan	chan bool
-	RecordingStateChan	chan *data.RecordingState
+	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}
 	outputDir  			string
-	connection			*net.Conn
+	connection			net.Conn
 	name 				string
 	// channel to send data to RealTimeDataService
 }
@@ -37,7 +36,7 @@ func NewRGAService(logger *zerolog.Logger, outputDir string) (*RGAService, error
 		Logger: logger,
 		QuitChan: make(chan struct{}),
 		outputDir: outputDir,
-		conncetion: c,
+		connection: c,
 		name: data.RgaName,
 	}, nil
 }
@@ -60,15 +59,13 @@ func (s *RGAService) Stop() error {
 		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
 	}
 	close(s.QuitChan)
-	close(s.StartBrodcastChan)
-	close(s.OutputChan)
-	s.conncetion.Close()
+	s.connection.Close()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
 	return nil
 }
 
 // Name satisfies the fmtd.Service interface
-func (s *FlukeService) Name() string {
+func (s *RGAService) Name() string {
 	return s.name
 }
 
@@ -76,26 +73,39 @@ func (s *FlukeService) Name() string {
 func (s *RGAService) ListenForRTDSignal() {
 	for {
 		select {
-		case bState := <-s.StartBrodcastChan:
-			if bState {
-				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
-					s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
+		case msg := <- s.StateChangeChan:
+			switch msg.Type {
+			case data.BROADCASTING:
+				if msg.State {
+					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
+						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: false, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
+					} else {
+						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+					}
+				} else {
+					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
+						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: true, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
+					} else {
+						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+					}
 				}
-			} else {
-				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
-					s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
-				}
-			}
-		case rState := <-s.RecordingStateChan:
-			if rState.RecordState { // RTD is responsible for determining whether or not RGA can safely be turned on.
-				if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-					s.Logger.Warn().Msg("Could not change recording state.")
-					s.RecordingStateChans <- &data.RecordingState{RecordState: false, ErrMsg: fmt.Errorf("Could not change recording state.")}
-				}
-			} else {
-				if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-					s.Logger.Warn().Msg("Could not change recording state.")
-					s.RecordingStateChans <- &data.RecordingState{RecordState: true, ErrMsg: fmt.Errorf("Could not change recording state.")}
+			case data.RECORDING:
+				if msg.State { // RTD is responsible for determining whether or not RGA can safely be turned on.
+					if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+						s.Logger.Warn().Msg("Could not change recording state.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not change recording state.")}
+					} else {
+						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+					}
+				} else {
+					if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
+						s.Logger.Warn().Msg("Could not change recording state.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: fmt.Errorf("Could not change recording state.")}
+					} else {
+						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+					}
 				}
 			}
 		case <-s.QuitChan:
@@ -106,8 +116,7 @@ func (s *RGAService) ListenForRTDSignal() {
 
 // RegisterWithRTDService adds the RTD Service channels to the RGA Service Struct and incrememnts the number of registered data providers on the RTD
 func (s *RGAService) RegisterWithRTDService(rtd *data.RTDService) {
-	rtd.RegisterDataProvider()
+	rtd.RegisterDataProvider(s.name)
 	s.OutputChan = rtd.DataProviderChan
-	s.StartBrodcastChan = rtd.StartBrodcastChan
-	s.RecordingStateChan = rtd.RecordingStateChans[s.name]
+	s.StateChangeChan = rtd.StateChangeChans[s.name]
 }

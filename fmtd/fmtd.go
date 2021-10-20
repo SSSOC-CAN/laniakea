@@ -33,6 +33,7 @@ import (
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
@@ -76,7 +77,7 @@ var (
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
-	var services []*data.Service
+	var services []data.Service
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -118,11 +119,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
 	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger)
-	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	err = rtdService.RegisterWithGrpcServer(rpcServer.GrpcServer)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
 		return err
 	}
+	services = append(services, rtdService)
 	server.logger.Info().Msg("RTD service instantiated.")
 
 	// Instantiate Fluke service and register with gRPC server but NOT start
@@ -243,7 +245,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	for _, s := range services {
 		err = s.Start()
 		if err != nil {
-			server.Logger.Error().Msg(fmt.Sprintf("Unable to start %S service: %v", s.Name(), err))
+			server.logger.Error().Msg(fmt.Sprintf("Unable to start %S service: %v", s.Name(), err))
 			return err
 		}
 		defer s.Stop()

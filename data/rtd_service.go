@@ -1,6 +1,9 @@
 package data
 
 import (
+	"context"
+	"fmt"
+	//"reflect"
 	"sync/atomic"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -10,15 +13,24 @@ import (
 var (
 	FlukeName = "FLUKE"
 	RgaName = "RGA"
+	RtdName = "RTD"
 	rpcEnumMap = map[fmtrpc.RecordService]string{
 		fmtrpc.RecordService_FLUKE: FlukeName,
 		fmtrpc.RecordService_RGA: RgaName,
 	}
 )
 
-type RecordingState struct {
-	RecordState 	bool
-	ErrMsg			error
+type StateType int32
+
+const (
+	BROADCASTING StateType = 0
+	RECORDING StateType = 1
+)
+
+type StateChangeMsg struct {
+	Type	StateType
+	State 	bool
+	ErrMsg	error
 }
 
 type RTDService struct {
@@ -27,22 +39,19 @@ type RTDService struct {
 	Listeners			int32 // used atomically
 	Logger				*zerolog.Logger
 	DataProviderChan	chan *fmtrpc.RealTimeData
-	StartBrodcastChan	chan bool
-	RecordingStateChans	map[string]chan *RecordingState
+	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
-	QuitChan			chan struct{}
-	registeredProviders	int
+	name				string
 }
 
 //NewDataBuffer returns an instantiated DataBuffer struct
 func NewRTDService(log *zerolog.Logger) *RTDService {
 	return &RTDService{
-		QuitChan: make(chan struct{}),
+		DataProviderChan: make(chan *fmtrpc.RealTimeData),
 		ServiceRecStates: make(map[string]bool),
-		StartBrodcastChan: make(chan bool),
-		RecordingStateChans: make(map[string]chan *RecordingState),
+		StateChangeChans: make(map[string]chan *StateChangeMsg),
 		Logger: log,
-		wg: wg,
+		name: RtdName,
 	}
 }
 
@@ -58,16 +67,32 @@ func (s *RTDService) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start RTD service. Service already started.")
 	}
-	s.DataProviderChan = make(chan *fmtrpc.RealTimeData, s.registeredProviders) //important to register all providers before starting the service
 	s.Logger.Info().Msg("RTD Service successfully started.")
 	return nil
 }
 
+// Stop stops the RTD service. It closes all its channels, lifting the burdens from Data providers
+func (s *RTDService) Stop() error {
+	s.Logger.Info().Msg("Stopping RTD Service ...")
+	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
+		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
+	}
+	for _, channel := range s.StateChangeChans {
+		close(channel)
+	}
+	s.Logger.Info().Msg("RTD Service stopped.")
+	return nil
+}
+
+// Name satisfies the Service interface
+func (s *RTDService) Name() string {
+	return s.name
+}
+
 //RegisterDataProvider increments the counter by one
 func (s *RTDService) RegisterDataProvider(serviceName string) {
-	s.registeredProviders += 1 // maybe this should be atomic
-	if _, ok := s.RecordingStateChans[serviceName]; !ok {
-		s.RecordingStateChans[serviceName] = make(chan *RecordingState)
+	if _, ok := s.StateChangeChans[serviceName]; !ok {
+		s.StateChangeChans[serviceName] = make(chan *StateChangeMsg)
 	}
 	if _, ok := s.ServiceRecStates[serviceName]; !ok {
 		s.ServiceRecStates[serviceName] = false
@@ -78,14 +103,14 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	switch req.Type {
 	case fmtrpc.RecordService_FLUKE:
-		s.RecordingStateChans[rpcEnumMap[req.Type]] <- &RecordingState{RecordState: true, ErrMsg: nil}
-		resp := <-s.RecordingStateChans[rpcEnumMap[req.Type]]
+		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil}
+		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
-				Msg: fmt.Sprintf("Could not start data recording: %v", err),
-			}, err
+				Msg: fmt.Sprintf("Could not start data recording: %v", resp.ErrMsg),
+			}, resp.ErrMsg
 		}
-		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.RecordState
+		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	case fmtrpc.RecordService_RGA:
 		// Leaving this until I can figure out how to make sure FLUKE is on and pressure is <= 0.00005 Torr
 		return &fmtrpc.RecordResponse{
@@ -99,12 +124,12 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
-	s.RecordingStateChans[rpcEnumMap[req.Type]] <- &RecordingState{RecordState: false, ErrMsg: nil}
-	resp := <-s.RecordingStateChans[rpcEnumMap[req.Type]]
+	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
+	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 	if resp.ErrMsg != nil {
 		return &fmtrpc.StopRecResponse{
 			Msg: "Could not stop data recording. Data recording already stopped.",
-		}, err
+		}, resp.ErrMsg
 	}
 	return &fmtrpc.StopRecResponse{
 		Msg: "Data recording successfully stopped.",
@@ -113,30 +138,97 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
-	_ = atomic.AddInt32(&s.Listeners, 1)
+	// Unblock DataProviderChan incase a service wrote to it and nobody read from it
+	// select {
+	// case _ = <- s.DataProviderChan:
+	// 	break
+	// default:
+	// 	break
+	// }
 	s.Logger.Info().Msg("Have a new data listener.")
-	s.StartBrodcastChan <- true
+	_ = atomic.AddInt32(&s.Listeners, 1)
+	for _, channel := range s.StateChangeChans {
+		channel <- &StateChangeMsg{Type: BROADCASTING, State: true, ErrMsg: nil}
+		resp := <- channel
+		if resp.ErrMsg != nil {
+			s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+			return resp.ErrMsg
+		}
+	}
+	s.Logger.Info().Msg("Hello?")
+	// cases := make([]reflect.SelectCase, len(s.DataProviderChans)+1) // +1 for updateStream.Context().Done() channel
+	// i := 0
+	// for _, ch := range s.DataProviderChans {
+	// 	cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
+	// 	i++
+	// }
+	// cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(updateStream.Context().Done())}
 	for {
+		s.Logger.Info().Msg("Hello every iteration?")
+		// chosen, value, ok := reflect.Select(cases)
+		// if !ok {
+		// 	cases[chosen].Chan = reflect.ValueOf(nil)
+		// 	continue
+		// }
+		// switch v := value.Interface().(type) {
+		// case *fmtrpc.RealTimeData:
+		// 	s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
+		// 	if err := updateStream.Send(v); err != nil {
+		// 		_ = atomic.AddInt32(&s.Listeners, -1)
+		// 		if atomic.LoadInt32(&s.Listeners) == 0 {
+		// 			for _, channel := range s.StateChangeChans {
+		// 				channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
+		// 				resp := <- channel
+		// 				if resp.ErrMsg != nil {
+		// 					return resp.ErrMsg
+		// 				}
+		// 			}
+		// 		}
+		// 		return err
+		// 	}
+		// default:
+		// 	_ = atomic.AddInt32(&s.Listeners, -1)
+		// 	if atomic.LoadInt32(&s.Listeners) == 0 {
+		// 		for _, channel := range s.StateChangeChans {
+		// 			channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
+		// 			resp := <- channel
+		// 			if resp.ErrMsg != nil {
+		// 				return resp.ErrMsg
+		// 			}
+		// 		}
+		// 	}
+		// 	return updateStream.Context().Err()
+		// }
 		select {
 		case RTD := <-s.DataProviderChan:
 			s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
 			if err := updateStream.Send(RTD); err != nil {
 				_ = atomic.AddInt32(&s.Listeners, -1)
 				if atomic.LoadInt32(&s.Listeners) == 0 {
-					s.StartBrodcastChan <- false
+					for _, channel := range s.StateChangeChans {
+						channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
+						resp := <- channel
+						if resp.ErrMsg != nil {
+							s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+							return resp.ErrMsg
+						}
+					}
 				}
 				return err
 			}
 		case <-updateStream.Context().Done():
 			_ = atomic.AddInt32(&s.Listeners, -1)
 			if atomic.LoadInt32(&s.Listeners) == 0 {
-				s.StartBrodcastChan <- false
+				for _, channel := range s.StateChangeChans {
+					channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
+					resp := <- channel
+					if resp.ErrMsg != nil {
+						s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+						return resp.ErrMsg
+					}
+				}
 			}
 			return updateStream.Context().Err()
-		case <-s.QuitChan:
-			atomic.StoreInt32(&s.Listeners, 0)
-			s.StartBrodcastChan <- false
-			return nil
 		}
 	}
 }
