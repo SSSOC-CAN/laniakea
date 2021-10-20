@@ -19,10 +19,10 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DataCollectorClient interface {
 	// fmtcli: `start-record`
-	//StartRecording will begin recording data from Fluke software and writing it.
+	//StartRecording will begin recording data from specified service and writing it.
 	StartRecording(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*RecordResponse, error)
 	// fmtcli: `stop-record`
-	//StopRecording will end the recording of data from Fluke software.
+	//StopRecording will end the recording of data from specified service.
 	StopRecording(ctx context.Context, in *StopRecRequest, opts ...grpc.CallOption) (*StopRecResponse, error)
 	// fmtcli: `subscribe-data-stream`
 	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
@@ -92,10 +92,10 @@ func (x *dataCollectorSubscribeDataStreamClient) Recv() (*RealTimeData, error) {
 // for forward compatibility
 type DataCollectorServer interface {
 	// fmtcli: `start-record`
-	//StartRecording will begin recording data from Fluke software and writing it.
+	//StartRecording will begin recording data from specified service and writing it.
 	StartRecording(context.Context, *RecordRequest) (*RecordResponse, error)
 	// fmtcli: `stop-record`
-	//StopRecording will end the recording of data from Fluke software.
+	//StopRecording will end the recording of data from specified service.
 	StopRecording(context.Context, *StopRecRequest) (*StopRecResponse, error)
 	// fmtcli: `subscribe-data-stream`
 	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
