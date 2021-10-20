@@ -107,15 +107,24 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
-				Msg: fmt.Sprintf("Could not start data recording: %v", resp.ErrMsg),
+				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
 			}, resp.ErrMsg
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	case fmtrpc.RecordService_RGA:
 		// Leaving this until I can figure out how to make sure FLUKE is on and pressure is <= 0.00005 Torr
-		return &fmtrpc.RecordResponse{
-			Msg: "Could not start data recording: RGA unimplemented.",
-		}, fmt.Errorf("Could not start data recording: RGA unimplemented.")
+		if !s.ServiceRecStates[FlukeName] {
+			return &fmtrpc.RecordResponse{
+				Msg: fmt.Sprintf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type]),
+			}, fmt.Errorf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type])
+		}
+		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil}
+		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
+		if resp.ErrMsg != nil {
+			return &fmtrpc.RecordResponse{
+				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
+			}, resp.ErrMsg
+		}
 	}
 	return &fmtrpc.RecordResponse{
 		Msg: "Data recording successfully started.",
@@ -131,6 +140,7 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 			Msg: "Could not stop data recording. Data recording already stopped.",
 		}, resp.ErrMsg
 	}
+	s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	return &fmtrpc.StopRecResponse{
 		Msg: "Data recording successfully stopped.",
 	}, nil
@@ -138,13 +148,6 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
-	// Unblock DataProviderChan incase a service wrote to it and nobody read from it
-	// select {
-	// case _ = <- s.DataProviderChan:
-	// 	break
-	// default:
-	// 	break
-	// }
 	s.Logger.Info().Msg("Have a new data listener.")
 	_ = atomic.AddInt32(&s.Listeners, 1)
 	for _, channel := range s.StateChangeChans {
@@ -155,50 +158,7 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 			return resp.ErrMsg
 		}
 	}
-	s.Logger.Info().Msg("Hello?")
-	// cases := make([]reflect.SelectCase, len(s.DataProviderChans)+1) // +1 for updateStream.Context().Done() channel
-	// i := 0
-	// for _, ch := range s.DataProviderChans {
-	// 	cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)}
-	// 	i++
-	// }
-	// cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(updateStream.Context().Done())}
 	for {
-		s.Logger.Info().Msg("Hello every iteration?")
-		// chosen, value, ok := reflect.Select(cases)
-		// if !ok {
-		// 	cases[chosen].Chan = reflect.ValueOf(nil)
-		// 	continue
-		// }
-		// switch v := value.Interface().(type) {
-		// case *fmtrpc.RealTimeData:
-		// 	s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
-		// 	if err := updateStream.Send(v); err != nil {
-		// 		_ = atomic.AddInt32(&s.Listeners, -1)
-		// 		if atomic.LoadInt32(&s.Listeners) == 0 {
-		// 			for _, channel := range s.StateChangeChans {
-		// 				channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
-		// 				resp := <- channel
-		// 				if resp.ErrMsg != nil {
-		// 					return resp.ErrMsg
-		// 				}
-		// 			}
-		// 		}
-		// 		return err
-		// 	}
-		// default:
-		// 	_ = atomic.AddInt32(&s.Listeners, -1)
-		// 	if atomic.LoadInt32(&s.Listeners) == 0 {
-		// 		for _, channel := range s.StateChangeChans {
-		// 			channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
-		// 			resp := <- channel
-		// 			if resp.ErrMsg != nil {
-		// 				return resp.ErrMsg
-		// 			}
-		// 		}
-		// 	}
-		// 	return updateStream.Context().Err()
-		// }
 		select {
 		case RTD := <-s.DataProviderChan:
 			s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")

@@ -22,6 +22,7 @@ type Tag struct {
 }
 
 var (
+	pressureRead int = 122
 	customerChannelString = "customer channel "
 	coldfingerSup         = "Coldfinger sup"
 	coldfingerRet         = "Coldfinger ret"
@@ -186,6 +187,8 @@ type FlukeService struct {
 	outputDir  				string
 	BuffedChan				chan *fmtrpc.RealTimeData
 	StateChangeChan			chan *data.StateChangeMsg
+	PressureChan			chan float64
+	IsRGAReady				bool
 }
 
 // A compile time check to make sure that FlukeService fully implements the data.Service interface
@@ -203,6 +206,7 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 		tags:      tags,
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
+		PressureChan: make(chan float64),
 		outputDir: outputDir,
 		name: 	   data.FlukeName,
 	}, nil
@@ -242,6 +246,7 @@ func (s *FlukeService) Stop() error {
 		return err
 	}
 	s.connection.Close()
+	close(s.PressureChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -324,6 +329,11 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 				}
 			}
 			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
+			if s.IsRGAReady {
+				if i == pressureRead {
+					s.PressureChan <- reading.Value.(float64)
+				}
+			}
 		}
 	}
 	err := writer.Write(dataString)

@@ -137,7 +137,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	flukeService.RegisterWithRTDService(rtdService)
 	services = append(services, flukeService)
 
-	// Instantiate RGA service and register with gRPC server but NOT start
+	// Instantiate RGA service and register with gRPC server and Fluke Service but NOT start
 	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate RGA service: %v", err))
@@ -148,6 +148,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	rgaService.RegisterWithRTDService(rtdService)
+	rgaService.RegisterWithFlukeService(flukeService)
 	services = append(services, rgaService)
 
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
