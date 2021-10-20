@@ -9,17 +9,23 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 )
 
+var (
+	minimumPressure float64 = 0.00005
+)
+
 type RGAService struct {
 	Running				int32 //atomically
 	Recording			int32 //atomically
 	Broadcasting		int32 //atomically
 	Logger				*zerolog.Logger
 	OutputChan			chan *fmtrpc.RealTimeData
+	PressureChan		chan float64
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}
 	outputDir  			string
 	connection			net.Conn
 	name 				string
+	currentPressure		float64
 	// channel to send data to RealTimeDataService
 }
 
@@ -92,12 +98,17 @@ func (s *RGAService) ListenForRTDSignal() {
 					}
 				}
 			case data.RECORDING:
-				if msg.State { // RTD is responsible for determining whether or not RGA can safely be turned on.
-					if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-						s.Logger.Warn().Msg("Could not change recording state.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not change recording state.")}
+				if msg.State {
+					if s.currentPressure == 0 || s.currentPressure > minimumPressure {
+						s.Logger.Warn().Msg(fmt.Sprintf("Could not start RGA recording: current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure))
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start RGA recording: current chamber pressure is too high.\nCurrent: %.6f Torr\nMinimum: %.5f Torr", s.currentPressure, minimumPressure)}
 					} else {
-						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+						if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+							s.Logger.Warn().Msg("Could not change recording state.")
+							s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not change recording state.")}
+						} else {
+							s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
+						}
 					}
 				} else {
 					if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
@@ -108,6 +119,8 @@ func (s *RGAService) ListenForRTDSignal() {
 					}
 				}
 			}
+		case p := <- s.PressureChan:
+			s.currentPressure = p
 		case <-s.QuitChan:
 			return
 		}
@@ -119,4 +132,10 @@ func (s *RGAService) RegisterWithRTDService(rtd *data.RTDService) {
 	rtd.RegisterDataProvider(s.name)
 	s.OutputChan = rtd.DataProviderChan
 	s.StateChangeChan = rtd.StateChangeChans[s.name]
+}
+
+// RegisterWithFlukeService adds the Fluke Service pressure channel to the RGA service struct in order to have realtime pressure measurements.
+func (s *RGAService) RegisterWithFlukeService(f *FlukeService) {
+	s.PressureChan = f.PressureChan
+	f.IsRGAReady = true
 }

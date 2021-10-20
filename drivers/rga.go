@@ -4,6 +4,7 @@ import (
 	"net"
 )
 
+// TODO:SSSOCPaulCote - Add list of RGA commands
 var (
 	rgaIPAddr = "192.168.0.77"
 	rgaPort = "10014"
