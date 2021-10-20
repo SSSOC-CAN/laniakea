@@ -168,8 +168,11 @@ func login(ctx *cli.Context) error {
 var startRecording = cli.Command{
 	Name:  "start-record",
 	Usage: "Start recording data in realtime.",
+	ArgsUsage: "service-name",
 	Description: `
-	This command starts the process of recording data from the Fluke DAQ into a timestamped csv file.`,
+	This command starts the process of recording data for the given service into a timestamped csv file. Service-name must be one the following:
+	    - fluke
+		- rga`,
 	Flags: []cli.Flag{
 		cli.Int64Flag{
 			Name:  "polling_interval",
@@ -182,14 +185,28 @@ var startRecording = cli.Command{
 // startRecord is the CLI wrapper around the FlukeService StartRecording method
 func startRecord(ctx *cli.Context) error {
 	ctxc := getContext()
+	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
+		return cli.ShowCommandHelp(ctx, "start-record")
+	}
 	client, cleanUp := getDataCollectorClient(ctx)
 	defer cleanUp()
 	var polling_interval int64
+	serviceNameStr := ctx.Args().First()
+	var serviceName fmtrpc.RecordService
 	if ctx.NumFlags() != 0 {
 		polling_interval = ctx.Int64("polling_interval")
 	}
+	switch serviceNameStr {
+	case "fluke":
+		serviceName = fmtrpc.RecordService_FLUKE
+	case "rga":
+		serviceName = fmtrpc.RecordService_RGA
+	default:
+		return fmt.Errorf("Invalid service name %v, service names must be one of the following: fluke and rga", serviceNameStr)
+	}
 	recordRequest := &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
+		Type: serviceName,
 	}
 	recordResponse, err := client.StartRecording(ctxc, recordRequest)
 	if err != nil {
@@ -202,17 +219,33 @@ func startRecord(ctx *cli.Context) error {
 var stopRecording = cli.Command{
 	Name:  "stop-record",
 	Usage: "Stop recording data.",
+	ArgsUsage: "service-name",
 	Description: `
-	This command stops the process of recording data from the Fluke DAQ into a timestamped csv file.`,
+	This command stops the process of recording data from the given service into a timestamped csv file. Service-name must be one the following:
+	- fluke
+	- rga`,
 	Action: stopRecord,
 }
 
 // stopRecord is the CLI wrapper around the FlukeService StopRecording method
 func stopRecord(ctx *cli.Context) error {
 	ctxc := getContext()
+	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
+		return cli.ShowCommandHelp(ctx, "stop-record")
+	}
 	client, cleanUp := getDataCollectorClient(ctx)
 	defer cleanUp()
-	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{})
+	serviceNameStr := ctx.Args().First()
+	var serviceName fmtrpc.RecordService
+	switch serviceNameStr {
+	case "fluke":
+		serviceName = fmtrpc.RecordService_FLUKE
+	case "rga":
+		serviceName = fmtrpc.RecordService_RGA
+	default:
+		return fmt.Errorf("Invalid service name %v, service names must be one of the following: fluke and rga", serviceNameStr)
+	}
+	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{Type: serviceName})
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,20 @@ import (
 	"google.golang.org/grpc"
 )
 
+var (
+	FlukeName = "FLUKE"
+	RgaName = "RGA"
+	rpcEnumMap = map[fmtrpc.RecordService]string{
+		fmtrpc.RecordService_FLUKE: FlukeName,
+		fmtrpc.RecordService_RGA: RgaName,
+	}
+)
+
+type RecordingState struct {
+	RecordState 	bool
+	ErrMsg			error
+}
+
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
 	Running				int32 // used atomically
@@ -14,6 +28,8 @@ type RTDService struct {
 	Logger				*zerolog.Logger
 	DataProviderChan	chan *fmtrpc.RealTimeData
 	StartBrodcastChan	chan bool
+	RecordingStateChans	map[string]chan *RecordingState
+	ServiceRecStates	map[string]bool
 	QuitChan			chan struct{}
 	registeredProviders	int
 }
@@ -22,7 +38,9 @@ type RTDService struct {
 func NewRTDService(log *zerolog.Logger) *RTDService {
 	return &RTDService{
 		QuitChan: make(chan struct{}),
+		ServiceRecStates: make(map[string]bool),
 		StartBrodcastChan: make(chan bool),
+		RecordingStateChans: make(map[string]chan *RecordingState),
 		Logger: log,
 		wg: wg,
 	}
@@ -46,18 +64,33 @@ func (s *RTDService) Start() error {
 }
 
 //RegisterDataProvider increments the counter by one
-func (s *RTDService) RegisterDataProvider() {
+func (s *RTDService) RegisterDataProvider(serviceName string) {
 	s.registeredProviders += 1 // maybe this should be atomic
+	if _, ok := s.RecordingStateChans[serviceName]; !ok {
+		s.RecordingStateChans[serviceName] = make(chan *RecordingState)
+	}
+	if _, ok := s.ServiceRecStates[serviceName]; !ok {
+		s.ServiceRecStates[serviceName] = false
+	}
 }
 
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
-	// TODO:SSSOCPaulCote - Send data using channel to start recording
-	err := s.startRecording(req.PollingInterval)
-	if err != nil {
+	switch req.Type {
+	case fmtrpc.RecordService_FLUKE:
+		s.RecordingStateChans[rpcEnumMap[req.Type]] <- &RecordingState{RecordState: true, ErrMsg: nil}
+		resp := <-s.RecordingStateChans[rpcEnumMap[req.Type]]
+		if resp.ErrMsg != nil {
+			return &fmtrpc.RecordResponse{
+				Msg: fmt.Sprintf("Could not start data recording: %v", err),
+			}, err
+		}
+		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.RecordState
+	case fmtrpc.RecordService_RGA:
+		// Leaving this until I can figure out how to make sure FLUKE is on and pressure is <= 0.00005 Torr
 		return &fmtrpc.RecordResponse{
-			Msg: fmt.Sprintf("Could not start data recording: %v", err),
-		}, err
+			Msg: "Could not start data recording: RGA unimplemented.",
+		}, fmt.Errorf("Could not start data recording: RGA unimplemented.")
 	}
 	return &fmtrpc.RecordResponse{
 		Msg: "Data recording successfully started.",
@@ -66,9 +99,9 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
-	// TODO:SSSOCPaulCote - Send data using channel to stop recording
-	err := s.stopRecording()
-	if err != nil {
+	s.RecordingStateChans[rpcEnumMap[req.Type]] <- &RecordingState{RecordState: false, ErrMsg: nil}
+	resp := <-s.RecordingStateChans[rpcEnumMap[req.Type]]
+	if resp.ErrMsg != nil {
 		return &fmtrpc.StopRecResponse{
 			Msg: "Could not stop data recording. Data recording already stopped.",
 		}, err

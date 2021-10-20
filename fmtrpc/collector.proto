@@ -6,11 +6,11 @@ option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 service DataCollector {
     /* fmtcli: `start-record`
-    StartRecording will begin recording data from Fluke software and writing it.
+    StartRecording will begin recording data from specified service and writing it.
     */
     rpc StartRecording (RecordRequest) returns (RecordResponse);
     /* fmtcli: `stop-record`
-    StopRecording will end the recording of data from Fluke software.
+    StopRecording will end the recording of data from specified service.
     */
     rpc StopRecording (StopRecRequest) returns (StopRecResponse);
     /* fmtcli: `subscribe-data-stream`
@@ -19,8 +19,14 @@ service DataCollector {
     rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
 }
 
+enum RecordService {
+    FLUKE = 0;
+    RGA = 1;
+}
+
 message RecordRequest {
     int64 polling_interval = 1;
+    RecordService type = 2;
 }
 
 message RecordResponse {
@@ -28,6 +34,7 @@ message RecordResponse {
 }
 
 message StopRecRequest {
+    RecordService type = 1;
 }
 
 message StopRecResponse {

@@ -188,7 +188,12 @@ type FlukeService struct {
 	outputDir  				string
 	BuffedChan				chan *fmtrpc.RealTimeData
 	StartBrodcastChan		chan bool
+	RecordingStateChan		chan *data.RecordingState
 }
+
+// A compile time check to make sure that FlukeService fully implements the data.Service interface
+var _ data.Service = (*FlukeService) (nil)
+
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
 func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, error) {
@@ -202,7 +207,7 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
 		outputDir: outputDir,
-		name:	"FLUKE",
+		name: 	   data.FlukeName,
 	}, nil
 }
 
@@ -224,7 +229,7 @@ func (s *FlukeService) Start() error {
 		return err
 	}
 	s.connection = c
-	go s.CheckIfBroadcasting()
+	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("Fluke Service started.")
 	return nil
 }
@@ -244,6 +249,11 @@ func (s *FlukeService) Stop() error {
 	close(s.StartBrodcastChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
+}
+
+// Name satisfies the fmtd.Service interface
+func (s *FlukeService) Name() string {
+	return s.name
 }
 
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
@@ -350,17 +360,47 @@ func (s *FlukeService) stopRecording() error {
 }
 
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
-func (s *FlukeService) CheckIfBroadcasting() {
+func (s *FlukeService) ListenForRTDSignal() {
 	for {
 		select {
-		case state := <-s.StartBrodcastChan:
-			if state {
+		case bState := <-s.StartBrodcastChan:
+			if bState {
 				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
 					s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
 				}
 			} else {
 				if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
 					s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
+				}
+			}
+		case rState := <-s.RecordingStateChan:
+			if rState.RecordState {
+				if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+					s.Logger.Warn().Msg("Could not change recording state.")
+					s.RecordingStateChan <- &data.RecordingState{RecordState: false, ErrMsg: fmt.Errorf("Could not change recording state.")}
+				} else {
+					err := s.startRecording(DefaultPollingInterval) // TODO:SSSOCPaulCote - RecordingState data will include polling interval
+					if err != nil {
+						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
+						s.RecordingStateChan <- &data.RecordingState{RecordState: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
+					} else {
+						s.Logger.Info().Msg("Started recording.")
+						s.RecordingStateChan <- &data.RecordingState{RecordState: true, ErrMsg: nil}
+					}
+				}
+			} else {
+				if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
+					s.Logger.Warn().Msg("Could not change recording state.")
+					s.RecordingStateChan <- &data.RecordingState{RecordState: true, ErrMsg: fmt.Errorf("Could not change recording state.")}
+				} else {
+					err := s.stopRecording()
+					if err != nil {
+						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
+						s.RecordingStateChan <- &data.RecordingState{RecordState: true, ErrMsg: fmt.Errorf("Could not stop recording: %v", err)}
+					} else {
+						s.Logger.Info().Msg("Stopped recording.")
+						s.RecordingStateChan <- &data.RecordingState{RecordState: false, ErrMsg: nil}
+					}
 				}
 			}
 		case <-s.QuitChan:
@@ -371,7 +411,8 @@ func (s *FlukeService) CheckIfBroadcasting() {
 
 // RegisterWithRTDService adds the RTD Service channels to the Fluke Service Struct and incrememnts the number of registered data providers on the RTD
 func (s *FlukeService) RegisterWithRTDService(rtd *data.RTDService) {
-	s.BuffedChan = rtd.DataProviderChan
-	s.StartBrodcastChan = rtd.StartBrodcastChan
 	rtd.RegisterDataProvider()
+	s.OutputChan = rtd.DataProviderChan
+	s.StartBrodcastChan = rtd.StartBrodcastChan
+	s.RecordingStateChan = rtd.RecordingStateChans[s.name]
 }
