@@ -8,7 +8,7 @@ import (
 var (
 	rgaIPAddr = "192.168.0.77"
 	rgaPort = "10014"
-	rgaServer =rgaIPAddr+":"+rgaPort
+	rgaServer = rgaIPAddr+":"+rgaPort
 )
 
 //connectToRGA establishes a conncetion with the RGA
