@@ -699,25 +699,31 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	// We know that the second row will be headers
 	headers := re.FindAllString(string(split[1]), -1)
 	// We know that split has a length of four since it's an horizontal response. We can ignore the last line.
-	values := re.FindAllString(string(split[2]), len(headers))
-	fields := make(map[string]RGAValue)
-	for i, header := range headers {
-		if _, ok := fields[header]; !ok {
-			// if int64
-			if v, err := strconv.ParseInt(values[i], 10, 64); err == nil {
-				fields[header] = RGAValue{Type: Rga_INT, Value: v}
-			// if float64
-			} else if v, err := strconv.ParseFloat(values[i], 64); err == nil {
-				fields[header] = RGAValue{Type: Rga_FLOAT, Value: v}
-			// if bool
-			} else if v, err := strconv.ParseBool(values[i]); err == nil {
-				fields[header] = RGAValue{Type: Rga_BOOL, Value: v}
-			// if string
-			} else {
-				fields[header] = RGAValue{Type: Rga_STR, Value: values[i]}
+	for j := 2; j < len(split)-1; j++ {
+		values := re.FindAllString(string(split[j]), len(headers))
+		fields := make(map[string]RGAValue)
+		for i, header := range headers {
+			if j > 2 {
+				header = header+strconv.Itoa(i-2)
+			}
+			if _, ok := fields[header]; !ok {
+				// if int64
+				if v, err := strconv.ParseInt(values[i], 10, 64); err == nil {
+					fields[header] = RGAValue{Type: Rga_INT, Value: v}
+				// if float64
+				} else if v, err := strconv.ParseFloat(values[i], 64); err == nil {
+					fields[header] = RGAValue{Type: Rga_FLOAT, Value: v}
+				// if bool
+				} else if v, err := strconv.ParseBool(values[i]); err == nil {
+					fields[header] = RGAValue{Type: Rga_BOOL, Value: v}
+				// if string
+				} else {
+					fields[header] = RGAValue{Type: Rga_STR, Value: values[i]}
+				}
 			}
 		}
 	}
+	
 	return &RGAResponse{
 		ErrMsg: RGAErr{errorStatus[1]},
 		Fields: fields,
@@ -908,14 +914,257 @@ func (c RGAConnection) SourceInfo() (*RGAResponse, error) {
 	return parseVerticalResp(resp[0], false)
 }
 
-// DetectorInfo returns the current configuration the current state of the multiplier and the reason why it is locked
-func (c RGAConnection) DetectorInfo() (*RGAResponse, error) {
-	fmt.Fprintf(c, detectorInfo+commandSuffix)
+// DetectorInfo returns a table of information about the detector settings for a particular source table
+func (c RGAConnection) DetectorInfo(SourceIndex int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d%s", detectorInfo, SourceIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
 	_, err = c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
 	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
-	return parseHorizontalResp(resp[0], false) // TODO:SSSOCPaulCote - The response is a table with many rows, need to accomodate in parseHorizontalResp
+	return parseHorizontalResp(resp[0])
+}
+
+// FilamentInfo returns the current config and state of the filaments
+func (c RGAConnection) FilamentInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, filamentInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// TotalPressureInfo returns information about the current state and settings being used if a total pressure gauge has been fitted onto the sensor
+func (c RGAConnection) TotalPressureInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, totalPressureInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// AnalogInputInfo returns information about all the analog inputs that the sensor has.
+func (c RGAConnection) AnalogInputInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, analogInputInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseHorizontalResp(resp[0])
+}
+
+// AnalogOutputInfo rReturns information about all analog outputs that a sensor has
+func (c RGAConnection) AnalogOutputInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, analogOutputInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseHorizontalResp(resp[0])
+}
+
+// DigitalInfo returns information about the fitted digital input ports
+func (c RGAConnection) DigitalInfo() (*RGAResponse, error) { // TODO:SSSOCPaulCote this command has both vertical and horizontal outputs
+	fmt.Fprintf(c, digitalInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// RolloverInfo Returns configuration settings for the rollover correction algorithm used in the HPQ2s
+func (c RGAConnection) RolloverInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, rolloverInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// RVCInfo returns the current state of the RVC if the sensor has an RVC fitted.
+func (c RGAConnection) RVCInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, rVCInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+//CirrusInfo returns the current Cirrus status and configuration if the sensor is a Cirrus
+func (c RGAConnection) CirrusInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, cirrusInfo+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+//PECal_Info It is not meant to be used by non MKS software
+func (c RGAConnection) PECal_Info(SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d %d%s", pECal_Info, SourceIndex, DetectorIndex, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+//Control takes an AppName (name of the TCP client) and the version of the controlling application to control an unused sensor
+func (c RGAConnection) Control(AppName, Version string) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %s %s%s", control, AppName, Version, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// Release releases control of the sensor
+func (c RGAConnection) Release() (*RGAResponse, error) {
+	fmt.Fprintf(c, release+commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+type RGAOnOff string
+
+const (
+	Rga_ON RGAOnOff = "On"
+	Rga_OFF RGAOnOff = "Off"
+)
+
+// FilamentControl turns the currently selected filament On or Off
+func (c RGAConnection) FilamentControl(State RGAOnOff) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %s%s", filamentControl, State, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// FilamentSelect selects a particular filament
+func (c RGAConnection) FilamentSelect(Number int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d%s", filamentSelect, Number, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// FilamentOnTime sets the amount of time that filaments will stay on for if the unit is configured to use a time limit before filaments automatically go off
+func (c RGAConnection) FilamentOnTime(Time int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d%s", filamentOnTime, Time, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// AddAnalog adds a new analog measurement to the sensor
+func (c RGAConnection) AddAnalog(Name string, StartMass, EndMass, PointerPerPeak, Accuracy, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %s %d %d %d %d %d %d%s", addAnalog, Name, StartMass, EndMass, PointerPerPeak, Accuracy, SourceIndex, DetectorIndex, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+type RGAFilterMode string
+
+const (
+	Rga_PeakCenter RGAFilterMode = "PeakCenter"
+	Rga_PeakMax RGAFilterMode = "PeakMax"
+	Rga_PeakAverage RGAFilterMode = "PeakAverage"
+)
+
+// AddBarchart adds a new barchart measurement to the sensor
+func (c RGAConnection) AddBarchart(Name string, StartMass, EndMass int, FilterMode RGAFilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %s %d %d %s %d %d %d %d%s", addBarchart, Name, StartMass, EndMass, FilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// AddPeakJump adds a new peak jump measurement to the sensor
+func (c RGAConnection) AddPeakJump(Name string, FilterMode RGAFilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %s %s %d %d %d %d%s", addPeakJump, Name, FilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// AddSinglePeak adds a new single peak measurement to the sensor
+func (c RGAConnection) AddSinglePeak(Name string, Mass float64, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %s %f %d %d %d %d%s", addSinglePeak, Name, Mass, Accuracy, EGainIndex, SourceIndex, DetectorIndex, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
+}
+
+// MeasurementAccuracy changes the accuracy code of the currently selected measurement.
+func (c RGAConnection) MeasurementAccuracy(Accuracy int) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d%s", measurementAccuracy, Accuracy, commandSuffix)
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseVerticalResp(resp[0], false)
 }
