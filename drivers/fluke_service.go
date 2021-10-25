@@ -313,14 +313,14 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	return nil
 }
 
-// record records the live data from Fluke and inserts it into a csv file
+// record records the live data from Fluke and inserts it into a csv file and passes it to the RTD service
 func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	current_time := time.Now()
 	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	for _, i := range idxs {
-		reading := s.connection.ReadItem(s.tagMap[i].tag)
+		reading := s.connection.ReadMass()
 		if i != 0 {
 			if atomic.LoadInt32(&s.Broadcasting) == 1 {
 				dataField[int64(i)]= &fmtrpc.DataField{
@@ -358,6 +358,7 @@ func (s *FlukeService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 	}
+	s.QuitChan<-struct{}{}
 	return nil
 }
 
