@@ -652,25 +652,59 @@ var (
 	stopDegas = "StopDegas"
 	BUFFER = 4096
 	ACKMsg = "MKSRGA"
+	Rga_ERR_ERROR = func(code, msg string) error {
+		return fmt.Errorf("%s\nCODE: %s\nDESCRIPTION: %s", Rga_ERROR, code, msg)
+	}
+	filamentStatus = "FilamentStatus"
+	filamentTimeRemaining = "FilamentTimeRemaining"
+	startingScan = "StartingScan"
+	startingMeasurement = "StartingMeasurement"
+	zeroReading = "ZeroReading"
+	massReading = "MassReading"
+	multiplierStatus = "MultiplierStatus"
+	rfTripState = "RFTripState"
+	inletChange = "InletChange"
+	analogInput = "AnalogInput"
+	totalPressure = "TotalPressure"
+	digitalPortChange = "DigitalPortChange"
+	rvcPumpStatus = "RVCPumpStatus"
+	rvcHeaterStatus = "RVCHeaterStatus"
+	rvcValveStatus = "RVCValveStatus"
+	rvcInterlocks = "RVCInterlocks"
+	rvcStatus = "RVCStatus"
+	rvcDigitalInput = "RVCDigitalInput"
+	rvcValveMode = "RVCValveMode"
+	linkDown = "LinkDown"
+	vscEvent = "VSCEvent"
+	degasReading = "DegasReading"
+	BIG_BUFFER = 16384
 )
 
 type RGAConnection net.Conn
 
-type RGAErr string
+type RGAErrStr string
+type RGAErr error
 type RGAType int32
+type RGASensorState string
 
 const (
-	Rga_ERROR RGAErr = "ERROR"
-	Rga_OK RGAErr = "OK"
+	Rga_ERROR RGAErrStr = "ERROR"
+	Rga_OK RGAErrStr = "OK"
+	Rga_ERR_ERROR RGAErr = fmt.Errorf(Rga_ERROR)
+	Rga_
 	Rga_INT RGAType = 0
 	Rga_FLOAT RGAType = 1
 	Rga_BOOL RGAType = 2
 	Rga_STR RGAType = 3
+	Rga_SENSOR_STATE_READY RGASensorState = "Ready"
+	Rga_SENSOR_STATE_INUSE RGASensorState = "InUse"
+	Rga_SENSOR_STATE_CONFIG RGASensorState = "Config"
+	Rga_SENSOR_STATE_NA RGASensorState = "N/A"
 )
 
 type RGARespErr struct {
 	CommandName string
-	Err			RGAErr
+	Err			RGAErrStr
 }
 
 type RGAValue struct {
@@ -693,10 +727,10 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	//We know the first row is always the name of the command it's error status
 	errorStatus := re.FindAllString(string(split[0]), 2)
 	var errMsg error
-	if RGAErr{errorStatus[1]} != Rga_ERROR && RGAErr{errorStatus[1]} != Rga_OK {
+	if RGAErrStr{errorStatus[1]} != Rga_ERROR && RGAErrStr{errorStatus[1]} != Rga_OK {
 		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus[1])
-	} else {
-		errMsg = fmt.Errorf(errorStatus[1])
+	} else if  RGAErrStr{errorStatus[1]} == Rga_ERROR {
+		return nil, Rga_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], re.FindAllString(string(split[2]), 2)[1])
 	}
 	// We know that the second row will be headers
 	headers := re.FindAllString(string(split[1]), -1)
@@ -727,13 +761,16 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	}
 	
 	return &RGAResponse{
-		ErrMsg: RGAErr{errorStatus[1]},
+		ErrMsg: RGARespErr{
+			CommandName: errorStatus[0],
+			Err: RGAErrStr{errorStatus[1]},
+		},
 		Fields: fields,
 	}, errMsg
 }
 
-// parseVerticalResponse will parse a vertical response from the RGA into a RGAResponse object
-func parseVerticalResponse(resp []byte, oneValuePerLine bool) (*RGAResponse, error) {
+// parseVerticalResp will parse a vertical response from the RGA into a RGAResponse object
+func parseVerticalResp(resp []byte, oneValuePerLine bool) (*RGAResponse, error) {
 	re, err := regexp.Compile(fieldRegex)
 	if err != nil {
 		return nil, err
@@ -742,10 +779,10 @@ func parseVerticalResponse(resp []byte, oneValuePerLine bool) (*RGAResponse, err
 	//We know the first row is always the name of the command it's error status
 	errorStatus := re.FindAllString(string(split[0]), 2)
 	var errMsg error
-	if RGAErr{errorStatus[1]} != Rga_ERROR && RGAErr{errorStatus[1]} != Rga_OK {
+	if RGAErrStr{errorStatus[1]} != Rga_ERROR && RGAErrStr{errorStatus[1]} != Rga_OK {
 		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus[1])
-	} else {
-		errMsg = fmt.Errorf(errorStatus[1])
+	} else if  RGAErrStr{errorStatus[1]} == Rga_ERROR {
+		return nil, Rga_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], re.FindAllString(string(split[2]), 2)[1])
 	}
 	// We know that the second to the before last will be our header value combos
 	fields := make(map[string]RGAValue)
@@ -781,7 +818,53 @@ func parseVerticalResponse(resp []byte, oneValuePerLine bool) (*RGAResponse, err
 		}
 	}
 	return &RGAResponse{
-		ErrMsg: RGAErr{errorStatus[1]},
+		ErrMsg: RGARespErr{
+			CommandName: errorStatus[0],
+			Err: RGAErrStr{errorStatus[1]},
+		},
+		Fields: fields,
+	}, errMsg
+}
+
+// parseMassResp parses a MassReading response from the RGA
+func parseMassResp(resp []byte) (*RGAResponse, error) {
+	re, err := regexp.Compile(fieldRegex)
+	if err != nil {
+		return nil, err
+	}
+	split := bytes.Split(resp, delim)
+	// We first ensure we are parsing a mass response
+	firstRow := re.FindAllString(string(split[0]), 3)
+	if firstRow[0] != massReading {
+		return nil, fmt.Errorf("Trying to parse %s as MassReading", firstRow[0])
+	}
+	// Now we parse data
+	fields := make(map[string]RGAValue)
+	for i := 1; i < len(split)-1; i++ {
+		field := re.FindAllString(string(split[i]), 3)
+		massPosition := field[1]
+		value := field[2]
+		if _, ok := fields[massPosition]; !ok {
+			// if int64
+			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
+				fields[massPosition] = RGAValue{Type: Rga_INT, Value: v}
+			// if float64
+			} else if v, err := strconv.ParseFloat(value, 64); err == nil {
+				fields[massPosition] = RGAValue{Type: Rga_FLOAT, Value: v}
+			// if bool
+			} else if v, err := strconv.ParseBool(value); err == nil {
+				fields[massPosition] = RGAValue{Type: Rga_BOOL, Value: v}
+			// if string
+			} else {
+				fields[massPosition] = RGAValue{Type: Rga_STR, Value: value}
+			}
+		}
+	}
+	return &RGAResponse{
+		ErrMsg: RGARespErr{
+			CommandName: firstRow[0],
+			Err: Rga_OK,
+		},
 		Fields: fields,
 	}, errMsg
 }
@@ -806,6 +889,68 @@ func (c RGAConnection) InitMsg() error {
 		return fmt.Errorf("RGA did not respond with expected ACK msg: %s", string(split[0]))
 	}
 	return nil
+}
+
+func (c RGAConnection) ReadMass() (*RGAResponse, error) {
+	buf := make([]byte, BIG_BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	return parseMassResp(resp[0])
+}
+
+//ReadResponse reads an asynchronous response from the RGA
+func (c RGAConnection) ReadResponse() (*RGAResponse, error) {
+	buf := make([]byte, BUFFER)
+	_, err = c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
+	//Parse response here
+	re, err := regexp.Compile(fieldRegex)
+	if err != nil {
+		return nil, err
+	}
+	split := bytes.Split(resp[0], delim)
+	// We first ensure we are parsing a mass response
+	firstRow := re.FindAllString(string(split[0]), -1)
+	fields := make(map[string]RGAValue)
+	switch firstRow[0] {
+	var headers []string
+	case startingScan:
+		headers = []string{"ScanNumber", "Time", "ScansRemaining"}
+	case startingMeasurement:
+		headers = []string{"MeasurementName"}
+	}
+	i := 1;
+	for _, name := range headers {
+		if _, ok := fields[name]; !ok {
+			// if int64
+			if v, err := strconv.ParseInt(firstRow[i], 10, 64); err == nil {
+				fields[name] = RGAValue{Type: Rga_INT, Value: v}
+			// if float64
+			} else if v, err := strconv.ParseFloat(firstRow[i], 64); err == nil {
+				fields[name] = RGAValue{Type: Rga_FLOAT, Value: v}
+			// if bool
+			} else if v, err := strconv.ParseBool(firstRow[i]); err == nil {
+				fields[name] = RGAValue{Type: Rga_BOOL, Value: v}
+			// if string
+			} else {
+				fields[name] = RGAValue{Type: Rga_STR, Value: firstRow[i]}
+			}
+		}
+		i++
+	}
+	return &RGAResponse{
+		ErrMsg: RGARespErr{
+			CommandName: firstRow[0],
+			Err: Rga_OK,
+		},
+		Fields: fields,
+	}, errMsg
 }
 
 // Sensors returns a table of sensors that can be controlled
