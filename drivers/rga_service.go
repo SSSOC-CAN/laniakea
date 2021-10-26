@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync/atomic"
+	"time"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -26,7 +27,7 @@ type RGAService struct {
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}
 	outputDir  			string
-	connection			RGAConnection
+	connection			*RGAConnection
 	name 				string
 	currentPressure		float64
 	// channel to send data to RealTimeDataService
@@ -45,7 +46,7 @@ func NewRGAService(logger *zerolog.Logger, outputDir string) (*RGAService, error
 		Logger: logger,
 		QuitChan: make(chan struct{}),
 		outputDir: outputDir,
-		connection: c,
+		connection: &RGAConnection{c},
 		name: data.RgaName,
 	}, nil
 }
@@ -80,6 +81,9 @@ func (s *RGAService) Name() string {
 
 // startRecording starts data recording from the RGA device
 func (s *RGAService) startRecording(pol_int int64) error {
+	if s.currentPressure == 0 || s.currentPressure > minimumPressure {
+		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure)
+	}
 	if pol_int < minRgaPollingInterval && pol_int != 0 {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", minRgaPollingInterval)
 	} else if pol_int == 0 { //No polling interval provided
@@ -98,54 +102,54 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	}
 	writer := csv.NewWriter(file)
 	// InitMsg
-	err = s.conncetion.InitMsg()
+	err = s.connection.InitMsg()
 	if err != nil {
 		return fmt.Errorf("Unable to communicate with RGA: %v", err)
 	}
 	// Setup Data
-	_, err = s.conncetion.Control(utils.AppName, utils.AppVersion)
+	_, err = s.connection.Control(utils.AppName, utils.AppVersion)
 	if err != nil {
 		return err
 	}
-	resp, err := s.conncetion.SensorState()
+	resp, err := s.connection.SensorState()
 	if err != nil {
 		return err
 	}
-	if resp.Fields["State"] != Rga_SENSOR_STATE_READY {
+	if resp.Fields["State"].Value.(RGASensorState) != Rga_SENSOR_STATE_READY {
 		return fmt.Errorf("Sensor not ready: %v", resp.Fields["State"])
 	}
-	_, err = s.conncetion.AddBarchart("Bar1", 1, 200, Rga_PeakCenter, 5, 0, 0, 0)
+	_, err = s.connection.AddBarchart("Bar1", 1, 200, Rga_PeakCenter, 5, 0, 0, 0)
 	if err != nil {
 		return fmt.Errorf("Could not add Barchart: %v", err)
 	}
 	for i := 1; i < 6; i++ {
-		_, err = s.conncetion.MeasurementAddMass(i)
+		_, err = s.connection.MeasurementAddMass(i)
 		if err != nil {
 			return fmt.Errorf("Could not add measurement mass: %v", err)
 		}
 	}
-	_, err = s.conncetion.ScanAdd("Bar1")
+	_, err = s.connection.ScanAdd("Bar1")
 	if err != nil {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
 	}
-	_, err = s.conncetion.AnalogInputInterval(1, pol_int*100000)
+	_, err = s.connection.AnalogInputInterval(1, int(pol_int)*100000)
 	if err != nil {
 		return fmt.Errorf("Could not set input interval: %v", err)
 	}
-	_, err = s.conncetion.AnalogInputAverageCount(1, 10) // 1 reading every 0.3 seconds averaged every 3 seconds (10 readings averaged)
+	_, err = s.connection.AnalogInputAverageCount(1, 10) // 1 reading every 0.3 seconds averaged every 3 seconds (10 readings averaged)
 	if err != nil {
 		return fmt.Errorf("Could not set input average count: %v", err)
 	}
-	_, err = s.conncetion.ScanStart(1)
+	_, err = s.connection.ScanStart(1)
 	if err != nil {
 		return fmt.Errorf("Could not start scan: %v", err)
 	}
-	_, err = s.conncetion.ReadResponse()
-	_, err = s.conncetion.ReadResponse()
+	_, err = s.connection.ReadResponse()
+	_, err = s.connection.ReadResponse()
 	// Header data for csv file
 	headerData := []string{"Timestamp"}
-	time.Sleep(pol_int*time.Second)
-	resp, err := s.connection.ReadMass()
+	time.Sleep(time.Duration(pol_int)*time.Second)
+	resp, err = s.connection.ReadMass()
 	if err != nil {
 		return err
 	}
@@ -198,10 +202,10 @@ func (s *RGAService) record(writer *csv.Writer) error {
 				Value: value.Value.(float64),
 			}
 		}
-		dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
+		dataString = append(dataString, fmt.Sprintf("%g", value.Value))
 		i++
 	}
-	err := writer.Write(dataString)
+	err = writer.Write(dataString)
 	if err != nil {
 		return err
 	}
@@ -225,7 +229,7 @@ func (s *RGAService) stopRecording() error {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 	}
 	s.QuitChan <- struct{}{}
-	_, err := s.conncetion.Release()
+	_, err := s.connection.Release()
 	if err != nil {
 		return fmt.Errorf("Could not safely release control of RGA: %v", err)
 	}
@@ -256,18 +260,13 @@ func (s *RGAService) ListenForRTDSignal() {
 				}
 			case data.RECORDING:
 				if msg.State {
-					if s.currentPressure == 0 || s.currentPressure > minimumPressure {
-						s.Logger.Warn().Msg(fmt.Sprintf("Could not start RGA recording: current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure))
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start RGA recording: current chamber pressure is too high.\nCurrent: %.6f Torr\nMinimum: %.5f Torr", s.currentPressure, minimumPressure)}
+					err := s.startRecording(0)
+					if err != nil {
+						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
-						err := s.startRecording(0)
-						if err != nil {
-							s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
-							s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
-						} else {
-							s.Logger.Info().Msg("Started recording.")
-							s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
-						}
+						s.Logger.Info().Msg("Started recording.")
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
 					err := s.stopRecording()
@@ -282,7 +281,7 @@ func (s *RGAService) ListenForRTDSignal() {
 			}
 		case p := <- s.PressureChan:
 			s.currentPressure = p
-			if p >= 0.00005 {
+			if p >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))

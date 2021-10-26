@@ -13,11 +13,25 @@ import (
 /*
 For more information of the commands for the RGA, please visit https://mmrc.caltech.edu/Kratos%20XPS/MKS%20RGA/ASCII%20Protocol%20User%20Manual%20SP1040016.100.pdf
 */
+
+const (
+	Rga_ERROR RGAErrStr = "ERROR"
+	Rga_OK RGAErrStr = "OK"
+	Rga_INT RGAType = 0
+	Rga_FLOAT RGAType = 1
+	Rga_BOOL RGAType = 2
+	Rga_STR RGAType = 3
+	Rga_SENSOR_STATE_READY RGASensorState = "Ready"
+	Rga_SENSOR_STATE_INUSE RGASensorState = "InUse"
+	Rga_SENSOR_STATE_CONFIG RGASensorState = "Config"
+	Rga_SENSOR_STATE_NA RGASensorState = "N/A"
+)
+
 var (
 	commandSuffix = "\n\r"
 	delim = []byte("\r\n")
 	commandEnd = []byte("\r\n\r\r")
-	fieldRegex := `\S+`
+	fieldRegex = `\S+`
 	/*Returns a table of sensors that can be controlled*/
 	sensors = "Sensors"
 	/*
@@ -655,6 +669,7 @@ var (
 	Rga_ERR_ERROR = func(code, msg string) error {
 		return fmt.Errorf("%s\nCODE: %s\nDESCRIPTION: %s", Rga_ERROR, code, msg)
 	}
+	Rga_ERR_OK = fmt.Errorf("%s", Rga_OK)
 	filamentStatus = "FilamentStatus"
 	filamentTimeRemaining = "FilamentTimeRemaining"
 	startingScan = "StartingScan"
@@ -680,38 +695,20 @@ var (
 	BIG_BUFFER = 16384
 )
 
-type RGAConnection net.Conn
-
 type RGAErrStr string
-type RGAErr error
 type RGAType int32
 type RGASensorState string
-
-const (
-	Rga_ERROR RGAErrStr = "ERROR"
-	Rga_OK RGAErrStr = "OK"
-	Rga_ERR_ERROR RGAErr = fmt.Errorf(Rga_ERROR)
-	Rga_
-	Rga_INT RGAType = 0
-	Rga_FLOAT RGAType = 1
-	Rga_BOOL RGAType = 2
-	Rga_STR RGAType = 3
-	Rga_SENSOR_STATE_READY RGASensorState = "Ready"
-	Rga_SENSOR_STATE_INUSE RGASensorState = "InUse"
-	Rga_SENSOR_STATE_CONFIG RGASensorState = "Config"
-	Rga_SENSOR_STATE_NA RGASensorState = "N/A"
-)
-
+type RGAConnection struct {
+	*net.TCPConn
+}
 type RGARespErr struct {
 	CommandName string
 	Err			RGAErrStr
 }
-
 type RGAValue struct {
 	Type	RGAType
 	Value	interface{}
 }
-
 type RGAResponse struct {
 	ErrMsg	RGARespErr
 	Fields	map[string]RGAValue
@@ -725,19 +722,20 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	}
 	split := bytes.Split(resp, delim)
 	//We know the first row is always the name of the command it's error status
-	errorStatus := re.FindAllString(string(split[0]), 2)
+	errorStatusField := re.FindAllString(string(split[0]), 2)
+	errorStatus := RGAErrStr(errorStatusField[1])
 	var errMsg error
-	if RGAErrStr{errorStatus[1]} != Rga_ERROR && RGAErrStr{errorStatus[1]} != Rga_OK {
-		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus[1])
-	} else if  RGAErrStr{errorStatus[1]} == Rga_ERROR {
+	if errorStatus != Rga_ERROR && errorStatus != Rga_OK {
+		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus)
+	} else if  errorStatus == Rga_ERROR {
 		return nil, Rga_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], re.FindAllString(string(split[2]), 2)[1])
 	}
 	// We know that the second row will be headers
 	headers := re.FindAllString(string(split[1]), -1)
 	// We know that split has a length of four since it's an horizontal response. We can ignore the last line.
+	fields := make(map[string]RGAValue)
 	for j := 2; j < len(split)-1; j++ {
 		values := re.FindAllString(string(split[j]), len(headers))
-		fields := make(map[string]RGAValue)
 		for i, header := range headers {
 			if j > 2 {
 				header = header+strconv.Itoa(i-2)
@@ -762,8 +760,8 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	
 	return &RGAResponse{
 		ErrMsg: RGARespErr{
-			CommandName: errorStatus[0],
-			Err: RGAErrStr{errorStatus[1]},
+			CommandName: errorStatusField[0],
+			Err: errorStatus,
 		},
 		Fields: fields,
 	}, errMsg
@@ -777,11 +775,11 @@ func parseVerticalResp(resp []byte, oneValuePerLine bool) (*RGAResponse, error) 
 	}
 	split := bytes.Split(resp, delim)
 	//We know the first row is always the name of the command it's error status
-	errorStatus := re.FindAllString(string(split[0]), 2)
-	var errMsg error
-	if RGAErrStr{errorStatus[1]} != Rga_ERROR && RGAErrStr{errorStatus[1]} != Rga_OK {
-		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus[1])
-	} else if  RGAErrStr{errorStatus[1]} == Rga_ERROR {
+	errorStatusField := re.FindAllString(string(split[0]), 2)
+	errorStatus := RGAErrStr(errorStatusField[1])
+	if errorStatus != Rga_ERROR && errorStatus != Rga_OK {
+		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus)
+	} else if  errorStatus == Rga_ERROR {
 		return nil, Rga_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], re.FindAllString(string(split[2]), 2)[1])
 	}
 	// We know that the second to the before last will be our header value combos
@@ -819,11 +817,11 @@ func parseVerticalResp(resp []byte, oneValuePerLine bool) (*RGAResponse, error) 
 	}
 	return &RGAResponse{
 		ErrMsg: RGARespErr{
-			CommandName: errorStatus[0],
-			Err: RGAErrStr{errorStatus[1]},
+			CommandName: errorStatusField[0],
+			Err: errorStatus,
 		},
 		Fields: fields,
-	}, errMsg
+	}, nil
 }
 
 // parseMassResp parses a MassReading response from the RGA
@@ -866,34 +864,34 @@ func parseMassResp(resp []byte) (*RGAResponse, error) {
 			Err: Rga_OK,
 		},
 		Fields: fields,
-	}, errMsg
+	}, nil
 }
 
 // InitMsg returns the standard response when the RGA receives it's first message from the client
-func (c RGAConnection) InitMsg() error {
+func (c *RGAConnection) InitMsg() error {
 	fmt.Fprintf(c, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return err
 	}
 	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
-	split := bytes.Split(resp, delim)
-	splitAgain := bytes.Split(split, delim)
+	split := bytes.Split(resp[0], delim)
+	splitAgain := bytes.Split(split[0], delim)
 	re, err := regexp.Compile(fieldRegex)
 	if err != nil {
 		return err
 	}
 	firstLine := re.FindAllString(string(splitAgain[0]), 2)
-	if firstLine != ACKMsg {
+	if firstLine[0] != ACKMsg {
 		return fmt.Errorf("RGA did not respond with expected ACK msg: %s", string(split[0]))
 	}
 	return nil
 }
 
-func (c RGAConnection) ReadMass() (*RGAResponse, error) {
+func (c *RGAConnection) ReadMass() (*RGAResponse, error) {
 	buf := make([]byte, BIG_BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -902,9 +900,9 @@ func (c RGAConnection) ReadMass() (*RGAResponse, error) {
 }
 
 //ReadResponse reads an asynchronous response from the RGA
-func (c RGAConnection) ReadResponse() (*RGAResponse, error) {
+func (c *RGAConnection) ReadResponse() (*RGAResponse, error) {
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -918,8 +916,8 @@ func (c RGAConnection) ReadResponse() (*RGAResponse, error) {
 	// We first ensure we are parsing a mass response
 	firstRow := re.FindAllString(string(split[0]), -1)
 	fields := make(map[string]RGAValue)
-	switch firstRow[0] {
 	var headers []string
+	switch firstRow[0] {
 	case startingScan:
 		headers = []string{"ScanNumber", "Time", "ScansRemaining"}
 	case startingMeasurement:
@@ -950,14 +948,14 @@ func (c RGAConnection) ReadResponse() (*RGAResponse, error) {
 			Err: Rga_OK,
 		},
 		Fields: fields,
-	}, errMsg
+	}, nil
 }
 
 // Sensors returns a table of sensors that can be controlled
-func (c RGAConnection) Sensors() (*RGAResponse, error) {
+func (c *RGAConnection) Sensors() (*RGAResponse, error) {
 	fmt.Fprintf(c, sensors+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -966,10 +964,10 @@ func (c RGAConnection) Sensors() (*RGAResponse, error) {
 }
 
 // Select selects the device via the inputted SerialNumber
-func (c RGAConnection) Select(SerialNumber string) (*RGAResponse, error) {
+func (c *RGAConnection) Select(SerialNumber string) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", selectCmd, SerialNumber, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -978,10 +976,10 @@ func (c RGAConnection) Select(SerialNumber string) (*RGAResponse, error) {
 }
 
 // SensorState retrieves the state of the selected sensor. State can only one of Ready, InUse, Config, N/A
-func (c RGAConnection) SensorState() (*RGAResponse, error) {
+func (c *RGAConnection) SensorState() (*RGAResponse, error) {
 	fmt.Fprintf(c, sensorState+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -990,10 +988,10 @@ func (c RGAConnection) SensorState() (*RGAResponse, error) {
 }
 
 // Info returns the sensor config
-func (c RGAConnection) Info() (*RGAResponse, error) {
+func (c *RGAConnection) Info() (*RGAResponse, error) {
 	fmt.Fprintf(c, info+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1002,10 +1000,10 @@ func (c RGAConnection) Info() (*RGAResponse, error) {
 }
 
 // EGains returns the list of electronic gain factors available for the sensor
-func (c RGAConnection) EGains() (*RGAResponse, error) {
+func (c *RGAConnection) EGains() (*RGAResponse, error) {
 	fmt.Fprintf(c, eGains+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1014,10 +1012,10 @@ func (c RGAConnection) EGains() (*RGAResponse, error) {
 }
 
 // InletInfo returns inlet information
-func (c RGAConnection) InletInfo() (*RGAResponse, error) {
+func (c *RGAConnection) InletInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, inletInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1026,10 +1024,10 @@ func (c RGAConnection) InletInfo() (*RGAResponse, error) {
 }
 
 // RFInfo returns the current configuration and state of the RF Trip
-func (c RGAConnection) RFInfo() (*RGAResponse, error) {
-	fmt.Fprintf(c, rFInfo+commandSuffix)
+func (c *RGAConnection) RFInfo() (*RGAResponse, error) {
+	fmt.Fprintf(c, rfInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1038,10 +1036,10 @@ func (c RGAConnection) RFInfo() (*RGAResponse, error) {
 }
 
 // MultiplierInfo returns the current configuration the current state of the multiplier and the reason why it is locked
-func (c RGAConnection) MultiplierInfo() (*RGAResponse, error) {
+func (c *RGAConnection) MultiplierInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, multiplierInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1050,10 +1048,10 @@ func (c RGAConnection) MultiplierInfo() (*RGAResponse, error) {
 }
 
 // SourceInfo returns the current configuration the current state of the multiplier and the reason why it is locked
-func (c RGAConnection) SourceInfo() (*RGAResponse, error) {
+func (c *RGAConnection) SourceInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, sourceInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1062,10 +1060,10 @@ func (c RGAConnection) SourceInfo() (*RGAResponse, error) {
 }
 
 // DetectorInfo returns a table of information about the detector settings for a particular source table
-func (c RGAConnection) DetectorInfo(SourceIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) DetectorInfo(SourceIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", detectorInfo, SourceIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1074,10 +1072,10 @@ func (c RGAConnection) DetectorInfo(SourceIndex int) (*RGAResponse, error) {
 }
 
 // FilamentInfo returns the current config and state of the filaments
-func (c RGAConnection) FilamentInfo() (*RGAResponse, error) {
+func (c *RGAConnection) FilamentInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, filamentInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1086,10 +1084,10 @@ func (c RGAConnection) FilamentInfo() (*RGAResponse, error) {
 }
 
 // TotalPressureInfo returns information about the current state and settings being used if a total pressure gauge has been fitted onto the sensor
-func (c RGAConnection) TotalPressureInfo() (*RGAResponse, error) {
+func (c *RGAConnection) TotalPressureInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, totalPressureInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1098,10 +1096,10 @@ func (c RGAConnection) TotalPressureInfo() (*RGAResponse, error) {
 }
 
 // AnalogInputInfo returns information about all the analog inputs that the sensor has.
-func (c RGAConnection) AnalogInputInfo() (*RGAResponse, error) {
+func (c *RGAConnection) AnalogInputInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, analogInputInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1110,10 +1108,10 @@ func (c RGAConnection) AnalogInputInfo() (*RGAResponse, error) {
 }
 
 // AnalogOutputInfo rReturns information about all analog outputs that a sensor has
-func (c RGAConnection) AnalogOutputInfo() (*RGAResponse, error) {
+func (c *RGAConnection) AnalogOutputInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, analogOutputInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1122,10 +1120,10 @@ func (c RGAConnection) AnalogOutputInfo() (*RGAResponse, error) {
 }
 
 // DigitalInfo returns information about the fitted digital input ports
-func (c RGAConnection) DigitalInfo() (*RGAResponse, error) { // TODO:SSSOCPaulCote this command has both vertical and horizontal outputs
+func (c *RGAConnection) DigitalInfo() (*RGAResponse, error) { // TODO:SSSOCPaulCote this command has both vertical and horizontal outputs
 	fmt.Fprintf(c, digitalInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1134,10 +1132,10 @@ func (c RGAConnection) DigitalInfo() (*RGAResponse, error) { // TODO:SSSOCPaulCo
 }
 
 // RolloverInfo Returns configuration settings for the rollover correction algorithm used in the HPQ2s
-func (c RGAConnection) RolloverInfo() (*RGAResponse, error) {
+func (c *RGAConnection) RolloverInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, rolloverInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1146,10 +1144,10 @@ func (c RGAConnection) RolloverInfo() (*RGAResponse, error) {
 }
 
 // RVCInfo returns the current state of the RVC if the sensor has an RVC fitted.
-func (c RGAConnection) RVCInfo() (*RGAResponse, error) {
+func (c *RGAConnection) RVCInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, rVCInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1158,10 +1156,10 @@ func (c RGAConnection) RVCInfo() (*RGAResponse, error) {
 }
 
 //CirrusInfo returns the current Cirrus status and configuration if the sensor is a Cirrus
-func (c RGAConnection) CirrusInfo() (*RGAResponse, error) {
+func (c *RGAConnection) CirrusInfo() (*RGAResponse, error) {
 	fmt.Fprintf(c, cirrusInfo+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1170,10 +1168,10 @@ func (c RGAConnection) CirrusInfo() (*RGAResponse, error) {
 }
 
 //PECal_Info It is not meant to be used by non MKS software
-func (c RGAConnection) PECal_Info(SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) PECal_Info(SourceIndex, DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", pECal_Info, SourceIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1182,10 +1180,10 @@ func (c RGAConnection) PECal_Info(SourceIndex, DetectorIndex int) (*RGAResponse,
 }
 
 //Control takes an AppName (name of the TCP client) and the version of the controlling application to control an unused sensor
-func (c RGAConnection) Control(AppName, Version string) (*RGAResponse, error) {
+func (c *RGAConnection) Control(AppName, Version string) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %s%s", control, AppName, Version, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1194,10 +1192,10 @@ func (c RGAConnection) Control(AppName, Version string) (*RGAResponse, error) {
 }
 
 // Release releases control of the sensor
-func (c RGAConnection) Release() (*RGAResponse, error) {
+func (c *RGAConnection) Release() (*RGAResponse, error) {
 	fmt.Fprintf(c, release+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1213,10 +1211,10 @@ const (
 )
 
 // FilamentControl turns the currently selected filament On or Off
-func (c RGAConnection) FilamentControl(State RGAOnOff) (*RGAResponse, error) {
+func (c *RGAConnection) FilamentControl(State RGAOnOff) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", filamentControl, State, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1225,10 +1223,10 @@ func (c RGAConnection) FilamentControl(State RGAOnOff) (*RGAResponse, error) {
 }
 
 // FilamentSelect selects a particular filament
-func (c RGAConnection) FilamentSelect(Number int) (*RGAResponse, error) {
+func (c *RGAConnection) FilamentSelect(Number int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", filamentSelect, Number, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1237,10 +1235,10 @@ func (c RGAConnection) FilamentSelect(Number int) (*RGAResponse, error) {
 }
 
 // FilamentOnTime sets the amount of time that filaments will stay on for if the unit is configured to use a time limit before filaments automatically go off
-func (c RGAConnection) FilamentOnTime(Time int) (*RGAResponse, error) {
+func (c *RGAConnection) FilamentOnTime(Time int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", filamentOnTime, Time, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1249,10 +1247,10 @@ func (c RGAConnection) FilamentOnTime(Time int) (*RGAResponse, error) {
 }
 
 // AddAnalog adds a new analog measurement to the sensor
-func (c RGAConnection) AddAnalog(Name string, StartMass, EndMass, PointerPerPeak, Accuracy, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) AddAnalog(Name string, StartMass, EndMass, PointerPerPeak, Accuracy, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %d %d %d %d %d %d%s", addAnalog, Name, StartMass, EndMass, PointerPerPeak, Accuracy, SourceIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1269,10 +1267,10 @@ const (
 )
 
 // AddBarchart adds a new barchart measurement to the sensor
-func (c RGAConnection) AddBarchart(Name string, StartMass, EndMass int, FilterMode RGAFilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) AddBarchart(Name string, StartMass, EndMass int, FilterMode RGAFilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %d %d %s %d %d %d %d%s", addBarchart, Name, StartMass, EndMass, FilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,10 +1279,10 @@ func (c RGAConnection) AddBarchart(Name string, StartMass, EndMass int, FilterMo
 }
 
 // AddPeakJump adds a new peak jump measurement to the sensor
-func (c RGAConnection) AddPeakJump(Name string, FilterMode RGAFilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) AddPeakJump(Name string, FilterMode RGAFilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %s %d %d %d %d%s", addPeakJump, Name, FilterMode, Accuracy, EGainIndex, SourceIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1293,10 +1291,10 @@ func (c RGAConnection) AddPeakJump(Name string, FilterMode RGAFilterMode, Accura
 }
 
 // AddSinglePeak adds a new single peak measurement to the sensor
-func (c RGAConnection) AddSinglePeak(Name string, Mass float64, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) AddSinglePeak(Name string, Mass float64, Accuracy, EGainIndex, SourceIndex, DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %f %d %d %d %d%s", addSinglePeak, Name, Mass, Accuracy, EGainIndex, SourceIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1305,10 +1303,10 @@ func (c RGAConnection) AddSinglePeak(Name string, Mass float64, Accuracy, EGainI
 }
 
 // MeasurementAccuracy changes the accuracy code of the currently selected measurement.
-func (c RGAConnection) MeasurementAccuracy(Accuracy int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementAccuracy(Accuracy int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementAccuracy, Accuracy, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1317,10 +1315,10 @@ func (c RGAConnection) MeasurementAccuracy(Accuracy int) (*RGAResponse, error) {
 }
 
 // MeasurementAddMass adds a mass to a peak jump measurement
-func (c RGAConnection) MeasurementAddMass(Mass int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementAddMass(Mass int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementAddMass, Mass, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1329,10 +1327,10 @@ func (c RGAConnection) MeasurementAddMass(Mass int) (*RGAResponse, error) {
 }
 
 // MeasurementChangeMass changes a mass on a Peak Jump measurement
-func (c RGAConnection) MeasurementChangeMass(MassIndex, NewMass int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementChangeMass(MassIndex, NewMass int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", measurementChangeMass, MassIndex, NewMass, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1341,10 +1339,10 @@ func (c RGAConnection) MeasurementChangeMass(MassIndex, NewMass int) (*RGARespon
 }
 
 // MeasurmentDetectorIndex changes the selected measurements detector index 
-func (c RGAConnection) MeasurementDetectorIndex(DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementDetectorIndex(DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementDetectorIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1353,10 +1351,10 @@ func (c RGAConnection) MeasurementDetectorIndex(DetectorIndex int) (*RGAResponse
 }
 
 // MeasurementEGainIndex changes a measurements electronic gain index
-func (c RGAConnection) MeasurementEGainIndex(EGainIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementEGainIndex(EGainIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementEGainIndex, EGainIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1365,10 +1363,10 @@ func (c RGAConnection) MeasurementEGainIndex(EGainIndex int) (*RGAResponse, erro
 }
 
 // MeasurementFilterMode selects the mass filter mode to be used for the Barchart and Peak Jump measurements
-func (c RGAConnection) MeasurementFilterMode(FilterMode RGAFilterMode) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementFilterMode(FilterMode RGAFilterMode) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", measurementFilterMode, FilterMode, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1377,10 +1375,10 @@ func (c RGAConnection) MeasurementFilterMode(FilterMode RGAFilterMode) (*RGAResp
 }
 
 // MeasurementMass changes the mass used for the selected single peak measurement
-func (c RGAConnection) MeasurementMass(Mass float64) (*RGAResponse, error) {
-	fmt.Fprintf(c, "%s %f%s", measurementMass, mass, commandSuffix)
+func (c *RGAConnection) MeasurementMass(Mass float64) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %f%s", measurementMass, Mass, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1389,10 +1387,10 @@ func (c RGAConnection) MeasurementMass(Mass float64) (*RGAResponse, error) {
 }
 
 // MeasurementPointsPerPeak sets the selected analog measurements number of points to measure per peak (or AMU)
-func (c RGAConnection) MeasurementPointsPerPeak(PointsPerPeak int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementPointsPerPeak(PointsPerPeak int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementPointsPerPeak, PointsPerPeak, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1401,10 +1399,10 @@ func (c RGAConnection) MeasurementPointsPerPeak(PointsPerPeak int) (*RGAResponse
 }
 
 // MeasurementRemoveMass removes a mass peak from the selected Peak Jump measurement
-func (c RGAConnection) MeasurementRemoveMass(MassIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementRemoveMass(MassIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementRemoveMass, MassIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1413,10 +1411,10 @@ func (c RGAConnection) MeasurementRemoveMass(MassIndex int) (*RGAResponse, error
 }
 
 // MeasurementSourceIndex changes the selected measurements source parameters
-func (c RGAConnection) MeasurementSourceIndex(SourceIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementSourceIndex(SourceIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementSourceIndex, SourceIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1425,10 +1423,10 @@ func (c RGAConnection) MeasurementSourceIndex(SourceIndex int) (*RGAResponse, er
 }
 
 // MeasurementRolloverCorrection changes whether the selected measurement uses rollover correction
-func (c RGAConnection) MeasurementRolloverCorrection(UseCorrection bool) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementRolloverCorrection(UseCorrection bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", measurementRolloverCorrection, strings.Title(fmt.Sprintf("%t", UseCorrection)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1437,10 +1435,10 @@ func (c RGAConnection) MeasurementRolloverCorrection(UseCorrection bool) (*RGARe
 }
 
 // MeasurementZeroBeamOff controls whether the ion beam should be on or off during a measurements zero readings
-func (c RGAConnection) MeasurementZeroBeamOff(BeamOff bool) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementZeroBeamOff(BeamOff bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", measurementZeroBeamOff, strings.Title(fmt.Sprintf("%t", BeamOff)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1449,10 +1447,10 @@ func (c RGAConnection) MeasurementZeroBeamOff(BeamOff bool) (*RGAResponse, error
 }
 
 // MeasurementZeroBufferDepth sets the selected measurements zero buffer depth
-func (c RGAConnection) MeasurementZeroBufferDepth(ZeroBufferDepth int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementZeroBufferDepth(ZeroBufferDepth int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementZeroBufferDepth, ZeroBufferDepth, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1470,10 +1468,10 @@ const (
 )
 
 // MeasurementZeroBufferMode sets the selected measurements zero buffer mode
-func (c RGAConnection) MeasurementZeroBufferMode(ZeroBufferMode RGAZeroBufferMode) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementZeroBufferMode(ZeroBufferMode RGAZeroBufferMode) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", measurementZeroBufferMode, ZeroBufferMode, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1482,10 +1480,10 @@ func (c RGAConnection) MeasurementZeroBufferMode(ZeroBufferMode RGAZeroBufferMod
 }
 
 // MeasurementZeroReTrigger re-triggers the selected measurements zero buffer if it's mode is SingleShot
-func (c RGAConnection) MeasurementZeroReTrigger() (*RGAResponse, error) {
-	fmt.Fprintf(c, measurementZeroReTrigge+commandSuffix)
+func (c *RGAConnection) MeasurementZeroReTrigger() (*RGAResponse, error) {
+	fmt.Fprintf(c, measurementZeroReTrigger+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1494,10 +1492,10 @@ func (c RGAConnection) MeasurementZeroReTrigger() (*RGAResponse, error) {
 }
 
 // MeasurementZeroMass sets the mass position where the selected measurement should take it's zero readings from
-func (c RGAConnection) MeasurementZeroMass(ZeroMass float64) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementZeroMass(ZeroMass float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %f%s", measurementZeroMass, ZeroMass, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1506,10 +1504,10 @@ func (c RGAConnection) MeasurementZeroMass(ZeroMass float64) (*RGAResponse, erro
 }
 
 // MultiplierProtect controls whether the multiplier is allowed to come on or not
-func (c RGAConnection) MultiplierProtect(Protect bool) (*RGAResponse, error) {
+func (c *RGAConnection) MultiplierProtect(Protect bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", multiplierProtect, strings.Title(fmt.Sprintf("%t", Protect)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1518,10 +1516,10 @@ func (c RGAConnection) MultiplierProtect(Protect bool) (*RGAResponse, error) {
 }
 
 // RunDiagnostics runs the sensors diagnostics measurements
-func (c RGAConnection) RunDiagnostics() (*RGAResponse, error) {
+func (c *RGAConnection) RunDiagnostics() (*RGAResponse, error) {
 	fmt.Fprintf(c, runDiagnostics+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1530,10 +1528,10 @@ func (c RGAConnection) RunDiagnostics() (*RGAResponse, error) {
 }
 
 // SetTotalPressure if no gauge is fitted for measuring total pressure it is sometimes useful to pass in a value for total pressure so that the sensors roll over correction can still function properly
-func (c RGAConnection) SetTotalPressure(Pressure float64) (*RGAResponse, error) {
+func (c *RGAConnection) SetTotalPressure(Pressure float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %E%s", setTotalPressure, Pressure, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1542,10 +1540,10 @@ func (c RGAConnection) SetTotalPressure(Pressure float64) (*RGAResponse, error) 
 }
 
 // TotalPressureCalFactor sets a value to apply to external gauge total pressure readings to compensate for any differences between the gauge and the true pressure
-func (c RGAConnection) TotalPressureCalFactor(Factor float64) (*RGAResponse, error) {
+func (c *RGAConnection) TotalPressureCalFactor(Factor float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %f%s", totalPressureCalFactor, Factor, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1554,10 +1552,10 @@ func (c RGAConnection) TotalPressureCalFactor(Factor float64) (*RGAResponse, err
 }
 
 // TotalPressureCalDate sets the date/time associated with a calibration
-func (c RGAConnection) TotalPressureCalDate(DateTime time.Time) (*RGAResponse, error) {
+func (c *RGAConnection) TotalPressureCalDate(DateTime time.Time) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d-%2d-%2d_%2d:%2d:%2d%s", totalPressureCalDate, DateTime.Year(), DateTime.Month(), DateTime.Day(), DateTime.Hour(), DateTime.Minute(), DateTime.Second(), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1574,10 +1572,10 @@ const (
 )
 
 // CalibrationOptions sets how to apply calibration factors to acquired measurement data
-func (c RGAConnection) CalibrationOptions(InletOption DetectorOption RGAOption) (*RGAResponse, error) {
+func (c *RGAConnection) CalibrationOptions(InletOption, DetectorOption RGAOption) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %s%s", calibrationOptions, InletOption, DetectorOption, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1586,10 +1584,10 @@ func (c RGAConnection) CalibrationOptions(InletOption DetectorOption RGAOption) 
 }
 
 // DetectorFactor sets a calibration factor for a given set of source parameters and detector parameters
-func (c RGAConnection) DetectorFactor(SourceIndex, DetectorIndex, Filament int, Factor float64) (*RGAResponse, error) {
+func (c *RGAConnection) DetectorFactor(SourceIndex, DetectorIndex, Filament int, Factor float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d %d %e%s", detectorFactor, SourceIndex, DetectorIndex, Filament, Factor, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1598,10 +1596,10 @@ func (c RGAConnection) DetectorFactor(SourceIndex, DetectorIndex, Filament int, 
 }
 
 // DetectorCalDate sets a calibration date for a given set of source parameters and detector parameters
-func (c RGAConnection) DetectorCalDate(SourceIndex, DetectorIndex, Filament int, Date time.Time) (*RGAResponse, error) {
-	fmt.Fprintf(c, "%s %d %d %d %d-%2d-%2d_%2d:%2d:%2d%s", detectorCalDate, SourceIndex, DetectorIndex, Filament, DateTime.Year(), DateTime.Month(), DateTime.Day(), DateTime.Hour(), DateTime.Minute(), DateTime.Second(), commandSuffix)
+func (c *RGAConnection) DetectorCalDate(SourceIndex, DetectorIndex, Filament int, Date time.Time) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d %d %d %d-%2d-%2d_%2d:%2d:%2d%s", detectorCalDate, SourceIndex, DetectorIndex, Filament, Date.Year(), Date.Month(), Date.Day(), Date.Hour(), Date.Minute(), Date.Second(), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1610,10 +1608,10 @@ func (c RGAConnection) DetectorCalDate(SourceIndex, DetectorIndex, Filament int,
 }
 
 // DetectorVoltage sets the multiplier voltage for a particular set of detector settings
-func (c RGAConnection) DetectorVoltage(SourceIndex, DetectorIndex, Filament, Voltage int) (*RGAResponse, error) {
+func (c *RGAConnection) DetectorVoltage(SourceIndex, DetectorIndex, Filament, Voltage int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d %d %d%s", detectorVoltage, SourceIndex, DetectorIndex, Filament, Voltage, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1622,10 +1620,10 @@ func (c RGAConnection) DetectorVoltage(SourceIndex, DetectorIndex, Filament, Vol
 }
 
 // InletFactor sets a particular inlets pressure reduction factor
-func (c RGAConnection) InletFactor(InletIndex int, Factor float64) (*RGAResponse, error) {
+func (c *RGAConnection) InletFactor(InletIndex int, Factor float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %f%s", inletFactor, InletIndex, Factor, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1634,10 +1632,10 @@ func (c RGAConnection) InletFactor(InletIndex int, Factor float64) (*RGAResponse
 }
 
 // ScanAdd adds a measurement to the scans list of measurements
-func (c RGAConnection) ScanAdd(MeasurementName string) (*RGAResponse, error) {
+func (c *RGAConnection) ScanAdd(MeasurementName string) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", scanAdd, MeasurementName, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1646,10 +1644,10 @@ func (c RGAConnection) ScanAdd(MeasurementName string) (*RGAResponse, error) {
 }
 
 // ScanStart starts a scan running and will re-trigger the scan automatically the number of times specified by NumScans
-func (c RGAConnection) ScanStart(NumScans int) (*RGAResponse, error) {
+func (c *RGAConnection) ScanStart(NumScans int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", scanStart, NumScans, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1658,10 +1656,10 @@ func (c RGAConnection) ScanStart(NumScans int) (*RGAResponse, error) {
 }
 
 // ScanStop stops a scan and removes all measurements from the scan list
-func (c RGAConnection) ScanStop() (*RGAResponse, error) {
+func (c *RGAConnection) ScanStop() (*RGAResponse, error) {
 	fmt.Fprintf(c, scanStop+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1670,10 +1668,10 @@ func (c RGAConnection) ScanStop() (*RGAResponse, error) {
 }
 
 // ScanResume re-triggers the scan NumScans times
-func (c RGAConnection) ScanResume(NumScans int) (*RGAResponse, error) {
+func (c *RGAConnection) ScanResume(NumScans int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", scanResume, NumScans, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1682,10 +1680,10 @@ func (c RGAConnection) ScanResume(NumScans int) (*RGAResponse, error) {
 }
 
 // ScanRestart re-starts the current scan from the beginning 
-func (c RGAConnection) ScanRestart(NumScans int) (*RGAResponse, error) {
+func (c *RGAConnection) ScanRestart(NumScans int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", scanRestart, NumScans, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1694,10 +1692,10 @@ func (c RGAConnection) ScanRestart(NumScans int) (*RGAResponse, error) {
 }
 
 // MeasurementSelect selects a measurement for other MeasurementXXX comands to act upon
-func (c RGAConnection) MeasurementSelect(MeasurementName string) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementSelect(MeasurementName string) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", measurementSelect, MeasurementName, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1706,10 +1704,10 @@ func (c RGAConnection) MeasurementSelect(MeasurementName string) (*RGAResponse, 
 }
 
 // MeasurementStartMass sets the selected Analog or Barchart measurements starting mass
-func (c RGAConnection) MeasurmentStartMass(Mass int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurmentStartMass(Mass int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementStartMass, Mass, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1718,10 +1716,10 @@ func (c RGAConnection) MeasurmentStartMass(Mass int) (*RGAResponse, error) {
 }
 
 // MeasurementEndMass sets the selected analog or barchart measurements ending mass
-func (c RGAConnection) MeasurementEndMass(Mass int) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementEndMass(Mass int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", measurementEndMass, Mass, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1730,10 +1728,10 @@ func (c RGAConnection) MeasurementEndMass(Mass int) (*RGAResponse, error) {
 }
 
 // MeasurementRemoveAll removes all measurements from the sensor
-func (c RGAConnection) MeasurementRemoveAll() (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementRemoveAll() (*RGAResponse, error) {
 	fmt.Fprintf(c, measurementRemoveAll+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1742,10 +1740,10 @@ func (c RGAConnection) MeasurementRemoveAll() (*RGAResponse, error) {
 }
 
 // MeasurementRemove removes the specified measurement from the sensor
-func (c RGAConnection) MeasurementRemove(MeasurementName string) (*RGAResponse, error) {
+func (c *RGAConnection) MeasurementRemove(MeasurementName string) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", measurementRemove, MeasurementName, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1756,10 +1754,10 @@ func (c RGAConnection) MeasurementRemove(MeasurementName string) (*RGAResponse, 
 // FormatWithTab by default the output from commands is formatted using spaces to try to line everything up
 // when output using a fixed width font (or terminal program). By sending this command clients can reduce the amount
 // of characters sent in each message slightly as groups of spaces will be replaced by a single tab character
-func (c RGAConnection) FormatWithTab(UseTab bool) (*RGAResponse, error) {
+func (c *RGAConnection) FormatWithTab(UseTab bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", formatWithTab, strings.Title(fmt.Sprintf("%t", UseTab)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1768,10 +1766,10 @@ func (c RGAConnection) FormatWithTab(UseTab bool) (*RGAResponse, error) {
 }
 
 // SourceIonEnergy sets a source settings parameters Ion Energy setting
-func (c RGAConnection) SourceIonEnergy(SourceIndex int, IonEnergy float64) (*RGAResponse, error) {
+func (c *RGAConnection) SourceIonEnergy(SourceIndex int, IonEnergy float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %f%s", sourceIonEnergy, SourceIndex, IonEnergy, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1780,10 +1778,10 @@ func (c RGAConnection) SourceIonEnergy(SourceIndex int, IonEnergy float64) (*RGA
 }
 
 // SourceEmission sets a source settings parameters Emission setting
-func (c RGAConnection) SourceEmission(SourceIndex int, Emission float64) (*RGAResponse, error) {
+func (c *RGAConnection) SourceEmission(SourceIndex int, Emission float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %f%s", sourceEmission, SourceIndex, Emission, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1792,10 +1790,10 @@ func (c RGAConnection) SourceEmission(SourceIndex int, Emission float64) (*RGARe
 }
 
 // SourceExtract sets a source settings parameters Extract setting
-func (c RGAConnection) SourceExtract(SourceIndex, Extract int) (*RGAResponse, error) {
+func (c *RGAConnection) SourceExtract(SourceIndex, Extract int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", sourceExtract, SourceIndex, Extract, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1804,10 +1802,10 @@ func (c RGAConnection) SourceExtract(SourceIndex, Extract int) (*RGAResponse, er
 }
 
 // SourceElectronEnergy sets a source settings parameters Electron Energy setting
-func (c RGAConnection) SourceElectronEnergy(SourceIndex, ElectronEnergy int) (*RGAResponse, error) {
+func (c *RGAConnection) SourceElectronEnergy(SourceIndex, ElectronEnergy int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", sourceElectronEnergy, SourceIndex, ElectronEnergy, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1816,10 +1814,10 @@ func (c RGAConnection) SourceElectronEnergy(SourceIndex, ElectronEnergy int) (*R
 }
 
 // SourceLowMassResolution sets a source settings parameters Low Mass Resolution setting
-func (c RGAConnection) SourceLowMassResolution(SourceIndex, LowMassResolution int) (*RGAResponse, error) {
+func (c *RGAConnection) SourceLowMassResolution(SourceIndex, LowMassResolution int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", sourceLowMassResolution, SourceIndex, LowMassResolution, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1828,10 +1826,10 @@ func (c RGAConnection) SourceLowMassResolution(SourceIndex, LowMassResolution in
 }
 
 // SourceLowMassAlignment sets a source settings parameters Low Mass Alignment setting
-func (c RGAConnection) SourceLowMassAlignment(SourceIndex, LowMassAlignment int) (*RGAResponse, error) {
+func (c *RGAConnection) SourceLowMassAlignment(SourceIndex, LowMassAlignment int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", sourceLowMassAlignment, SourceIndex, LowMassAlignment, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1840,10 +1838,10 @@ func (c RGAConnection) SourceLowMassAlignment(SourceIndex, LowMassAlignment int)
 }
 
 // SourceHighMassAlignment sets a source settings parameters High Mass Alignment setting
-func (c RGAConnection) SourceHighMassAlignment(SourceIndex, HighMassAlignment int) (*RGAResponse, error) {
+func (c *RGAConnection) SourceHighMassAlignment(SourceIndex, HighMassAlignment int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", sourceHighMassAlignment, SourceIndex, HighMassAlignment, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1852,10 +1850,10 @@ func (c RGAConnection) SourceHighMassAlignment(SourceIndex, HighMassAlignment in
 }
 
 // SourceHighMassResolution sets a source settings parameters High Mass Resolution setting
-func (c RGAConnection) SourceHighMassResolution(SourceIndex, HighMassResolution int) (*RGAResponse, error) {
+func (c *RGAConnection) SourceHighMassResolution(SourceIndex, HighMassResolution int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", sourceHighMassResolution, SourceIndex, HighMassResolution, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1864,10 +1862,10 @@ func (c RGAConnection) SourceHighMassResolution(SourceIndex, HighMassResolution 
 }
 
 // AnalogInputAverageCount sets the number of readings that should be taken and averaged before results are sent back
-func (c RGAConnection) AnalogInputAverageCount(Index, NumberToAverage int) (*RGAResponse, error) {
+func (c *RGAConnection) AnalogInputAverageCount(Index, NumberToAverage int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", analogInputAverageCount, Index, NumberToAverage, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1876,10 +1874,10 @@ func (c RGAConnection) AnalogInputAverageCount(Index, NumberToAverage int) (*RGA
 }
 
 // AnalogInputEnable enables or disables analog input readings from being sent when in control of the sensor
-func (c RGAConnection) AnalogInputEnable(Index int, Enable bool) (*RGAResponse, error) {
+func (c *RGAConnection) AnalogInputEnable(Index int, Enable bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %s%s", analogInputEnable, Index, strings.Title(fmt.Sprintf("%t", Enable)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1888,10 +1886,10 @@ func (c RGAConnection) AnalogInputEnable(Index int, Enable bool) (*RGAResponse, 
 }
 
 // AnalogInputInterval sets the interval between analog input readings in the sensor
-func (c RGAConnection) AnalogInputInterval(Index, Interval int) (*RGAResponse, error) {
+func (c *RGAConnection) AnalogInputInterval(Index, Interval int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", analogInputInterval, Index, Interval, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1900,10 +1898,10 @@ func (c RGAConnection) AnalogInputInterval(Index, Interval int) (*RGAResponse, e
 }
 
 // AnalogOutput sets a given analog output channel to the specified voltage
-func (c RGAConnection) AnalogOutput(Index, Value int) (*RGAResponse, error) {
+func (c *RGAConnection) AnalogOutput(Index, Value int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", analogOutput, Index, Value, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1912,10 +1910,10 @@ func (c RGAConnection) AnalogOutput(Index, Value int) (*RGAResponse, error) {
 }
 
 // AudioFrequency sets the frequency of the audio output if the sensor supports audio output
-func (c RGAConnection) AudioFrequency(Frequency int) (*RGAResponse, error) {
+func (c *RGAConnection) AudioFrequency(Frequency int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", audioFrequency, Frequency, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1932,10 +1930,10 @@ const (
 )
 
 // AudioMode changes the mode if the sensor supports audio output
-func (c RGAConnection) AudioMode(Mode RGAAudioMode) (*RGAResponse, error) {
+func (c *RGAConnection) AudioMode(Mode RGAAudioMode) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", audioMode, Mode, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1944,10 +1942,10 @@ func (c RGAConnection) AudioMode(Mode RGAAudioMode) (*RGAResponse, error) {
 }
 
 // CirrusCapillaryHeater turns the capillary heater on/off
-func (c RGAConnection) CirrusCapillaryHeater(HeatOn bool) (*RGAResponse, error) {
+func (c *RGAConnection) CirrusCapillaryHeater(HeatOn bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", cirrusCapillaryHeater, strings.Title(fmt.Sprintf("%t", HeatOn)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1964,10 +1962,10 @@ const (
 )
 
 // CirrusHeater sets the cirrus heater into the mode requested
-func (c RGAConnection) CirrusHeater(Mode RGACirrusHeaterMode) (*RGAResponse, error) {
+func (c *RGAConnection) CirrusHeater(Mode RGACirrusHeaterMode) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", cirrusHeater, Mode, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1976,10 +1974,10 @@ func (c RGAConnection) CirrusHeater(Mode RGACirrusHeaterMode) (*RGAResponse, err
 }
 
 // CirrusPump turns the cirrus pumps on or off
-func (c RGAConnection) CirrusPump(PumpOn bool) (*RGAResponse, error) {
+func (c *RGAConnection) CirrusPump(PumpOn bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", cirrusPump, strings.Title(fmt.Sprintf("%t", PumpOn)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -1988,10 +1986,10 @@ func (c RGAConnection) CirrusPump(PumpOn bool) (*RGAResponse, error) {
 }
 
 // CirrusValvePosition moves the cirrus rotary valve to the specified position
-func (c RGAConnection) CirrusValvePosition(ValvePos int) (*RGAResponse, error) {
+func (c *RGAConnection) CirrusValvePosition(ValvePos int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", cirrusValvePosition, ValvePos, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2000,10 +1998,10 @@ func (c RGAConnection) CirrusValvePosition(ValvePos int) (*RGAResponse, error) {
 }
 
 // DigitalMaxPB67OnTime sets the time that either pin 6 or 7 will remain set for after they are initially set
-func (c RGAConnection) DigitalMaxPB67OnTime(Time int) (*RGAResponse, error) {
+func (c *RGAConnection) DigitalMaxPB67OnTime(Time int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d%s", digitalMaxPB67OnTime, Time, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2012,10 +2010,10 @@ func (c RGAConnection) DigitalMaxPB67OnTime(Time int) (*RGAResponse, error) {
 }
 
 // DigitalOutput sets digital outputs according to the value specified
-func (c RGAConnection) DigitalOutput(Port string, Value int) (*RGAResponse, error) {
+func (c *RGAConnection) DigitalOutput(Port string, Value int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s %d%s", digitalOutput, Port, Value, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2024,10 +2022,10 @@ func (c RGAConnection) DigitalOutput(Port string, Value int) (*RGAResponse, erro
 }
 
 // PECal_DateMsg this is a message specifically for MKS Process Eye software to maintain compatability with some of the softwares calibration features
-func (c RGAConnection) PECal_DateMsg(Date time.Time, Message string) (*RGAResponse, error) {
-	fmt.Fprintf(c, "%s %d-%2d-%2d_%2d:%2d:%2d %s%s", pECal_DateMsg, DateTime.Year(), DateTime.Month(), DateTime.Day(), DateTime.Hour(), DateTime.Minute(), DateTime.Second(), Message, commandSuffix)
+func (c *RGAConnection) PECal_DateMsg(Date time.Time, Message string) (*RGAResponse, error) {
+	fmt.Fprintf(c, "%s %d-%2d-%2d_%2d:%2d:%2d %s%s", pECal_DateMsg, Date.Year(), Date.Month(), Date.Day(), Date.Hour(), Date.Minute(), Date.Second(), Message, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2037,10 +2035,10 @@ func (c RGAConnection) PECal_DateMsg(Date time.Time, Message string) (*RGARespon
 
 // PECal_Flush tThis is a message specifically for MKS Process Eye software to maintain compatability with some of the softwares
 // calibration features. It flushes the selected calibration settings to persistent storeage of the sensor.
-func (c RGAConnection) PECal_Flush() (*RGAResponse, error) {
+func (c *RGAConnection) PECal_Flush() (*RGAResponse, error) {
 	fmt.Fprintf(c, pECal_Flush+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2049,10 +2047,10 @@ func (c RGAConnection) PECal_Flush() (*RGAResponse, error) {
 }
 
 // PECal_Inlet this is a message specifically for MKS Process Eye software to maintain compatability with some of the software calibration features.
-func (c RGAConnection) PECal_Inlet(Inlet1, Inlet2, Inlet3 float64) (*RGAResponse, error) {
+func (c *RGAConnection) PECal_Inlet(Inlet1, Inlet2, Inlet3 float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %f %f %f%s", pECal_Inlet, Inlet1, Inlet2, Inlet3, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2061,10 +2059,10 @@ func (c RGAConnection) PECal_Inlet(Inlet1, Inlet2, Inlet3 float64) (*RGAResponse
 }
 
 // PECal_MassMethodContribution this is a message specifically for MKS Process Eye software to maintain compatability with some of the softwares calibration features
-func (c RGAConnection) PECal_MassMethodContribution(Mass, Method int, Contribution float64) (*RGAResponse, error) {
+func (c *RGAConnection) PECal_MassMethodContribution(Mass, Method int, Contribution float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d %f%s", pECal_MassMethodContribution, Mass, Method, Contribution, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2073,10 +2071,10 @@ func (c RGAConnection) PECal_MassMethodContribution(Mass, Method int, Contributi
 }
 
 // PECal_Pressures this is a message specifically for MKS Process Eye software to maintain compatability with some of the softwares calibration features
-func (c RGAConnection) PECal_Pressures() (*RGAResponse, error) {
+func (c *RGAConnection) PECal_Pressures() (*RGAResponse, error) {
 	fmt.Fprintf(c, pECal_Pressures+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2085,10 +2083,10 @@ func (c RGAConnection) PECal_Pressures() (*RGAResponse, error) {
 }
 
 // PECal_Select This is a message specifically for MKS Process Eye software to maintain compatability with some of the softwares calibration features
-func (c RGAConnection) PECal_Select(SourceIndex, DetectorIndex int) (*RGAResponse, error) {
+func (c *RGAConnection) PECal_Select(SourceIndex, DetectorIndex int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d%s", pECal_Select, SourceIndex, DetectorIndex, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2097,10 +2095,10 @@ func (c RGAConnection) PECal_Select(SourceIndex, DetectorIndex int) (*RGARespons
 }
 
 // RolloverScaleFactor sets a given masses peak scale factor to compensate for differences in sensitivity to the rollover effect
-func (c RGAConnection) RolloverScaleFactor(Mass int, Factor float64) (*RGAResponse, error) {
+func (c *RGAConnection) RolloverScaleFactor(Mass int, Factor float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %f%s", rolloverScaleFactor, Mass, Factor, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2109,10 +2107,10 @@ func (c RGAConnection) RolloverScaleFactor(Mass int, Factor float64) (*RGARespon
 }
 
 // RolloverVariables sets the key rollover algorithm constants
-func (c RGAConnection) RolloverVariables(M1, M2 int, B1, B2, BP1 float64) (*RGAResponse, error) {
+func (c *RGAConnection) RolloverVariables(M1, M2 int, B1, B2, BP1 float64) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d %f %f %f%s", rolloverVariables, M1, M2, B1, B2, BP1, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2121,10 +2119,10 @@ func (c RGAConnection) RolloverVariables(M1, M2 int, B1, B2, BP1 float64) (*RGAR
 }
 
 // RVCAlarm sets of clears the digital alarm output on the RVC
-func (c RGAConnection) RVCAlarm(State bool) (*RGAResponse, error) {
+func (c *RGAConnection) RVCAlarm(State bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", rVCAlarm, strings.Title(fmt.Sprintf("%t", State)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2133,10 +2131,10 @@ func (c RGAConnection) RVCAlarm(State bool) (*RGAResponse, error) {
 }
 
 // RVCCloseAllValves the sensor must have an RVC fitted for this command to be available.
-func (c RGAConnection) RVCCloseAllValves() (*RGAResponse, error) {
+func (c *RGAConnection) RVCCloseAllValves() (*RGAResponse, error) {
 	fmt.Fprintf(c, rVCCloseAllValves+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2145,10 +2143,10 @@ func (c RGAConnection) RVCCloseAllValves() (*RGAResponse, error) {
 }
 
 // RVCHeater turns the RVC heater on/off
-func (c RGAConnection) RVCHeater(HeaterOn bool) (*RGAResponse, error) {
+func (c *RGAConnection) RVCHeater(HeaterOn bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", rVCHeater, strings.Title(fmt.Sprintf("%t", HeaterOn)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2157,10 +2155,10 @@ func (c RGAConnection) RVCHeater(HeaterOn bool) (*RGAResponse, error) {
 }
 
 // RVCPump turns the pump on or off
-func (c RGAConnection) RVCPump(PumpOn bool) (*RGAResponse, error) {
+func (c *RGAConnection) RVCPump(PumpOn bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", rVCPump, strings.Title(fmt.Sprintf("%t", PumpOn)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2169,10 +2167,10 @@ func (c RGAConnection) RVCPump(PumpOn bool) (*RGAResponse, error) {
 }
 
 // RVCValveControl opens or closes a specific valve
-func (c RGAConnection) RVCValveControl(Valve int, Open bool) (*RGAResponse, error) {
+func (c *RGAConnection) RVCValveControl(Valve int, Open bool) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %s%s", rVCValveControl, Valve, strings.Title(fmt.Sprintf("%t", Open)), commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2188,10 +2186,10 @@ const (
 )
 
 // RVCValveMode switches valve mode between manual and automatic mode
-func (c RGAConnection) RVCValveMode(Mode RGARVCValveMode) (*RGAResponse, error) {
+func (c *RGAConnection) RVCValveMode(Mode RGARVCValveMode) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %s%s", rVCValveMode, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2200,10 +2198,10 @@ func (c RGAConnection) RVCValveMode(Mode RGARVCValveMode) (*RGAResponse, error) 
 }
 
 // SaveChanges saves any changes that may have been made to the tuning/calibration of the sensor
-func (c RGAConnection) SaveChanges() (*RGAResponse, error) {
+func (c *RGAConnection) SaveChanges() (*RGAResponse, error) {
 	fmt.Fprintf(c, saveChanges+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2212,10 +2210,10 @@ func (c RGAConnection) SaveChanges() (*RGAResponse, error) {
 }
 
 // StartDegas runs a degas operation
-func (c RGAConnection) StartDegas(StartPower, EndPower, RampPeriod, MaxPowerPeriod, ResettlePeriod int) (*RGAResponse, error) {
+func (c *RGAConnection) StartDegas(StartPower, EndPower, RampPeriod, MaxPowerPeriod, ResettlePeriod int) (*RGAResponse, error) {
 	fmt.Fprintf(c, "%s %d %d %d %d %d%s", startDegas, StartPower, EndPower, RampPeriod, MaxPowerPeriod, ResettlePeriod, commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
@@ -2224,10 +2222,10 @@ func (c RGAConnection) StartDegas(StartPower, EndPower, RampPeriod, MaxPowerPeri
 }
 
 // StopDegas ends a degas operation that is currently running
-func (c RGAConnection) StopDegas() (*RGAResponse, error) {
+func (c *RGAConnection) StopDegas() (*RGAResponse, error) {
 	fmt.Fprintf(c, stopDegas+commandSuffix)
 	buf := make([]byte, BUFFER)
-	_, err = c.Read(buf)
+	_, err := c.Read(buf)
 	if err != nil {
 		return nil, err
 	}
