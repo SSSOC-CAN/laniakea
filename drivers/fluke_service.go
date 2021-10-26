@@ -320,7 +320,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	for _, i := range idxs {
-		reading := s.connection.ReadMass()
+		reading := s.connection.ReadItem(s.tagMap[i].tag)
 		if i != 0 {
 			if atomic.LoadInt32(&s.Broadcasting) == 1 {
 				dataField[int64(i)]= &fmtrpc.DataField{
