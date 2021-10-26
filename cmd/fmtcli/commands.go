@@ -77,7 +77,7 @@ var stopCommand = cli.Command{
 // stopDaemon is the proxy command between fmtcli and gRPC equivalent.
 func stopDaemon(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx) //This command returns the proto generated FmtClient instance
+	client, cleanUp := getFmtClient() //This command returns the proto generated FmtClient instance
 	defer cleanUp()
 
 	_, err := client.StopDaemon(ctxc, &fmtrpc.StopRequest{})
@@ -98,7 +98,7 @@ var adminTestCommand = cli.Command{
 // Proxy command for the fmtcli
 func adminTest(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx)
+	client, cleanUp := getFmtClient()
 	defer cleanUp()
 	testResp, err := client.AdminTest(ctxc, &fmtrpc.AdminTestRequest{})
 	if err != nil {
@@ -119,7 +119,7 @@ var testCommand = cli.Command{
 // Proxy command for the fmtcli
 func test(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx)
+	client, cleanUp := getFmtClient()
 	defer cleanUp()
 	testResp, err := client.TestCommand(ctxc, &fmtrpc.TestRequest{})
 	if err != nil {
@@ -148,7 +148,7 @@ var loginCommand = cli.Command{
 // login is the wrapper around the UnlockerClient.Login method
 func login(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getUnlockerClient(ctx)
+	client, cleanUp := getUnlockerClient()
 	defer cleanUp()
 	pw, err := readPasswordFromTerminal("Input password: ")
 	if err != nil {
@@ -188,7 +188,7 @@ func startRecord(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
 		return cli.ShowCommandHelp(ctx, "start-record")
 	}
-	client, cleanUp := getDataCollectorClient(ctx)
+	client, cleanUp := getDataCollectorClient()
 	defer cleanUp()
 	var polling_interval int64
 	serviceNameStr := ctx.Args().First()
@@ -233,7 +233,7 @@ func stopRecord(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
 		return cli.ShowCommandHelp(ctx, "stop-record")
 	}
-	client, cleanUp := getDataCollectorClient(ctx)
+	client, cleanUp := getDataCollectorClient()
 	defer cleanUp()
 	serviceNameStr := ctx.Args().First()
 	var serviceName fmtrpc.RecordService
