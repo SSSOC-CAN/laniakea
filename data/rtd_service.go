@@ -112,7 +112,6 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	case fmtrpc.RecordService_RGA:
-		// Leaving this until I can figure out how to make sure FLUKE is on and pressure is <= 0.00005 Torr
 		if !s.ServiceRecStates[FlukeName] {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type]),
@@ -125,6 +124,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
 			}, resp.ErrMsg
 		}
+		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	}
 	return &fmtrpc.RecordResponse{
 		Msg: "Data recording successfully started.",
