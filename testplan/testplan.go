@@ -18,13 +18,21 @@ var (
 		time.Sleep(time.Duration(waitTime)*time.Second)
 		return nil
 	}
-	defaultStateFilePath = func() string {
-		return filepath.Join(utils.AppDataDir("fmtd", false), stateFileName)
+	defaultStateFilePath = func(testPlanName string) string {
+		return filepath.Join(utils.AppDataDir("fmtd", false), testPlaneName+"_"+stateFileName)
 	}
 )
 
 // actionFunc there will be a handful of standard actionFuncs like one to prompt a user and return when user confirms or wait a specific amount of time
 type actionFunc func(int64) error
+
+type AlertState string
+
+var (
+	ALERTSTATE_PENDING = "PENDING"
+	ALERTSTATE_COMPLETED = "COMPLETED"
+	ALERTSTATE_EXPIRED = "EXPIRED"
+)
 
 type TestPlan struct {
 	Name				string			`yaml:"plan_name"`
@@ -41,8 +49,10 @@ type TestPlan struct {
 		ActionArg		int64		`yaml:"action_arg"`
 		ActionStartTime	int64		`yaml:"action_start_time"`
 		ActionFunc		actionFunc
+		ExecutionState	AlertState
 	} `yaml:"alerts"`
 	TestStateFilePath	string
+	TestReportFilePath 	string		`yaml:"report_file_path"`
 }
 
 // loadTestPlan will load the inputted test plan file into a TestPlan struct and return it
@@ -64,15 +74,16 @@ func loadTestPlan(path_to_test_plan string) (*TestPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	testPlan.TestStateFilePath = defaultStateFilePath()
+	testPlan.TestStateFilePath = defaultStateFilePath(testPlan.Name)
 	return &testPlan, nil
 }
 
-// assignActions takes the action names and maps them to a function
+// assignActions takes the action names and maps them to a function and also gives the default PENDING State
 func assignActions(tp *TestPlan) error {
 	for _, alert := range tp.Alerts {
 		if aFunc, ok := possibleActions[alert.ActionName]; ok {
 			alert.ActionFunc = aFunc
+			alert.ExecutionState = ALERTSTATE_PENDING
 		} else {
 			return fmt.Errorf("Action provided is not recognized: %v", alert.ActionName)
 		}
