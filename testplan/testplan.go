@@ -19,7 +19,7 @@ var (
 		return nil
 	}
 	defaultStateFilePath = func(testPlanName string) string {
-		return filepath.Join(utils.AppDataDir("fmtd", false), testPlaneName+"_"+stateFileName)
+		return filepath.Join(utils.AppDataDir("fmtd", false), testPlanName+"_"+stateFileName)
 	}
 )
 
@@ -29,28 +29,29 @@ type actionFunc func(int64) error
 type AlertState string
 
 var (
-	ALERTSTATE_PENDING = "PENDING"
-	ALERTSTATE_COMPLETED = "COMPLETED"
-	ALERTSTATE_EXPIRED = "EXPIRED"
+	ALERTSTATE_PENDING AlertState = "PENDING"
+	ALERTSTATE_COMPLETED AlertState = "COMPLETED"
+	ALERTSTATE_EXPIRED AlertState = "EXPIRED"
 )
+
+type Alert struct {
+	Name			string		`yaml:"alert_name"`
+	ActionName		string		`yaml:"action"`
+	ActionArg		int64		`yaml:"action_arg"`
+	ActionStartTime	int64		`yaml:"action_start_time"`
+	ActionFunc		actionFunc
+	ExecutionState	AlertState
+}
 
 type TestPlan struct {
 	Name				string			`yaml:"plan_name"`
-	TestDuration		int64			`yaml:"test_duration"`
 	DataProviders		[]*struct{
 		Name			string		`yaml:"provider_name"`
 		Driver			string		`yaml:"driver"`
 		//dependencies	string		`yaml:"dependencies"`
 		NumDataPoints	int64		`yaml:"num_data_points"`
 	} `yaml:"data_providers"`
-	Alerts				[]*struct{
-		Name			string		`yaml:"alert_name"`
-		ActionName		string		`yaml:"action"`
-		ActionArg		int64		`yaml:"action_arg"`
-		ActionStartTime	int64		`yaml:"action_start_time"`
-		ActionFunc		actionFunc
-		ExecutionState	AlertState
-	} `yaml:"alerts"`
+	Alerts				[]*Alert 	`yaml:"alerts"`
 	TestStateFilePath	string
 	TestReportFilePath 	string		`yaml:"report_file_path"`
 }

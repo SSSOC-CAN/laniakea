@@ -252,3 +252,103 @@ func stopRecord(ctx *cli.Context) error {
 	printRespJSON(recordResponse)
 	return nil
 }
+
+var loadTestPlan = cli.Command{
+	Name:  "load-testplan",
+	Usage: "Load a test plan file.",
+	ArgsUsage: "path-to-testplan",
+	Description: `
+	This command loads a given test plan file. The absolute path must be given. Ex: C:\Users\User\Downloads\testplan.yaml`,
+	Action: loadPlan,
+}
+
+// loadPlan is the CLI wrapper for the Test Plan Executor method LoadTestPlan 
+func loadPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() != 1 {
+		return cli.ShowCommandHelp(ctx, "load-testplan")
+	}
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	testPlanFilePath := ctx.Args().First()
+	loadPlanReq := &fmtrpc.LoadTestPlanRequest{
+		PathToFile: testPlanFilePath,
+	}
+	loadPlanResponse, err := client.LoadTestPlan(ctxc, loadPlanReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(loadPlanResponse)
+	return nil
+}
+
+var startTestPlan = cli.Command{
+	Name:  "start-testplan",
+	Usage: "Start a loaded test plan file.",
+	Description: `
+	This command starts a loaded test plan file. If no test plan has been loaded, an error will be raised.`,
+	Action: startPlan,
+}
+
+// startPlan is the CLI wrapper for the Test Plan Executor method StartTestPlan 
+func startPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	startPlanResponse, err := client.StartTestPlan(ctxc, &fmtrpc.StartTestPlanRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(startPlanResponse)
+	return nil
+}
+
+var stopTestPlan = cli.Command{
+	Name:  "stop-testplan",
+	Usage: "Stops a currently executing test plan",
+	Description: `
+	This command stops a running test plan. If no test plan is being executed, an error will be raised.`,
+	Action: stopPlan,
+}
+
+// stopPlan is the CLI wrapper for the Test Plan Executor method StopTestPlan 
+func stopPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	stopPlanResponse, err := client.StopTestPlan(ctxc, &fmtrpc.StopTestPlanRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(stopPlanResponse)
+	return nil
+}
+
+var insertROIMarker = cli.Command{
+	Name:  "insert-roi",
+	Usage: "Inserts a Region of Interest marker in the test plan report",
+	ArgsUsage: "message",
+	Description: `
+	This command inserts a Region of Interest marker in the test plan report. If no test plan is currently running, an error is raised.`,
+	Action: insertROI,
+}
+
+// insertROI is the CLI wrapper for the Test Plan Executor method InsertROIMarker
+func insertROI(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() != 1 {
+		return cli.ShowCommandHelp(ctx, "insert-roi")
+	}
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	markerText := ctx.Args().First()
+	insertROIReq := &fmtrpc.InsertROIRequest{
+		Text: markerText,
+	}
+	insertROIResponse, err := client.InsertROIMarker(ctxc, insertROIReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(insertROIResponse)
+	return nil
+}

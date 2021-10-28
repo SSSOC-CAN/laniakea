@@ -341,7 +341,6 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 		return err
 	}
 	if atomic.LoadInt32(&s.Broadcasting) == 1 {
-		s.Logger.Info().Msg("Sending raw data to data buffer")
 		dataFrame := &fmtrpc.RealTimeData{
 			Source: s.name,
 			IsScanning: true,
@@ -349,7 +348,6 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 			Data: dataField,
 		}
 		s.BuffedChan <- dataFrame // may need to go into a goroutine
-		s.Logger.Info().Msg("After pushing into channel")
 	}
 	return nil
 }
