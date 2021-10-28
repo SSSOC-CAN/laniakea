@@ -40,9 +40,7 @@ message StopTestPlanResponse {
     string msg = 1;
 }
 message InsertROIRequest {
-    string name = 1;
-    string text = 2;
-    repeated string data_points = 3;
+    string text = 1;
 }
 message InsertROIResponse {
     string msg = 1;
