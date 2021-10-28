@@ -131,17 +131,8 @@
     "fmtrpcInsertROIRequest": {
       "type": "object",
       "properties": {
-        "name": {
-          "type": "string"
-        },
         "text": {
           "type": "string"
-        },
-        "data_points": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     },
