@@ -39,8 +39,17 @@ message StopTestPlanRequest {
 message StopTestPlanResponse {
     string msg = 1;
 }
+enum ReportLvl {
+    INFO = 0;
+    ERROR = 1;
+    DEBUG = 2;
+    WARN = 3;
+    FATAL = 4;
+}
 message InsertROIRequest {
     string text = 1;
+    ReportLvl report_lvl = 2;
+    string author = 3;
 }
 message InsertROIResponse {
     string msg = 1;

@@ -161,7 +161,6 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 	for {
 		select {
 		case RTD := <-s.DataProviderChan:
-			s.Logger.Info().Msg("Received data from data buffer. Sending out to server-client stream...")
 			if err := updateStream.Send(RTD); err != nil {
 				_ = atomic.AddInt32(&s.Listeners, -1)
 				if atomic.LoadInt32(&s.Listeners) == 0 {

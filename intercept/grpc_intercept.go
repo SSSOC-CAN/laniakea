@@ -241,5 +241,21 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "fmtd",
 			Action: "read",
 		}},
+		"/fmtrpc.TestPlanExecutor/LoadTestPlan": {{
+			Entity: "tpex",
+			Action: "write",
+		}},
+		"/fmtrpc.TestPlanExecutor/StartTestPlan": {{
+			Entity: "tpex",
+			Action: "write",
+		}},
+		"/fmtrpc.TestPlanExecutor/StopTestPlan": {{
+			Entity: "tpex",
+			Action: "write",
+		}},
+		"/fmtrpc.TestPlanExecutor/InsertROIMarker": {{
+			Entity: "tpex",
+			Action:	"write",
+		}},
 	}
 }

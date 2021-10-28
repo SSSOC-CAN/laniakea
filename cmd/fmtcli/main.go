@@ -24,13 +24,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"syscall"
 	"github.com/urfave/cli"
 	"github.com/SSSOC-CAN/fmtd/auth"
+	"github.com/SSSOC-CAN/fmtd/fmtd"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -46,7 +44,11 @@ func fatal(err error) {
 
 // getFmtClient returns the FmtClient instance from the fmtrpc package as well as a cleanup function
 func getFmtClient() (fmtrpc.FmtClient, func()) {
-	conn, err := auth.GetClientConn(false, defaultMacaroonTimeout)
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
 	if err != nil {
 		fatal(err)
 	}
@@ -58,7 +60,11 @@ func getFmtClient() (fmtrpc.FmtClient, func()) {
 
 //getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
 func getDataCollectorClient() (fmtrpc.DataCollectorClient, func()) {
-	conn, err := auth.GetClientConn(false, defaultMacaroonTimeout)
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
 	if err != nil {
 		fatal(err)
 	}
@@ -70,7 +76,11 @@ func getDataCollectorClient() (fmtrpc.DataCollectorClient, func()) {
 
 //getTestPlanExecutorClient returns the TestPlanExecutorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
 func getTestPlanExecutorClient() (fmtrpc.TestPlanExecutorClient, func()) {
-	conn, err := auth.GetClientConn(false, defaultMacaroonTimeout)
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
 	if err != nil {
 		fatal(err)
 	}
@@ -82,7 +92,11 @@ func getTestPlanExecutorClient() (fmtrpc.TestPlanExecutorClient, func()) {
 
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
 func getUnlockerClient() (fmtrpc.UnlockerClient, func()) {
-	conn, err := auth.GetClientConn(true, int64(0))
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, true, int64(0), config.GrpcPort)
 	if err != nil {
 		fatal(err)
 	}
@@ -104,16 +118,12 @@ func main() {
 		loginCommand,
 		startRecording,
 		stopRecording,
+		loadTestPlan,
+		startTestPlan,
+		stopTestPlan,
+		insertROIMarker,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)
 	}
-}
-
-// readPassword prompts the user for a password in the command line
-func readPassword(text string) ([]byte, error) {
-	fmt.Print(text)
-	pw, err := terminal.ReadPassword(int(syscall.Stdin))
-	fmt.Println()
-	return pw, err
 }
