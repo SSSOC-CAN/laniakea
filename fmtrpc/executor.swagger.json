@@ -133,6 +133,12 @@
       "properties": {
         "text": {
           "type": "string"
+        },
+        "report_lvl": {
+          "$ref": "#/definitions/fmtrpcReportLvl"
+        },
+        "author": {
+          "type": "string"
         }
       }
     },
@@ -151,6 +157,17 @@
           "type": "string"
         }
       }
+    },
+    "fmtrpcReportLvl": {
+      "type": "string",
+      "enum": [
+        "INFO",
+        "ERROR",
+        "DEBUG",
+        "WARN",
+        "FATAL"
+      ],
+      "default": "INFO"
     },
     "fmtrpcStartTestPlanResponse": {
       "type": "object",
