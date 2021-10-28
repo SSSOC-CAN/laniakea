@@ -301,9 +301,11 @@ func (s *TestPlanService) StopTestPlan(ctx context.Context, req *fmtrpc.StopTest
 
 // InsertROIMarker creates a new entry in the rest report
 func (s *TestPlanService) InsertROIMarker(ctx context.Context, req *fmtrpc.InsertROIRequest) (*fmtrpc.InsertROIResponse, error) {
-	// TODO:SSSOCPaulCote - Change the InsertROIRequest to only have a msg to be insert in the Test Report
-	err := writeMsgToReport(s.reportFile, rpt_INFO, "RGA data recording started")
+	err := writeMsgToReport(s.reportFile, rpt_INFO, req.Text)
 	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+		return nil, fmt.Errorf("Cannot write to report: %v", err)
 	}
+	return &fmtrpc.InsertROIResponse{
+		Msg: "Region of Interest marker inserted successfully.",
+	}, nil
 }
