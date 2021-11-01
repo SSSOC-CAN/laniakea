@@ -38,6 +38,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bolt "go.etcd.io/bbolt"
@@ -57,6 +58,10 @@ var (
 			Entity: "macaroon",
 			Action: "read",
 		},
+		{
+			Entity: "tpex",
+			Action: "read",
+		},
 	}
 	writePermissions = []bakery.Op{
 		{
@@ -69,6 +74,10 @@ var (
 		},
 		{
 			Entity: "macaroon",
+			Action: "write",
+		},
+		{
+			Entity: "tpex",
 			Action: "write",
 		},
 	}
@@ -87,7 +96,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg("Could not start server")
 		return err
 	}
-	server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
+	// server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
 	defer server.Stop()
 
 	// Get TLS config
@@ -150,6 +159,16 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	rgaService.RegisterWithRTDService(rtdService)
 	rgaService.RegisterWithFlukeService(flukeService)
 	services = append(services, rgaService)
+
+	// Instantiate Test Plan Executor and register with gRPC server but NOT start
+	testPlanExecutor := testplan.NewTestPlanService(
+		&NewSubLogger(server.logger, "TPEX").SubLogger,
+		server.cfg.TLSCertPath,
+		server.cfg.AdminMacPath,
+		server.cfg.GrpcPort,
+	)
+	testPlanExecutor.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	services = append(services, testPlanExecutor)
 
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
@@ -242,7 +261,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
 
-	// Start Fluke Service TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
+	// Starting services TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
 	for _, s := range services {
 		err = s.Start()
 		if err != nil {

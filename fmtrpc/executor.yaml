@@ -1,0 +1,14 @@
+ype: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: fmtrpc.TestPlanExecutor.LoadTestPlan
+      get: "/v1/load/testplan/{path_to_file}"
+    - selector: fmtrpc.TestPlanExecutor.StartTestPlan
+      get: "/v1/start/testplan"
+    - selector: fmtrpc.TestPlanExecutor.StopTestPlan
+      get: "/v1/stop/testplan"
+    - selector: fmtrpc.TestPlanExecutor.InsertROIMarker
+      post: "/v1/insert/roi"
+      body: "*"

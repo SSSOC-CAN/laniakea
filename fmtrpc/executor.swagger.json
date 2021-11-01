@@ -1,0 +1,216 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "executor.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "TestPlanExecutor"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/insert/roi": {
+      "post": {
+        "summary": "fmtcli: `insert-roi`\nInsertROIMarker will insert a Region of Interest (ROI) marker within the test report based on given parameters.",
+        "operationId": "TestPlanExecutor_InsertROIMarker",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcInsertROIResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcInsertROIRequest"
+            }
+          }
+        ],
+        "tags": [
+          "TestPlanExecutor"
+        ]
+      }
+    },
+    "/v1/load/testplan/{path_to_file}": {
+      "get": {
+        "summary": "fmtcli: `load-test`\nLoadTestPlan will load the inputted test plan and ensure the FMT can currently run it.",
+        "operationId": "TestPlanExecutor_LoadTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcLoadTestPlanResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "path_to_file",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "TestPlanExecutor"
+        ]
+      }
+    },
+    "/v1/start/testplan": {
+      "get": {
+        "summary": "fmtcli: `start-test`\nStartTestPlan will start the loaded test plan. This will automatically start recording from services as need be.",
+        "operationId": "TestPlanExecutor_StartTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcStartTestPlanResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "TestPlanExecutor"
+        ]
+      }
+    },
+    "/v1/stop/testplan": {
+      "get": {
+        "summary": "fmtcli: `stop-test`\nStopTestPlan will stop the currently running test plan. This will automatically stop all data recording.",
+        "operationId": "TestPlanExecutor_StopTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcStopTestPlanResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "TestPlanExecutor"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "fmtrpcInsertROIRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "report_lvl": {
+          "$ref": "#/definitions/fmtrpcReportLvl"
+        },
+        "author": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcInsertROIResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcLoadTestPlanResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcReportLvl": {
+      "type": "string",
+      "enum": [
+        "INFO",
+        "ERROR",
+        "DEBUG",
+        "WARN",
+        "FATAL"
+      ],
+      "default": "INFO"
+    },
+    "fmtrpcStartTestPlanResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcStopTestPlanResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

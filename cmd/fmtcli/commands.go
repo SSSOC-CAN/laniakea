@@ -77,7 +77,7 @@ var stopCommand = cli.Command{
 // stopDaemon is the proxy command between fmtcli and gRPC equivalent.
 func stopDaemon(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx) //This command returns the proto generated FmtClient instance
+	client, cleanUp := getFmtClient() //This command returns the proto generated FmtClient instance
 	defer cleanUp()
 
 	_, err := client.StopDaemon(ctxc, &fmtrpc.StopRequest{})
@@ -98,7 +98,7 @@ var adminTestCommand = cli.Command{
 // Proxy command for the fmtcli
 func adminTest(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx)
+	client, cleanUp := getFmtClient()
 	defer cleanUp()
 	testResp, err := client.AdminTest(ctxc, &fmtrpc.AdminTestRequest{})
 	if err != nil {
@@ -119,7 +119,7 @@ var testCommand = cli.Command{
 // Proxy command for the fmtcli
 func test(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx)
+	client, cleanUp := getFmtClient()
 	defer cleanUp()
 	testResp, err := client.TestCommand(ctxc, &fmtrpc.TestRequest{})
 	if err != nil {
@@ -148,7 +148,7 @@ var loginCommand = cli.Command{
 // login is the wrapper around the UnlockerClient.Login method
 func login(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getUnlockerClient(ctx)
+	client, cleanUp := getUnlockerClient()
 	defer cleanUp()
 	pw, err := readPasswordFromTerminal("Input password: ")
 	if err != nil {
@@ -188,7 +188,7 @@ func startRecord(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
 		return cli.ShowCommandHelp(ctx, "start-record")
 	}
-	client, cleanUp := getDataCollectorClient(ctx)
+	client, cleanUp := getDataCollectorClient()
 	defer cleanUp()
 	var polling_interval int64
 	serviceNameStr := ctx.Args().First()
@@ -233,7 +233,7 @@ func stopRecord(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
 		return cli.ShowCommandHelp(ctx, "stop-record")
 	}
-	client, cleanUp := getDataCollectorClient(ctx)
+	client, cleanUp := getDataCollectorClient()
 	defer cleanUp()
 	serviceNameStr := ctx.Args().First()
 	var serviceName fmtrpc.RecordService
@@ -250,5 +250,144 @@ func stopRecord(ctx *cli.Context) error {
 		return err
 	}
 	printRespJSON(recordResponse)
+	return nil
+}
+
+var loadTestPlan = cli.Command{
+	Name:  "load-testplan",
+	Usage: "Load a test plan file.",
+	ArgsUsage: "path-to-testplan",
+	Description: `
+	This command loads a given test plan file. The absolute path must be given. Ex: C:\Users\User\Downloads\testplan.yaml`,
+	Action: loadPlan,
+}
+
+// loadPlan is the CLI wrapper for the Test Plan Executor method LoadTestPlan 
+func loadPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() != 1 {
+		return cli.ShowCommandHelp(ctx, "load-testplan")
+	}
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	testPlanFilePath := ctx.Args().First()
+	loadPlanReq := &fmtrpc.LoadTestPlanRequest{
+		PathToFile: testPlanFilePath,
+	}
+	loadPlanResponse, err := client.LoadTestPlan(ctxc, loadPlanReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(loadPlanResponse)
+	return nil
+}
+
+var startTestPlan = cli.Command{
+	Name:  "start-testplan",
+	Usage: "Start a loaded test plan file.",
+	Description: `
+	This command starts a loaded test plan file. If no test plan has been loaded, an error will be raised.`,
+	Action: startPlan,
+}
+
+// startPlan is the CLI wrapper for the Test Plan Executor method StartTestPlan 
+func startPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	startPlanResponse, err := client.StartTestPlan(ctxc, &fmtrpc.StartTestPlanRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(startPlanResponse)
+	return nil
+}
+
+var stopTestPlan = cli.Command{
+	Name:  "stop-testplan",
+	Usage: "Stops a currently executing test plan",
+	Description: `
+	This command stops a running test plan. If no test plan is being executed, an error will be raised.`,
+	Action: stopPlan,
+}
+
+// stopPlan is the CLI wrapper for the Test Plan Executor method StopTestPlan 
+func stopPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	stopPlanResponse, err := client.StopTestPlan(ctxc, &fmtrpc.StopTestPlanRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(stopPlanResponse)
+	return nil
+}
+
+var insertROIMarker = cli.Command{
+	Name:  "insert-roi",
+	Usage: "Inserts a Region of Interest marker in the test plan report",
+	ArgsUsage: "message",
+	Description: `
+	This command inserts a Region of Interest marker in the test plan report. If no test plan is currently running, an error is raised.`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "report_lvl",
+			Usage: `If set, then the entries level of importance in the report file will be marked accordingly. Must be one of the following:
+			- INFO
+			- ERROR
+			- DEBUG
+			- WARN
+			- FATAL
+			INFO by default.`,
+		},
+		cli.StringFlag{
+			Name: "author",
+			Usage: "If set, the author of the entry will be marked accordingly. FMT by default.",
+		},
+	},
+	Action: insertROI,
+}
+
+// insertROI is the CLI wrapper for the Test Plan Executor method InsertROIMarker
+func insertROI(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() != 1 || ctx.NumFlags() > 2 {
+		return cli.ShowCommandHelp(ctx, "insert-roi")
+	}
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	markerText := ctx.Args().First()
+	reportLvl := fmtrpc.ReportLvl_INFO
+	author := "FMT"
+	if ctx.String("report_lvl") != "" {
+		switch ctx.String("report_lvl") {
+		case "INFO":
+			reportLvl = fmtrpc.ReportLvl_INFO
+		case "ERROR":
+			reportLvl = fmtrpc.ReportLvl_ERROR
+		case "DEBUG":
+			reportLvl = fmtrpc.ReportLvl_DEBUG
+		case "WARN":
+			reportLvl = fmtrpc.ReportLvl_WARN
+		case "FATAL":
+			reportLvl = fmtrpc.ReportLvl_FATAL
+		default:
+			return cli.ShowCommandHelp(ctx, "insert-roi")
+		}
+	}
+	if ctx.String("author") != "" {
+		author = ctx.String("author")
+	}
+	insertROIReq := &fmtrpc.InsertROIRequest{
+		Text: markerText,
+		ReportLvl: reportLvl,
+		Author: author,
+	}
+	insertROIResponse, err := client.InsertROIMarker(ctxc, insertROIReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(insertROIResponse)
 	return nil
 }
