@@ -341,7 +341,6 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 		return err
 	}
 	if atomic.LoadInt32(&s.Broadcasting) == 1 {
-		s.Logger.Info().Msg("Sending raw data to data buffer")
 		dataFrame := &fmtrpc.RealTimeData{
 			Source: s.name,
 			IsScanning: true,
@@ -349,7 +348,6 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 			Data: dataField,
 		}
 		s.BuffedChan <- dataFrame // may need to go into a goroutine
-		s.Logger.Info().Msg("After pushing into channel")
 	}
 	return nil
 }
@@ -371,14 +369,14 @@ func (s *FlukeService) ListenForRTDSignal() {
 			case data.BROADCASTING:
 				if msg.State {
 					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
-						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
+						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service: Already broadcasting")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: false, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
 					} else {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
 					}
 				} else {
 					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
-						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
+						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service: Already stopped broadcasting")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: true, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
 					} else {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}

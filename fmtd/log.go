@@ -50,8 +50,6 @@ func InitLogger(config *Config) (zerolog.Logger, error) {
 			return zerolog.Logger{}, err
 		}
 	}
-	
-	
 	if config.ConsoleOutput {
 		output := zerolog.NewConsoleWriter()
 		if runtime.GOOS == "windows" {
