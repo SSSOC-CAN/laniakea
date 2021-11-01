@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 	"github.com/rs/zerolog"
@@ -18,11 +19,11 @@ import (
 var (
 	testPlanExecName = "TPEX"
 	rptLvlMap = map[fmtrpc.ReportLvl]string {
-		fmtrpc.ReportLvl_INFO = "INFO"
-		fmtrpc.ReportLvl_ERROR = "ERROR"
-		fmtrpc.ReportLvl_DEBUG = "DEBUG"
-		fmtrpc.ReportLvl_WARN = "WARN"
-		fmtrpc.ReportLvl_FATAL = "FATAL"
+		fmtrpc.ReportLvl_INFO: "INFO",
+		fmtrpc.ReportLvl_ERROR: "ERROR",
+		fmtrpc.ReportLvl_DEBUG: "DEBUG",
+		fmtrpc.ReportLvl_WARN: "WARN",
+		fmtrpc.ReportLvl_FATAL: "FATAL",
 	}
 	minChamberPressure float64 = 0.00005
 	defaultAuthor = "FMT"
@@ -44,6 +45,7 @@ type TestPlanService struct {
 	tlsCertPath			string
 	adminMacPath		string
 	grpcPort			int64
+	wg					sync.WaitGroup
 }
 
 //getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
@@ -75,6 +77,7 @@ func writeMsgToReport(report *csv.Writer, lvl fmtrpc.ReportLvl, msg, author stri
 
 // NewTestPlanService instantiates the TestPlanService struct
 func NewTestPlanService(logger *zerolog.Logger, tlsCertPath, adminMacPath string, grpcPort int64) *TestPlanService {
+	var wg sync.WaitGroup
 	return &TestPlanService{
 		Logger: logger,
 		name: testPlanExecName,
@@ -82,6 +85,7 @@ func NewTestPlanService(logger *zerolog.Logger, tlsCertPath, adminMacPath string
 		tlsCertPath: tlsCertPath,
 		adminMacPath: adminMacPath,
 		grpcPort: grpcPort,
+		wg: wg,
 	}
 }
 
@@ -147,14 +151,16 @@ func (s *TestPlanService) startTestPlan() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Executing, 0, 1); !ok {
 		return fmt.Errorf("Could not start test plan execution: execution already started.")
 	}
+	// make a new cancel chan
+	s.CancelChan = make(chan struct{})
 	//Open state file and json encoder
-	state_file, err := os.OpenFile(s.testPlan.TestStateFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775) // write state to state file periodically for fault tolerance
+	state_file, err := os.OpenFile(s.testPlan.TestStateFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) // write state to state file periodically for fault tolerance
 	if err != nil {
 		return fmt.Errorf("Could not open state file: %v", err)
 	}
 	stateWriter := json.NewEncoder(state_file)
 	// Open report file and csv encoder
-	report_file, err := os.OpenFile(s.testPlan.TestReportFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775) // write key events to report file
+	report_file, err := os.OpenFile(s.testPlan.TestReportFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) // write key events to report file
 	if err != nil {
 		return fmt.Errorf("Could not open report file: %v", err)
 	}
@@ -175,15 +181,17 @@ func (s *TestPlanService) startTestPlan() error {
 	// Setup cleanup function
 	s.testPlanCleanup = func() {
 		_ = state_file.Close()
-		_ = report_file.Close()
 		s.reportWriter.Flush()
+		_ = report_file.Close()
 	}
+	s.wg.Add(1)
 	go s.executeTestPlan()
 	return nil
 }
 
 // executeTestPlan enables the server->client stream of realtime data and passes it along to a handler
 func (s *TestPlanService) executeTestPlan() {
+	defer s.wg.Done()
 	s.Logger.Info().Msg("Starting test...")
 	err := writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_INFO, "Starting test...", defaultAuthor)
 	if err != nil {
@@ -204,6 +212,7 @@ func (s *TestPlanService) executeTestPlan() {
 		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
 	}
 	dataChan := make(chan *fmtrpc.RealTimeData)
+	defer close(dataChan)
 	go func () {
 		dataStreamReq := &fmtrpc.SubscribeDataRequest{}
 		stream, err := s.client.SubscribeDataStream(ctx, dataStreamReq)
@@ -228,14 +237,14 @@ func (s *TestPlanService) executeTestPlan() {
 	var rtd *fmtrpc.RealTimeData
 	var rgaRecording bool
 	var readyAlerts []*Alert
-	startTestTime := <-ticker.C // wait for the first tick to synchronize
+	ticks := 0
 	for {
 		select {
-		case t := <-ticker.C:
+		case <-ticker.C:
 			// First perform any ready Alerts 
 			for _, alert := range readyAlerts {
 				s.Logger.Info().Msg(fmt.Sprintf("Executing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg))
-				err := writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_INFO fmt.Sprintf("Executing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg), defaultAuthor)
+				err := writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_INFO, fmt.Sprintf("Executing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg), defaultAuthor)
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
 				}
@@ -250,10 +259,10 @@ func (s *TestPlanService) executeTestPlan() {
 			readyAlerts = nil
 			// Second let's check if there are any alerts we need to process in the next tick
 			for _, alert := range s.testPlan.Alerts {
-				if t.Equal(startTestTime.Add(time.Duration(alert.ActionStartTime-int64(1))*time.Second)) && alert.ExecutionState == ALERTSTATE_PENDING {
+				if ticks == alert.ActionStartTime-1 && alert.ExecutionState == ALERTSTATE_PENDING {
 					s.Logger.Info().Msg(fmt.Sprintf("Preparing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg))
 					readyAlerts = append(readyAlerts, alert)
-				} else if t.After(startTestTime.Add(time.Duration(alert.ActionStartTime)*time.Second)) && alert.ExecutionState == ALERTSTATE_PENDING {
+				} else if ticks > alert.ActionStartTime && alert.ExecutionState == ALERTSTATE_PENDING {
 					s.Logger.Info().Msg(fmt.Sprintf("%s alert expired.", alert.Name))
 					err := writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_ERROR, fmt.Sprintf("%s alert expired", alert.Name), defaultAuthor)
 					if err != nil {
@@ -262,8 +271,6 @@ func (s *TestPlanService) executeTestPlan() {
 					alert.ExecutionState = ALERTSTATE_EXPIRED
 				}
 			}
-
-			
 			// Next if rga recording hasn't started and pressure is below 0.00005 Torr, then start recording
 			// TODO:SSSOCPaulCote - make this generic. Iteratre through service dependencies and start based on provided conditions
 			if !rgaRecording && rtd != nil {
@@ -283,18 +290,39 @@ func (s *TestPlanService) executeTestPlan() {
 					rgaRecording = true
 				}
 			}
+			ticks++
 		case rtd = <-dataChan:
 		case <- s.CancelChan:
+			s.Logger.Debug().Msg("Shut 'er down")
+			// stop rga recording if recording
+			if rgaRecording {
+				stopRgaReq := &fmtrpc.StopRecRequest{
+					Type: fmtrpc.RecordService_RGA,
+				}
+				_, err := s.client.StopRecording(ctx, stopRgaReq)
+				if err != nil {
+					s.Logger.Error().Msg(fmt.Sprintf("Cannot stop RGA data recording: %v", err))
+				} else {
+					rgaRecording = false
+				}
+			}
+			stopFlukeReq := &fmtrpc.StopRecRequest{
+				Type: fmtrpc.RecordService_FLUKE,
+			}
+			_, err := s.client.StopRecording(ctx, stopFlukeReq)
+			if err != nil {
+				s.Logger.Error().Msg(fmt.Sprintf("Cannot stop Fluke data recording: %v", err))
+			}
 			s.clientConn.Close()
 			ticker.Stop()
-			break
+			return
 		}
 	}
 }
 
 // StartTestPlan is called by gRPC client and CLI to begin the execution of the loaded test plan
 func (s *TestPlanService) StartTestPlan(ctx context.Context, req *fmtrpc.StartTestPlanRequest) (*fmtrpc.StartTestPlanResponse, error) {
-	s.Logger.Info().Msg(fmt.Sprintf("Starting execution of test plan: %s", s.testPlan.Name))
+	s.Logger.Info().Msg("Starting execution of a test plan")
 	err := s.startTestPlan()
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Could not start execution of test plan: %v", err))
@@ -309,7 +337,7 @@ func (s *TestPlanService) StartTestPlan(ctx context.Context, req *fmtrpc.StartTe
 // stopTestPlan will end the execution of the test plan
 func (s *TestPlanService) stopTestPlan() error {
 	s.Logger.Info().Msg("Stopping test...")
-	err = writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_INFO, "Stopping test...", defaultAuthor)
+	err := writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_INFO, "Stopping test...", defaultAuthor)
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
 	}
@@ -322,6 +350,7 @@ func (s *TestPlanService) stopTestPlan() error {
 		return fmt.Errorf("Could not stop test plan execution: execution already stopped.")
 	}
 	close(s.CancelChan)
+	s.wg.Wait()
 	err = writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_INFO, "Test stopped.", defaultAuthor)
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))

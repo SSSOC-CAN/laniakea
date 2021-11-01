@@ -330,20 +330,59 @@ var insertROIMarker = cli.Command{
 	ArgsUsage: "message",
 	Description: `
 	This command inserts a Region of Interest marker in the test plan report. If no test plan is currently running, an error is raised.`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "report_lvl",
+			Usage: `If set, then the entries level of importance in the report file will be marked accordingly. Must be one of the following:
+			- INFO
+			- ERROR
+			- DEBUG
+			- WARN
+			- FATAL
+			INFO by default.`,
+		},
+		cli.StringFlag{
+			Name: "author",
+			Usage: "If set, the author of the entry will be marked accordingly. FMT by default.",
+		},
+	},
 	Action: insertROI,
 }
 
 // insertROI is the CLI wrapper for the Test Plan Executor method InsertROIMarker
 func insertROI(ctx *cli.Context) error {
 	ctxc := getContext()
-	if ctx.NArg() != 1 {
+	if ctx.NArg() != 1 || ctx.NumFlags() > 2 {
 		return cli.ShowCommandHelp(ctx, "insert-roi")
 	}
 	client, cleanUp := getTestPlanExecutorClient()
 	defer cleanUp()
 	markerText := ctx.Args().First()
+	reportLvl := fmtrpc.ReportLvl_INFO
+	author := "FMT"
+	if ctx.String("report_lvl") != "" {
+		switch ctx.String("report_lvl") {
+		case "INFO":
+			reportLvl = fmtrpc.ReportLvl_INFO
+		case "ERROR":
+			reportLvl = fmtrpc.ReportLvl_ERROR
+		case "DEBUG":
+			reportLvl = fmtrpc.ReportLvl_DEBUG
+		case "WARN":
+			reportLvl = fmtrpc.ReportLvl_WARN
+		case "FATAL":
+			reportLvl = fmtrpc.ReportLvl_FATAL
+		default:
+			return cli.ShowCommandHelp(ctx, "insert-roi")
+		}
+	}
+	if ctx.String("author") != "" {
+		author = ctx.String("author")
+	}
 	insertROIReq := &fmtrpc.InsertROIRequest{
 		Text: markerText,
+		ReportLvl: reportLvl,
+		Author: author,
 	}
 	insertROIResponse, err := client.InsertROIMarker(ctxc, insertROIReq)
 	if err != nil {
