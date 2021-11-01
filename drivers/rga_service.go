@@ -245,14 +245,14 @@ func (s *RGAService) ListenForRTDSignal() {
 			case data.BROADCASTING:
 				if msg.State {
 					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
-						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service.")
+						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service: already broadcasting")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: false, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
 					} else {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
 					}
 				} else {
 					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
-						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service.")
+						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service: already stopped broadcasting")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: true, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
 					} else {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}

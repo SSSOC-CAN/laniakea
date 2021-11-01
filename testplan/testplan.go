@@ -38,13 +38,14 @@ type Alert struct {
 	Name			string		`yaml:"alert_name"`
 	ActionName		string		`yaml:"action"`
 	ActionArg		int64		`yaml:"action_arg"`
-	ActionStartTime	int64		`yaml:"action_start_time"`
+	ActionStartTime	int			`yaml:"action_start_time"`
 	ActionFunc		actionFunc
 	ExecutionState	AlertState
 }
 
 type TestPlan struct {
 	Name				string			`yaml:"plan_name"`
+	TestDuration		int64			`yaml:"test_duration"`
 	DataProviders		[]*struct{
 		Name			string		`yaml:"provider_name"`
 		Driver			string		`yaml:"driver"`

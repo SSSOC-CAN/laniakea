@@ -96,7 +96,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg("Could not start server")
 		return err
 	}
-	server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
+	// server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
 	defer server.Stop()
 
 	// Get TLS config
