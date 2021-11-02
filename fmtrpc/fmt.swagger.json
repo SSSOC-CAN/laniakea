@@ -39,6 +39,39 @@
         ]
       }
     },
+    "/v1/bake/macaroon": {
+      "post": {
+        "summary": "fmtcli: `bake-macaroon`\nBakeMacaroon will bake a new macaroon based on input permissions and constraints.",
+        "operationId": "Fmt_BakeMacaroon",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcBakeMacaroonResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcBakeMacaroonRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
     "/v1/stop": {
       "post": {
         "summary": "fmtcli: `stop`\nStopDaemon will send a shutdown request to the interrupt handler, triggering\na graceful shutdown of the daemon.",
@@ -105,6 +138,43 @@
         }
       }
     },
+    "fmtrpcBakeMacaroonRequest": {
+      "type": "object",
+      "properties": {
+        "timeout": {
+          "type": "string",
+          "format": "int64"
+        },
+        "timeout_type": {
+          "$ref": "#/definitions/fmtrpcTimeoutType"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/fmtrpcMacaroonPermission"
+          }
+        }
+      }
+    },
+    "fmtrpcBakeMacaroonResponse": {
+      "type": "object",
+      "properties": {
+        "macaroon": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcMacaroonPermission": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        }
+      }
+    },
     "fmtrpcStopRequest": {
       "type": "object"
     },
@@ -118,6 +188,16 @@
           "type": "string"
         }
       }
+    },
+    "fmtrpcTimeoutType": {
+      "type": "string",
+      "enum": [
+        "SECOND",
+        "MINUTE",
+        "HOUR",
+        "DAY"
+      ],
+      "default": "SECOND"
     },
     "protobufAny": {
       "type": "object",
