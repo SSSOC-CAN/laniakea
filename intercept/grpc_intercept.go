@@ -257,5 +257,9 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "tpex",
 			Action:	"write",
 		}},
+		"/fmtrpc.Fmt/BakeMacaroon": {{
+			Entity: "macaroon",
+			Action: "write",
+		}},
 	}
 }
