@@ -23,12 +23,16 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -389,5 +393,107 @@ func insertROI(ctx *cli.Context) error {
 		return err
 	}
 	printRespJSON(insertROIResponse)
+	return nil
+}
+
+var bakeMacaroon = cli.Command{
+	Name:  "bake-macaroon",
+	Usage: "Bakes a new macaroon",
+	ArgsUsage: "permissions",
+	Description: `
+	This command bakes a new macaroon based on the provided permissions and optional constraints. Permissions must be of the following format: entity:action
+	For specific commands, the format is uri:<command_uri> example: fmtd:write, uri:/fmtrpc.Fmt/Test this would generate a macaroon with write permissions for any commands associated to the fmtd entity as well as the fmtrpc.Fmt.Test command
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "timeout_unit",
+			Usage: `If set, then the the timeout given will be in the specified units. Possible units are:
+			- day
+			- hour
+			- minute
+			- second
+			second is the default.`,
+		},
+		cli.Int64Flag{
+			Name: "timeout",
+			Usage: "If set, the macaroon will timeout after the given number of units. The default unit is seconds. The default timeout is 24 hours",
+		},
+		cli.StringFlag{
+			Name: "save_to",
+			Usage: "If set, the macaroon will be saved as a .macaroon file at the specified path. The hex encoded macaroon is printed to the console by default",
+		},
+	},
+	Action: bakeMac,
+}
+
+func bakeMac(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() < 1 || ctx.NumFlags() > 3 {
+		return cli.ShowCommandHelp(ctx, "bake-macaroon")
+	}
+	client, cleanUp := getFmtClient()
+	defer cleanUp()
+	permissions := ctx.Args()
+	timeoutType := fmtrpc.TimeoutType_SECOND
+	timeout := int64(60*60*24)
+	if ctx.Int64("timeout") != 0 {
+		timeout = ctx.Int64("author")
+	}
+	if ttype := ctx.String("timeout_type"); ttype != "" {
+		switch ttype {
+		case "day":
+			timeoutType = fmtrpc.TimeoutType_DAY
+		case "hour":
+			timeoutType = fmtrpc.TimeoutType_HOUR
+		case "minute":
+			timeoutType = fmtrpc.TimeoutType_MINUTE
+		}
+	}
+	var parsedPerms []*fmtrpc.MacaroonPermission
+	for _, perm := range permissions {
+		tuple := strings.Split(perm, ":")
+		if len(tuple) != 2 {
+			return fmt.Errorf("Unable to parse permission tuple: %s", perm)
+		}
+		entity, action := tuple[0], tuple[1]
+		if entity == "" {
+			return fmt.Errorf("Invalid permission %s: entity cannot be empty", perm)
+		}
+		if action == "" {
+			return fmt.Errorf("Invalid permission %s: action cannot be empty", perm)
+		}
+		parsedPerms = append(parsedPerms, &fmtrpc.MacaroonPermission{
+			Entity: entity,
+			Action: action,
+		})
+	}
+	bakeMacReq := &fmtrpc.BakeMacaroonRequest{
+		Timeout: timeout,
+		TimeoutType: timeoutType,
+		Permissions: parsedPerms,
+	}
+	bakeMacResponse, err := client.BakeMacaroon(ctxc, bakeMacReq)
+	if err != nil {
+		return err
+	}
+	if path := ctx.String("save_to"); path != "" {
+		macBytes, err := hex.DecodeString(bakeMacResponse.Macaroon)
+		if err != nil {
+			return err
+		}
+		if !utils.FileExists(path) {
+			file, err := os.Create(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+		}
+		err = ioutil.WriteFile(path, macBytes, 0755)
+		if err != nil {
+			_ = os.Remove(path)
+			return err
+		}
+	} 
+	printRespJSON(bakeMacResponse)
 	return nil
 }

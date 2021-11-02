@@ -40,6 +40,10 @@ service Fmt {
     TestCommand will send a string response regardless if a macaroon is provided or not.
     */
     rpc TestCommand (TestRequest) returns (TestResponse);
+    /* fmtcli: `bake-macaroon`
+    BakeMacaroon will bake a new macaroon based on input permissions and constraints.
+    */
+    rpc BakeMacaroon (BakeMacaroonRequest) returns (BakeMacaroonResponse);
 }
 
 message StopRequest {
@@ -55,4 +59,22 @@ message TestRequest {
 }
 message TestResponse {
     string msg = 1;
+}
+message MacaroonPermission {
+    string entity = 1;
+    string action = 2;
+}
+enum TimeoutType {
+    SECOND = 0;
+    MINUTE = 1;
+    HOUR = 2;
+    DAY = 3;
+}
+message BakeMacaroonRequest {
+    int64 timeout = 1;
+    TimeoutType timeout_type = 2;
+    repeated MacaroonPermission permissions = 3;
+}
+message BakeMacaroonResponse {
+    string macaroon = 1;
 }
