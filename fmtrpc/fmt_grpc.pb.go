@@ -22,8 +22,15 @@ type FmtClient interface {
 	//StopDaemon will send a shutdown request to the interrupt handler, triggering
 	//a graceful shutdown of the daemon.
 	StopDaemon(ctx context.Context, in *StopRequest, opts ...grpc.CallOption) (*StopResponse, error)
+	// fmtcli: `admin-test`
+	//AdminTest will send a string response if the proper macaroon is provided.
 	AdminTest(ctx context.Context, in *AdminTestRequest, opts ...grpc.CallOption) (*AdminTestResponse, error)
+	// fmtcli: `test`
+	//TestCommand will send a string response regardless if a macaroon is provided or not.
 	TestCommand(ctx context.Context, in *TestRequest, opts ...grpc.CallOption) (*TestResponse, error)
+	// fmtcli: `bake-macaroon`
+	//BakeMacaroon will bake a new macaroon based on input permissions and constraints.
+	BakeMacaroon(ctx context.Context, in *BakeMacaroonRequest, opts ...grpc.CallOption) (*BakeMacaroonResponse, error)
 }
 
 type fmtClient struct {
@@ -61,6 +68,15 @@ func (c *fmtClient) TestCommand(ctx context.Context, in *TestRequest, opts ...gr
 	return out, nil
 }
 
+func (c *fmtClient) BakeMacaroon(ctx context.Context, in *BakeMacaroonRequest, opts ...grpc.CallOption) (*BakeMacaroonResponse, error) {
+	out := new(BakeMacaroonResponse)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/BakeMacaroon", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FmtServer is the server API for Fmt service.
 // All implementations must embed UnimplementedFmtServer
 // for forward compatibility
@@ -69,8 +85,15 @@ type FmtServer interface {
 	//StopDaemon will send a shutdown request to the interrupt handler, triggering
 	//a graceful shutdown of the daemon.
 	StopDaemon(context.Context, *StopRequest) (*StopResponse, error)
+	// fmtcli: `admin-test`
+	//AdminTest will send a string response if the proper macaroon is provided.
 	AdminTest(context.Context, *AdminTestRequest) (*AdminTestResponse, error)
+	// fmtcli: `test`
+	//TestCommand will send a string response regardless if a macaroon is provided or not.
 	TestCommand(context.Context, *TestRequest) (*TestResponse, error)
+	// fmtcli: `bake-macaroon`
+	//BakeMacaroon will bake a new macaroon based on input permissions and constraints.
+	BakeMacaroon(context.Context, *BakeMacaroonRequest) (*BakeMacaroonResponse, error)
 	mustEmbedUnimplementedFmtServer()
 }
 
@@ -86,6 +109,9 @@ func (UnimplementedFmtServer) AdminTest(context.Context, *AdminTestRequest) (*Ad
 }
 func (UnimplementedFmtServer) TestCommand(context.Context, *TestRequest) (*TestResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TestCommand not implemented")
+}
+func (UnimplementedFmtServer) BakeMacaroon(context.Context, *BakeMacaroonRequest) (*BakeMacaroonResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BakeMacaroon not implemented")
 }
 func (UnimplementedFmtServer) mustEmbedUnimplementedFmtServer() {}
 
@@ -154,6 +180,24 @@ func _Fmt_TestCommand_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Fmt_BakeMacaroon_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BakeMacaroonRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).BakeMacaroon(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/BakeMacaroon",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).BakeMacaroon(ctx, req.(*BakeMacaroonRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Fmt_ServiceDesc is the grpc.ServiceDesc for Fmt service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -172,6 +216,10 @@ var Fmt_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TestCommand",
 			Handler:    _Fmt_TestCommand_Handler,
+		},
+		{
+			MethodName: "BakeMacaroon",
+			Handler:    _Fmt_BakeMacaroon_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

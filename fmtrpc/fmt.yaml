@@ -10,3 +10,6 @@ http:
       get: "/v1/admin/test"
     - selector: fmtrpc.Fmt.TestCommand
       get: "/v1/test"
+    - selector: fmtrpc.Fmt.BakeMacaroon
+      post: "/v1/bake/macaroon"
+      body: "*"
