@@ -109,7 +109,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("TLS configuration successfully loaded.")
 	defer cleanUp()
 
-	// Starting RPC server
+	// Instantiating RPC server
 	rpcServer, err := NewRpcServer(interceptor, server.cfg, server.logger)
 	if err != nil {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize RPC server: %v", err))
@@ -260,6 +260,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
+	rpcServer.AddMacaroonService(macaroonService)
 
 	// Starting services TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
 	for _, s := range services {

@@ -122,6 +122,7 @@ func main() {
 		startTestPlan,
 		stopTestPlan,
 		insertROIMarker,
+		bakeMacaroon,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)
