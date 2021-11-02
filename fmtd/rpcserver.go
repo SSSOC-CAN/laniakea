@@ -23,6 +23,7 @@ package fmtd
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strconv"
@@ -31,22 +32,30 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"gopkg.in/macaroon-bakery.v2/bakery"
+)
+
+var (
+	validActions = []string{"read", "write"}
+	validEntities = []string{"fmtd", "macaroon", "tpex", macaroons.PermissionEntityCustomURI}
 )
 
 // RpcServer is a child of the fmtrpc.UnimplementedFmtServer struct. Meant to host all related attributes to the rpcserver
 type RpcServer struct {
-	started int32
-	shutdown int32
+	started 						int32
+	shutdown 						int32
 	fmtrpc.UnimplementedFmtServer
-	interceptor *intercept.Interceptor
-	GrpcServer	*grpc.Server
-	cfg *Config
-	quit chan struct{}
-	SubLogger *zerolog.Logger
-	unlockService *unlocker.UnlockerService
+	interceptor 					*intercept.Interceptor
+	GrpcServer						*grpc.Server
+	cfg 							*Config
+	quit 							chan struct{}
+	SubLogger 						*zerolog.Logger
+	unlockService 					*unlocker.UnlockerService
+	macSvc							*macaroons.Service
 }
 
 // NewRpcServer creates an instance of the GrpcServer struct
@@ -74,7 +83,8 @@ func (s *RpcServer) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	return nil
 }
 
-func( s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+// RegisterWithRestProxy registers the RPC Server with the REST proxy
+func(s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
 	err := fmtrpc.RegisterFmtHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
@@ -82,6 +92,11 @@ func( s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeM
 		return err
 	}
 	return nil
+}
+
+// func AddMacaroonService adds the macaroon service to the attributes of the RpcServer
+func (s *RpcServer) AddMacaroonService(svc *macaroons.Service) {
+	s.macSvc = svc
 }
 
 // Start starts the RpcServer subserver
@@ -134,4 +149,64 @@ func (s *RpcServer) AdminTest(_ context.Context, _*fmtrpc.AdminTestRequest) (*fm
 // TestCommand will return a string for any macaroon
 func (s *RpcServer) TestCommand(_ context.Context, _*fmtrpc.TestRequest) (*fmtrpc.TestResponse, error) {
 	return &fmtrpc.TestResponse{Msg: "This is a regular test"}, nil
+}
+
+// BakeMacaroon bakes a new macaroon based on input permissions and constraints
+func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRequest) (*fmtrpc.BakeMacaroonResponse, error) {
+	if s.macSvc == nil {
+		return nil, fmt.Errorf("Could not bake macaroon: macaroon service not initialized")
+	}
+	if len(req.Permissions) == 0 {
+		return nil, fmt.Errorf("Could not bake macaroon: empty permissions list")
+	}
+	perms := make([]bakery.Op, len(req.Permissions))
+	for i, op := range req.Permissions {
+		if !stringInSlice(op.Entity, validEntities) {
+			return nil, fmt.Errorf("Could not bake macaroon: invalid permission entity")
+		}
+		if op.Entity == macaroons.PermissionEntityCustomURI {
+			allPermissions := intercept.MainGrpcServerPermissions()
+			if _, ok := allPermissions[op.Action]; !ok {
+				return nil, fmt.Errorf("Could not bake macaroon: %s is not a valid action", op.Action)
+			}
+		} else if !stringInSlice(op.Action, validActions) {
+			return nil, fmt.Errorf("Could not bake macaroon: invalid permission action")
+		}
+		perms[i] = bakery.Op{
+			Entity: op.Entity,
+			Action: op.Action,
+		}
+	}
+	noTimeout := true
+	var timeoutSeconds int64
+	if req.Timeout != 0 {
+		noTimeout = false
+		switch req.TimeoutType {
+		case fmtrpc.TimeoutType_SECOND:
+			timeoutSeconds = req.Timeout
+		case fmtrpc.TimeoutType_MINUTE:
+			timeoutSeconds = req.Timeout * int64(60)
+		case fmtrpc.TimeoutType_HOUR:
+			timeoutSeconds = req.Timeout * int64(60) * int64(60)
+		case fmtrpc.TimeoutType_DAY:
+			timeoutSeconds = req.Timeout * int64(60) * int64(60) * int64(24)
+		}
+	}
+	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, noTimeout, timeoutSeconds)
+	if err != nil {
+		return nil, fmt.Errorf("Could not bake macaroon: %v", err)
+	}
+	return &fmtrpc.BakeMacaroonResponse{
+		Macaroon: hex.EncodeToString(macBytes),
+	}, nil
+}
+
+// stringInSlice checks if a string "a" is in the slice 
+func stringInSlice(a string, slice []string) bool {
+	for _, b := range slice {
+		if b == a {
+			return true
+		}
+	}
+	return false
 }
