@@ -41,15 +41,17 @@ type RTDService struct {
 	DataProviderChan	chan *fmtrpc.RealTimeData
 	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
+	ServiceBroadStates	map[string]bool
 	name				string
 }
 
 //NewDataBuffer returns an instantiated DataBuffer struct
 func NewRTDService(log *zerolog.Logger) *RTDService {
 	return &RTDService{
-		DataProviderChan: make(chan *fmtrpc.RealTimeData),
-		ServiceRecStates: make(map[string]bool),
-		StateChangeChans: make(map[string]chan *StateChangeMsg),
+		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
+		ServiceRecStates: 	make(map[string]bool),
+		ServiceBroadStates: make(map[string]bool),
+		StateChangeChans: 	make(map[string]chan *StateChangeMsg),
 		Logger: log,
 		name: RtdName,
 	}
@@ -96,6 +98,9 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 	}
 	if _, ok := s.ServiceRecStates[serviceName]; !ok {
 		s.ServiceRecStates[serviceName] = false
+	}
+	if _, ok := s.ServiceBroadStates[serviceName]; !ok {
+		s.ServiceBroadStates[serviceName] = false
 	}
 }
 
@@ -150,12 +155,15 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
 	_ = atomic.AddInt32(&s.Listeners, 1)
-	for _, channel := range s.StateChangeChans {
-		channel <- &StateChangeMsg{Type: BROADCASTING, State: true, ErrMsg: nil}
-		resp := <- channel
-		if resp.ErrMsg != nil {
-			s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-			return resp.ErrMsg
+	for name, channel := range s.StateChangeChans {
+		if !s.ServiceBroadStates[name] {
+			channel <- &StateChangeMsg{Type: BROADCASTING, State: true, ErrMsg: nil}
+			resp := <- channel
+			if resp.ErrMsg != nil {
+				s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+				return resp.ErrMsg
+			}
+			s.ServiceBroadStates[name] = true
 		}
 	}
 	for {
@@ -164,13 +172,16 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 			if err := updateStream.Send(RTD); err != nil {
 				_ = atomic.AddInt32(&s.Listeners, -1)
 				if atomic.LoadInt32(&s.Listeners) == 0 {
-					for _, channel := range s.StateChangeChans {
-						channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
-						resp := <- channel
-						if resp.ErrMsg != nil {
-							s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-							return resp.ErrMsg
+					for name, channel := range s.StateChangeChans {
+						if s.ServiceBroadStates[name] {
+							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
+							resp := <- channel
+							if resp.ErrMsg != nil {
+								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+								return resp.ErrMsg
+							}
 						}
+						s.ServiceBroadStates[name] = false
 					}
 				}
 				return err
@@ -178,13 +189,16 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 		case <-updateStream.Context().Done():
 			_ = atomic.AddInt32(&s.Listeners, -1)
 			if atomic.LoadInt32(&s.Listeners) == 0 {
-				for _, channel := range s.StateChangeChans {
-					channel <- &StateChangeMsg{Type: BROADCASTING, State:false, ErrMsg: nil}
-					resp := <- channel
-					if resp.ErrMsg != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-						return resp.ErrMsg
+				for name, channel := range s.StateChangeChans {
+					if s.ServiceBroadStates[name] {
+						channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
+						resp := <- channel
+						if resp.ErrMsg != nil {
+							s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+							return resp.ErrMsg
+						}
 					}
+					s.ServiceBroadStates[name] = false
 				}
 			}
 			return updateStream.Context().Err()
