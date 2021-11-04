@@ -86,7 +86,7 @@ func GenCertPair(org, certFile, keyFile string, certValidity time.Duration) erro
 		dnsNames = append(dnsNames, "localhost")
 	}
 	dnsNames = append(dnsNames, "unix", "unixpacket")
-	ipAddresses := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	ipAddresses := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1"), net.ParseIP("174.113.21.199"), net.ParseIP("192.168.0.202")}
 	addIP := func(ipAddr net.IP) {
 		for _, ip := range ipAddresses {
 			if ip.Equal(ipAddr) {

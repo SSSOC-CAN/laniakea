@@ -122,7 +122,7 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not add Barchart: %v", err)
 	}
-	for i := 1; i < 6; i++ {
+	for i := 1; i < 6; i++ { // TODO:SSSOCPaulCote - Change this for test next week
 		_, err = s.connection.MeasurementAddMass(i)
 		if err != nil {
 			return fmt.Errorf("Could not add measurement mass: %v", err)
