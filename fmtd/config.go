@@ -19,6 +19,7 @@ type Config struct {
 	GrpcPort		int64		`yaml:"GrpcPort"`
 	RestPort		int64		`yaml:"RestPort"`
 	DataOutputDir	string		`yaml:"DataOutputDir"`
+	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr"` // optional parameter
 	MacaroonDBPath	string
 	TLSCertPath		string
 	TLSKeyPath		string
