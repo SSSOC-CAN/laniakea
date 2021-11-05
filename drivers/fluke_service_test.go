@@ -31,7 +31,7 @@ func TestNewFlukeService(t *testing.T) {
 		t.Errorf("Could not instantiate FlukeService struct: %v", err)
 	}
 	FlukeServiceStart(t, flukeService)
-	Recording(t, flukeService)
+	FlukeRecording(t, flukeService)
 }
 
 // FlukeServiceStart tests wether we can successfully start the fluke service
@@ -43,7 +43,7 @@ func FlukeServiceStart(t *testing.T, s *FlukeService) {
 }
 
 // Recording tests whether a recording can be successfully started and stopped
-func Recording(t *testing.T, s *FlukeService) {
+func FlukeRecording(t *testing.T, s *FlukeService) {
 	err := s.startRecording(DefaultPollingInterval)
 	if err != nil {
 		t.Errorf("Could not start recording: %v", err)

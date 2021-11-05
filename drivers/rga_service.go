@@ -154,7 +154,7 @@ func (s *RGAService) startRecording(pol_int int64) error {
 		return err
 	}
 	for massPos, _ := range resp.Fields {
-		headerData = append(headerData, fmt.Sprintf("Mass %d", massPos))
+		headerData = append(headerData, fmt.Sprintf("Mass %s", massPos))
 	}
 	err = writer.Write(headerData)
 	if err != nil {
@@ -198,7 +198,7 @@ func (s *RGAService) record(writer *csv.Writer) error {
 	for massPos, value := range resp.Fields {
 		if atomic.LoadInt32(&s.Broadcasting) == 1 {
 			dataField[int64(i)]= &fmtrpc.DataField{
-				Name: fmt.Sprintf("Mass %d", massPos),
+				Name: fmt.Sprintf("Mass %s", massPos),
 				Value: value.Value.(float64),
 			}
 		}
