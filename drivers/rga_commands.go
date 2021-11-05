@@ -889,6 +889,7 @@ func (c *RGAConnection) InitMsg() error {
 	return nil
 }
 
+// ReadMass reads an asychronous response from the RGA
 func (c *RGAConnection) ReadMass() (*RGAResponse, error) {
 	buf := make([]byte, BIG_BUFFER)
 	_, err := c.Read(buf)
@@ -2187,7 +2188,7 @@ const (
 
 // RVCValveMode switches valve mode between manual and automatic mode
 func (c *RGAConnection) RVCValveMode(Mode RGARVCValveMode) (*RGAResponse, error) {
-	fmt.Fprintf(c, "%s %s%s", rVCValveMode, commandSuffix)
+	fmt.Fprintf(c, "%s %s%s", rVCValveMode, Mode, commandSuffix)
 	buf := make([]byte, BUFFER)
 	_, err := c.Read(buf)
 	if err != nil {
