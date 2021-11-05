@@ -101,7 +101,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Get TLS config
 	server.logger.Info().Msg("Loading TLS configuration...")
-	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath)
+	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath, server.cfg.ExtraIPAddr)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Could not load TLS configuration: %v", err))
 		return err
