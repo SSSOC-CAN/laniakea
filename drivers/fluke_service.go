@@ -184,6 +184,7 @@ type FlukeService struct {
 	tagMap     				map[int]Tag
 	connection 				opc.Connection
 	QuitChan   				chan struct{}
+	CancelChan				chan struct{}
 	outputDir  				string
 	BuffedChan				chan *fmtrpc.RealTimeData
 	StateChangeChan			chan *data.StateChangeMsg
@@ -206,6 +207,7 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, e
 		tags:      tags,
 		tagMap:    defaultTagMap(tags),
 		QuitChan:  make(chan struct{}),
+		CancelChan: make(chan struct{}),
 		PressureChan: make(chan float64),
 		outputDir: outputDir,
 		name: 	   data.FlukeName,
@@ -239,6 +241,7 @@ func (s *FlukeService) Start() error {
 func (s *FlukeService) Stop() error {
 	s.Logger.Info().Msg("Stopping Fluke Service...")
 	atomic.StoreInt32(&s.Stopping, 1)
+	close(s.CancelChan)
 	close(s.QuitChan)
 	// Stop scanning
 	err := s.connection.Write(s.tagMap[0].tag, false)
@@ -301,6 +304,12 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
 				}
+			case <-s.CancelChan:
+				ticker.Stop()
+				file.Close()
+				writer.Flush()
+				s.Logger.Info().Msg("Data recording stopped.")
+				return
 			case <-s.QuitChan:
 				ticker.Stop()
 				file.Close()
@@ -344,7 +353,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 		dataFrame := &fmtrpc.RealTimeData{
 			Source: s.name,
 			IsScanning: true,
-			Timestamp: current_time_str,
+			Timestamp: current_time.UnixMilli(),
 			Data: dataField,
 		}
 		s.BuffedChan <- dataFrame // may need to go into a goroutine
@@ -356,7 +365,7 @@ func (s *FlukeService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 	}
-	s.QuitChan<-struct{}{}
+	s.CancelChan<-struct{}{}
 	return nil
 }
 
@@ -393,6 +402,7 @@ func (s *FlukeService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
+					s.Logger.Info().Msg("Stopping data recording...")
 					err := s.stopRecording()
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))

@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	//"reflect"
 	"sync/atomic"
@@ -200,6 +201,9 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 					}
 					s.ServiceBroadStates[name] = false
 				}
+			}
+			if errors.Is(updateStream.Context().Err(), context.Canceled) {
+				return nil
 			}
 			return updateStream.Context().Err()
 		}
