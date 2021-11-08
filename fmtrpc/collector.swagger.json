@@ -138,7 +138,8 @@
           "type": "boolean"
         },
         "timestamp": {
-          "type": "string"
+          "type": "string",
+          "format": "int64"
         },
         "data": {
           "type": "object",
