@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"strconv"
 	"sync/atomic"
 	"time"
 	"github.com/rs/zerolog"
@@ -14,7 +15,7 @@ import (
 
 var (
 	minimumPressure float64 = 0.00005
-	minRgaPollingInterval int64 = 2 // Arbitrary not sure what this value should be
+	minRgaPollingInterval int64 = 15 // Arbitrary not sure what this value should be - After manual testing, value will be 15 seconds
 )
 
 type RGAService struct {
@@ -26,6 +27,7 @@ type RGAService struct {
 	PressureChan		chan float64
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}
+	CancelChan			chan struct{}
 	outputDir  			string
 	connection			*RGAConnection
 	name 				string
@@ -38,13 +40,14 @@ var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(logger *zerolog.Logger, outputDir string) (*RGAService, error) {
-	c, err := connectToRGA()
+	c, err := ConnectToRGA()
 	if err != nil {
 		return nil, fmt.Errorf("Unable to connect to RGA: %v", err)
 	}
 	return &RGAService{
 		Logger: logger,
 		QuitChan: make(chan struct{}),
+		CancelChan: make(chan struct{}),
 		outputDir: outputDir,
 		connection: &RGAConnection{c},
 		name: data.RgaName,
@@ -68,6 +71,7 @@ func (s *RGAService) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
 	}
+	close(s.CancelChan)
 	close(s.QuitChan)
 	s.connection.Close()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
@@ -115,12 +119,16 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return err
 	}
-	if resp.Fields["State"].Value.(RGASensorState) != Rga_SENSOR_STATE_READY {
+	if resp.Fields["State"].Value.(string) != Rga_SENSOR_STATE_INUSE {
 		return fmt.Errorf("Sensor not ready: %v", resp.Fields["State"])
 	}
 	_, err = s.connection.AddBarchart("Bar1", 1, 200, Rga_PeakCenter, 5, 0, 0, 0)
 	if err != nil {
 		return fmt.Errorf("Could not add Barchart: %v", err)
+	}
+	_, err = s.connection.AddPeakJump("PeakJump1", Rga_PeakCenter, 5, 0, 0, 0)
+	if err != nil {
+		return fmt.Errorf("Could not add PeakJump: %v", err)
 	}
 	for i := 1; i < 6; i++ { // TODO:SSSOCPaulCote - Change this for test next week
 		_, err = s.connection.MeasurementAddMass(i)
@@ -132,46 +140,26 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
 	}
-	_, err = s.connection.AnalogInputInterval(1, int(pol_int)*100000)
-	if err != nil {
-		return fmt.Errorf("Could not set input interval: %v", err)
-	}
-	_, err = s.connection.AnalogInputAverageCount(1, 10) // 1 reading every 0.3 seconds averaged every 3 seconds (10 readings averaged)
-	if err != nil {
-		return fmt.Errorf("Could not set input average count: %v", err)
-	}
-	_, err = s.connection.ScanStart(1)
-	if err != nil {
-		return fmt.Errorf("Could not start scan: %v", err)
-	}
-	_, err = s.connection.ReadResponse()
-	_, err = s.connection.ReadResponse()
-	// Header data for csv file
-	headerData := []string{"Timestamp"}
-	time.Sleep(time.Duration(pol_int)*time.Second)
-	resp, err = s.connection.ReadMass()
-	if err != nil {
-		return err
-	}
-	for massPos, _ := range resp.Fields {
-		headerData = append(headerData, fmt.Sprintf("Mass %s", massPos))
-	}
-	err = writer.Write(headerData)
-	if err != nil {
-		return err
-	}
 	// Now we begin recording
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	go func() {
+		ticks := 0
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer)
+				err = s.record(writer, ticks)
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
 				}
+				ticks++
+			case <-s.CancelChan:
+				ticker.Stop()
+				file.Close()
+				writer.Flush()
+				s.Logger.Info().Msg("Data recording stopped.")
+				return
 			case <-s.QuitChan:
 				ticker.Stop()
 				file.Close()
@@ -185,40 +173,73 @@ func (s *RGAService) startRecording(pol_int int64) error {
 }
 
 //record writes data from the RGA to a csv file and will pass it along it's Output channel
-func (s *RGAService) record(writer *csv.Writer) error {
+func (s *RGAService) record(writer *csv.Writer, ticks int) error {
+	if ticks == 0 {
+		// Header data for csv file
+		headerData := []string{"Timestamp"}
+		// Start scan
+		_, err := s.connection.ScanStart(1)
+		if err != nil {
+			return fmt.Errorf("Could not start scan: %v", err)
+		}
+		for {
+			resp, err := s.connection.ReadResponse()
+			if err != nil {
+				return fmt.Errorf("Could not read response: %v", err)
+			}
+			if resp.ErrMsg.CommandName == massReading {
+				headerData = append(headerData, strconv.FormatInt(resp.Fields["MassPosition"].Value.(int64), 10))
+				if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
+					break
+				}
+			}
+		}
+		err = writer.Write(headerData)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	current_time := time.Now()
 	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
-	resp, err := s.connection.ReadMass()
+	// Start scan
+	_, err := s.connection.ScanResume(1)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not resume scan: %v", err)
 	}
-	i := 0
-	for massPos, value := range resp.Fields {
-		if atomic.LoadInt32(&s.Broadcasting) == 1 {
-			dataField[int64(i)]= &fmtrpc.DataField{
-				Name: fmt.Sprintf("Mass %s", massPos),
-				Value: value.Value.(float64),
+	for {
+		resp, err := s.connection.ReadResponse()
+		if err != nil {
+			return fmt.Errorf("Could not read response: %v", err)
+		}
+		if resp.ErrMsg.CommandName == massReading {
+			if atomic.LoadInt32(&s.Broadcasting) == 1 {
+				massPos := resp.Fields["MassPosition"].Value.(int64)
+				dataField[massPos]= &fmtrpc.DataField{
+					Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
+					Value: resp.Fields["Value"].Value.(float64),
+				}
+			}
+			dataString = append(dataString, fmt.Sprintf("%g", resp.Fields["Value"].Value.(float64)))
+			if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
+				break
 			}
 		}
-		dataString = append(dataString, fmt.Sprintf("%g", value.Value))
-		i++
 	}
 	err = writer.Write(dataString)
 	if err != nil {
 		return err
 	}
 	if atomic.LoadInt32(&s.Broadcasting) == 1 {
-		s.Logger.Info().Msg("Sending raw data to data buffer")
 		dataFrame := &fmtrpc.RealTimeData{
 			Source: s.name,
 			IsScanning: true,
-			Timestamp: current_time_str,
+			Timestamp: current_time.UnixMilli(),
 			Data: dataField,
 		}
 		s.OutputChan <- dataFrame // may need to go into a goroutine
-		s.Logger.Info().Msg("After pushing into channel")
 	}
 	return nil
 }
@@ -228,7 +249,7 @@ func (s *RGAService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 	}
-	s.QuitChan <- struct{}{}
+	s.CancelChan <- struct{}{}
 	_, err := s.connection.Release()
 	if err != nil {
 		return fmt.Errorf("Could not safely release control of RGA: %v", err)
@@ -269,6 +290,7 @@ func (s *RGAService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
+					s.Logger.Info().Msg("Stopping data recording...")
 					err := s.stopRecording()
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
