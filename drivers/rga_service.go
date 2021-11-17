@@ -71,6 +71,12 @@ func (s *RGAService) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
 	}
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		err := s.stopRecording()
+		if err != nil {
+			return fmt.Errorf("Could not stop RGA service: %v", err)
+		}
+	}
 	close(s.CancelChan)
 	close(s.QuitChan)
 	s.connection.Close()
@@ -182,6 +188,10 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		if err != nil {
 			return fmt.Errorf("Could not start scan: %v", err)
 		}
+		_, err = s.connection.FilamentControl("On")
+		if err != nil {
+			return fmt.Errorf("Could not turn on filament: %v", err)
+		}
 		for {
 			resp, err := s.connection.ReadResponse()
 			if err != nil {
@@ -201,7 +211,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		return nil
 	}
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
+	current_time_str := fmt.Sprintf("%02d-%02d-%d %02d:%02d:%02d", current_time.Day(), current_time.Month(), current_time.Year(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	// Start scan
@@ -250,7 +260,11 @@ func (s *RGAService) stopRecording() error {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 	}
 	s.CancelChan <- struct{}{}
-	_, err := s.connection.Release()
+	_, err := s.connection.FilamentControl("Off")
+	if err != nil {
+		return fmt.Errorf("Could nto safely turn off filament: %v", err)
+	}
+	_, err = s.connection.Release()
 	if err != nil {
 		return fmt.Errorf("Could not safely release control of RGA: %v", err)
 	}

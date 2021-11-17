@@ -740,9 +740,6 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	}
 	split := bytes.Split(resp, delim)
 	//We know the first row is always the name of the command it's error status
-	for _, s := range split {
-		fmt.Println(s)
-	}
 	errorStatusField := re.FindAllString(string(split[0]), 2)
 	errorStatus := RGAErrStr(errorStatusField[1])
 	var errMsg error
@@ -1081,7 +1078,32 @@ func (c *RGAConnection) DetectorInfo(SourceIndex int) (*RGAResponse, error) {
 		return nil, err
 	}
 	resp := bytes.Split(buf, commandEnd) // The whole response minus the empty bytes leftover
-	return parseHorizontalResp(resp[0])
+	// Detector info has a line that is vertical so we parse that separately
+	split := bytes.Split(resp[0], delim)
+	var vertBytes []byte
+	vertBytes = append(vertBytes, split[0]...)
+	vertBytes = append(vertBytes, delim...)
+	vertBytes = append(vertBytes, split[1]...)
+	vertBytes = append(vertBytes, delim...)
+	vertPortion, err := parseVerticalResp(vertBytes, false)
+	if err != nil {
+		return nil, err
+	}
+	var horizBytes []byte
+	horizBytes = append(horizBytes, split[0]...)
+	horizBytes = append(horizBytes, delim...)
+	for i := 2; i < len(split)-1; i++ {
+		horizBytes = append(horizBytes, split[i]...)
+		horizBytes = append(horizBytes, delim...)
+	}
+	horizPortion, err := parseHorizontalResp(horizBytes)
+	if err != nil {
+		return nil, err
+	}
+	for name, value := range vertPortion.Fields {
+		horizPortion.Fields[name] = value
+	}
+	return horizPortion, nil
 }
 
 // FilamentInfo returns the current config and state of the filaments
