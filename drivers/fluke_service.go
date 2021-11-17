@@ -241,6 +241,12 @@ func (s *FlukeService) Start() error {
 func (s *FlukeService) Stop() error {
 	s.Logger.Info().Msg("Stopping Fluke Service...")
 	atomic.StoreInt32(&s.Stopping, 1)
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		err := s.stopRecording()
+		if err != nil {
+			return fmt.Errorf("Could not stop Fluke service: %v", err)
+		}
+	}
 	close(s.CancelChan)
 	close(s.QuitChan)
 	// Stop scanning
@@ -325,7 +331,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 // record records the live data from Fluke and inserts it into a csv file and passes it to the RTD service
 func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%02d:%02d:%02d", current_time.Hour(), current_time.Minute(), current_time.Second())
+	current_time_str := fmt.Sprintf("%02d-%02d-%d %02d:%02d:%02d", current_time.Day(), current_time.Month(), current_time.Year(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	for _, i := range idxs {
