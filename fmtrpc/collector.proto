@@ -17,6 +17,9 @@ service DataCollector {
     SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
     */
     rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
+    /*
+    DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file*/
+    rpc DownloadHistoricalData (HistoricalDataRequest) returns (HistoricalDataResponse);
 }
 
 enum RecordService {
@@ -54,4 +57,14 @@ message RealTimeData {
     bool is_scanning = 2;
     int64 timestamp = 3;
     map<int64, DataField> data = 4;
+}
+
+message HistoricalDataRequest {
+    RecordService source = 1;
+}
+
+message HistoricalDataResponse {
+    string server_addr = 1;
+    int64 server_port = 2;
+    int64 buffer_size = 3;
 }
