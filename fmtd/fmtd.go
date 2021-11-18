@@ -127,7 +127,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
-	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger)
+	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, server.cfg.TCPAddr, server.cfg.TCPPort)
 	err = rtdService.RegisterWithGrpcServer(rpcServer.GrpcServer)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))

@@ -64,7 +64,6 @@ message HistoricalDataRequest {
 }
 
 message HistoricalDataResponse {
-    string server_addr = 1;
-    int64 server_port = 2;
-    int64 buffer_size = 3;
+    int64 server_port = 1;
+    int64 buffer_size = 2;
 }

@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	//"reflect"
+	"io"
+	"os"
 	"sync/atomic"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -19,6 +20,8 @@ var (
 		fmtrpc.RecordService_FLUKE: FlukeName,
 		fmtrpc.RecordService_RGA: RgaName,
 	}
+	errTCPStarted = fmt.Errorf("Unable to start TCP server: already started")
+	defaultTCPBufferSize int64 = 1024
 )
 
 type StateType int32
@@ -32,29 +35,40 @@ type StateChangeMsg struct {
 	Type	StateType
 	State 	bool
 	ErrMsg	error
+	Msg		string
 }
 
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
 	Running				int32 // used atomically
 	Listeners			int32 // used atomically
+	TCPRunning			int32 // used atomically
+	TCPListeners		int32 // used atomically
+	TCPPort				int64
+	TCPAddr				string
+	TCPBuffer			int64
 	Logger				*zerolog.Logger
 	DataProviderChan	chan *fmtrpc.RealTimeData
 	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
 	ServiceBroadStates	map[string]bool
+	ServiceFilePaths	map[fmtrpc.RecordService]string
 	name				string
 }
 
 //NewDataBuffer returns an instantiated DataBuffer struct
-func NewRTDService(log *zerolog.Logger) *RTDService {
+func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort, tcpBuff int64) *RTDService {
 	return &RTDService{
 		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
 		ServiceRecStates: 	make(map[string]bool),
 		ServiceBroadStates: make(map[string]bool),
 		StateChangeChans: 	make(map[string]chan *StateChangeMsg),
+		ServiceFilePaths:	make(map[fmtrpc.RecordService]string),
 		Logger: log,
 		name: RtdName,
+		TCPAddr: tcpAddr,
+		TCPPort: tcpPort,
+		TCPBuffer: tcpBuff,
 	}
 }
 
@@ -117,6 +131,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 			}, resp.ErrMsg
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
+		s.ServiceFilePaths[req.Type] = resp.Msg
 	case fmtrpc.RecordService_RGA:
 		if !s.ServiceRecStates[FlukeName] {
 			return &fmtrpc.RecordResponse{
@@ -131,6 +146,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 			}, resp.ErrMsg
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
+		s.ServiceFilePaths[req.Type] = resp.Msg
 	}
 	return &fmtrpc.RecordResponse{
 		Msg: "Data recording successfully started.",
@@ -208,4 +224,83 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 			return updateStream.Context().Err()
 		}
 	}
+}
+
+// startTCPServer starts a tcp server and starts a goroutine for listening
+func (s *RTD) startTCPServer() (*net.TCPListener, error) {
+	if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 0, 1); !ok {
+		return nil, errTCPStarted
+	}
+	server, err := net.Listen("tcp", s.TCPAddr+":"+strconv.FormatInt(s.TCPPort, 10))
+    if err != nil {
+        return nil, fmt.Errorf("Unable to listen at %s:%v: %v", s.TCPAddr, s.TCPPort, err)
+    }
+	return &server, nil
+}
+
+//tcpServerListen listens for incoming connections and handles them
+func (s *RTD) tcpServerListen(l *net.TCPListener, file_type *fmtrpc.RecordService) {
+	shutdown := func() {
+		s.Logger.Info().Msg("Shutting down tcp server...")
+		l.Close()
+		s.Logger.Info().Msg("TCP shutdown complete.")
+	}
+	defer shutdown()
+	i := 0
+	for {
+		if i > 0 && atomic.LoadInt32(&s.TCPListeners) == 0 {
+			// we've done a pass, and so had a listener, now we have no listeners, shutdown
+			return
+		}
+        conn, err := l.Accept()
+        if err != nil {
+            s.Logger.Error().Msg(fmt.Sprintf("Unable to accept connection: %v", err))
+			return
+        }
+        atomic.AddInt32(&s.TCPListeners, 1)
+        go s.tcpConnHandler(conn, file_type)
+		i++
+    }
+}
+
+// tcpConnHandler handles the incoming tcp connection and sends the requested file
+func (s *RTD) tcpConnHandler(conn net.Conn, file_type *fmtrpc.RecordService) {
+    defer conn.Close()
+	defer atomic.AddInt32(&s.TCPListeners, -1)
+	filepath = s.ServiceFilePaths[file_type]
+	if filepath == "" {
+		s.Logger.Error().Msg(fmt.Sprintf("Unable to find file path for service type %v", file_type))
+		return
+	}
+	fileBuf := make([]byte, defaultTCPBufferSize)
+	var byteIdx int64 = 0 
+	file, err := os.Open(filepath)
+	if err != nil {
+		s.Logger.Error().Msg(fmt.Sprintf("Unable to open file at path %v", filepath))
+		return
+	}
+	defer file.Close()
+	s.Logger.Info().Msg("Sending file...")
+	_, err = io.CopyBuffer(conn, file, fileBuf)
+	if err != nil {
+		s.Logger.Error().Msg(fmt.Sprintf("Error sending file: %v", err))
+		return
+	}
+	s.Logger.Info().Msg("File sent.")
+}
+
+// DownloadHistoricalData is a gRPC endpoint to establish a tcp connection and upload a csv file to the remote client app
+func (s *RTDService) DownloadHistoricalData(ctx context.Context, req *fmtrpc.HistoricalDataRequest) (*fmtrpc.HistoricalDataResponse, error) {
+	s.Logger.Info().Msg("Starting TCP server...")
+	tcpServer, err := s.startTCPServer()
+	if err != nil {
+		s.Logger.Error().Msg(fmt.Sprintf("Cannot start TCP server: %v", err))
+		return nil, err
+	}
+	s.Logger.Info().Msg("TCP server started")
+	go s.tcpServerListen(tcpServer, req.Source)
+	return &fmtrpc.HistoricalDataResponse{
+		ServerPort: s.TCPPort,
+		BufferSize: defaultTCPBufferSize,
+	}, nil
 }
