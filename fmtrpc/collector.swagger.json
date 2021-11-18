@@ -166,9 +166,6 @@
     "fmtrpcHistoricalDataResponse": {
       "type": "object",
       "properties": {
-        "server_addr": {
-          "type": "string"
-        },
         "server_port": {
           "type": "string",
           "format": "int64"
