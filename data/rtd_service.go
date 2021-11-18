@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"net"
+	"strconv"
 	"sync/atomic"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -20,7 +22,6 @@ var (
 		fmtrpc.RecordService_FLUKE: FlukeName,
 		fmtrpc.RecordService_RGA: RgaName,
 	}
-	errTCPStarted = fmt.Errorf("Unable to start TCP server: already started")
 	defaultTCPBufferSize int64 = 1024
 )
 
@@ -43,10 +44,8 @@ type RTDService struct {
 	Running				int32 // used atomically
 	Listeners			int32 // used atomically
 	TCPRunning			int32 // used atomically
-	TCPListeners		int32 // used atomically
 	TCPPort				int64
 	TCPAddr				string
-	TCPBuffer			int64
 	Logger				*zerolog.Logger
 	DataProviderChan	chan *fmtrpc.RealTimeData
 	StateChangeChans	map[string]chan *StateChangeMsg
@@ -54,10 +53,11 @@ type RTDService struct {
 	ServiceBroadStates	map[string]bool
 	ServiceFilePaths	map[fmtrpc.RecordService]string
 	name				string
+	tcpServer			net.Listener
 }
 
 //NewDataBuffer returns an instantiated DataBuffer struct
-func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort, tcpBuff int64) *RTDService {
+func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64) *RTDService {
 	return &RTDService{
 		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
 		ServiceRecStates: 	make(map[string]bool),
@@ -68,7 +68,6 @@ func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort, tcpBuff int64) 
 		name: RtdName,
 		TCPAddr: tcpAddr,
 		TCPPort: tcpPort,
-		TCPBuffer: tcpBuff,
 	}
 }
 
@@ -227,53 +226,44 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 }
 
 // startTCPServer starts a tcp server and starts a goroutine for listening
-func (s *RTD) startTCPServer() (*net.TCPListener, error) {
-	if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 0, 1); !ok {
-		return nil, errTCPStarted
-	}
-	server, err := net.Listen("tcp", s.TCPAddr+":"+strconv.FormatInt(s.TCPPort, 10))
+func (s *RTDService) startTCPServer() (error) {
+	tcpS, err := net.Listen("tcp", s.TCPAddr+":"+strconv.FormatInt(s.TCPPort, 10))
     if err != nil {
-        return nil, fmt.Errorf("Unable to listen at %s:%v: %v", s.TCPAddr, s.TCPPort, err)
+        return fmt.Errorf("Unable to listen at %s:%v: %v", s.TCPAddr, s.TCPPort, err)
     }
-	return &server, nil
+	s.tcpServer = tcpS
+	return nil
 }
 
 //tcpServerListen listens for incoming connections and handles them
-func (s *RTD) tcpServerListen(l *net.TCPListener, file_type *fmtrpc.RecordService) {
+func (s *RTDService) tcpServerListen(file_type fmtrpc.RecordService) {
 	shutdown := func() {
 		s.Logger.Info().Msg("Shutting down tcp server...")
-		l.Close()
+		s.tcpServer.Close()
+		if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 1, 0); !ok {
+			s.Logger.Error().Msg("TCP server already stopped")
+		}
 		s.Logger.Info().Msg("TCP shutdown complete.")
 	}
 	defer shutdown()
-	i := 0
-	for {
-		if i > 0 && atomic.LoadInt32(&s.TCPListeners) == 0 {
-			// we've done a pass, and so had a listener, now we have no listeners, shutdown
-			return
-		}
-        conn, err := l.Accept()
-        if err != nil {
-            s.Logger.Error().Msg(fmt.Sprintf("Unable to accept connection: %v", err))
-			return
-        }
-        atomic.AddInt32(&s.TCPListeners, 1)
-        go s.tcpConnHandler(conn, file_type)
-		i++
-    }
+	conn, err := s.tcpServer.Accept()
+	if err != nil {
+		s.Logger.Error().Msg(fmt.Sprintf("Unable to accept connection: %v", err))
+		return
+	}
+	s.tcpConnHandler(conn, file_type)
+	return
 }
 
 // tcpConnHandler handles the incoming tcp connection and sends the requested file
-func (s *RTD) tcpConnHandler(conn net.Conn, file_type *fmtrpc.RecordService) {
+func (s *RTDService) tcpConnHandler(conn net.Conn, file_type fmtrpc.RecordService) {
     defer conn.Close()
-	defer atomic.AddInt32(&s.TCPListeners, -1)
-	filepath = s.ServiceFilePaths[file_type]
+	filepath := s.ServiceFilePaths[file_type]
 	if filepath == "" {
 		s.Logger.Error().Msg(fmt.Sprintf("Unable to find file path for service type %v", file_type))
 		return
 	}
 	fileBuf := make([]byte, defaultTCPBufferSize)
-	var byteIdx int64 = 0 
 	file, err := os.Open(filepath)
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Unable to open file at path %v", filepath))
@@ -287,18 +277,23 @@ func (s *RTD) tcpConnHandler(conn net.Conn, file_type *fmtrpc.RecordService) {
 		return
 	}
 	s.Logger.Info().Msg("File sent.")
+	return
 }
 
 // DownloadHistoricalData is a gRPC endpoint to establish a tcp connection and upload a csv file to the remote client app
 func (s *RTDService) DownloadHistoricalData(ctx context.Context, req *fmtrpc.HistoricalDataRequest) (*fmtrpc.HistoricalDataResponse, error) {
-	s.Logger.Info().Msg("Starting TCP server...")
-	tcpServer, err := s.startTCPServer()
-	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Cannot start TCP server: %v", err))
-		return nil, err
+	if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 0, 1); !ok {
+		s.Logger.Info().Msg("TCP server already started")
+	} else {
+		s.Logger.Info().Msg("Starting TCP server...")
+		err := s.startTCPServer()
+		if err != nil {
+			s.Logger.Error().Msg(fmt.Sprintf("Cannot start TCP server: %v", err))
+			return nil, err
+		}
+		s.Logger.Info().Msg("TCP server started")
+		go s.tcpServerListen(req.Source)
 	}
-	s.Logger.Info().Msg("TCP server started")
-	go s.tcpServerListen(tcpServer, req.Source)
 	return &fmtrpc.HistoricalDataResponse{
 		ServerPort: s.TCPPort,
 		BufferSize: defaultTCPBufferSize,
