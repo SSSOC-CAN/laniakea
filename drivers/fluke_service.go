@@ -190,6 +190,7 @@ type FlukeService struct {
 	StateChangeChan			chan *data.StateChangeMsg
 	PressureChan			chan float64
 	IsRGAReady				bool
+	filepath				string
 }
 
 // A compile time check to make sure that FlukeService fully implements the data.Service interface
@@ -282,6 +283,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not create file %v: %v", file, err)
 	}
+	s.filepath = file_name
 	writer := csv.NewWriter(file)
 	// headers
 	headerData := []string{"Timestamp"}
@@ -405,7 +407,7 @@ func (s *FlukeService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")

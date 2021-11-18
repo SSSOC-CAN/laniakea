@@ -32,7 +32,7 @@ type RGAService struct {
 	connection			*RGAConnection
 	name 				string
 	currentPressure		float64
-	// channel to send data to RealTimeDataService
+	filepath			string
 }
 
 // A compile time check to make sure that RGAService fully implements the data.Service interface
@@ -110,6 +110,7 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not create file %v: %v", file, err)
 	}
+	s.filepath = file_name
 	writer := csv.NewWriter(file)
 	// InitMsg
 	err = s.connection.InitMsg()
@@ -301,7 +302,7 @@ func (s *RGAService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")

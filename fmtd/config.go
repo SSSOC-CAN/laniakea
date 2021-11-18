@@ -18,6 +18,8 @@ type Config struct {
 	ConsoleOutput	bool		`yaml:"ConsoleOutput"`
 	GrpcPort		int64		`yaml:"GrpcPort"`
 	RestPort		int64		`yaml:"RestPort"`
+	TCPPort			int64		`yaml:"TCPPort"`
+	TCPAddr			string		`yaml:"TCPAddr"`
 	DataOutputDir	string		`yaml:"DataOutputDir"`
 	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr"` // optional parameter
 	MacaroonDBPath	string
@@ -35,6 +37,8 @@ type Config struct {
 var (
 	default_grpc_port int64 = 7777
 	default_rest_port int64 = 8080
+	default_tcp_port  int64 = 10024
+	default_tcp_addr string = "0.0.0.0"
 	default_log_dir = func() string {
 		// home_dir, err := os.UserHomeDir() // this should be OS agnostic
 		// if err != nil {
@@ -58,6 +62,8 @@ var (
 			ConsoleOutput: false,
 			GrpcPort: default_grpc_port,
 			RestPort: default_rest_port,
+			TCPPort: default_tcp_port,
+			TCPAddr: default_tcp_addr,
 			DataOutputDir: default_data_output_dir,
 			MacaroonDBPath: default_macaroon_db_file,
 			TLSCertPath: default_tls_cert_path,
@@ -143,6 +149,14 @@ func check_yaml_config(config Config) Config {
 		case "RestPort":
 			if f.Int() == 0 { // This may end up being a range of values
 				change_field(f, default_rest_port)
+			}
+		case "TCPPort":
+			if f.Int() == 0 {
+				change_field(f, default_tcp_port)
+			}
+		case "TCPAddr":
+			if f.String() == "" {
+				change_field(f, default_tcp_addr)
 			}
 		case "MacaroonDBPath":
 			if f.String() == "" {

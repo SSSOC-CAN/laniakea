@@ -48,6 +48,8 @@ func TestInitConfigFromYAML(t *testing.T) {
 		ConsoleOutput: true,
 		GrpcPort: 3567,
 		RestPort: 8080,
+		TCPPort: 10024,
+		TCPAddr: "0.0.0.0",
 		DataOutputDir: default_data_output_dir,
 		MacaroonDBPath: default_macaroon_db_file,
 		TLSCertPath: default_tls_cert_path,
@@ -70,6 +72,18 @@ func TestInitConfigFromYAML(t *testing.T) {
 		t.Errorf("%s", err)
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("GrpcPort: %v", d_config.GrpcPort))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("RestPort: %v", d_config.RestPort))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("TCPPort: %v", d_config.TCPPort))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("TCPAddr: %v", d_config.TCPAddr))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
@@ -101,6 +115,8 @@ func TestDefaultConfig(t *testing.T) {
 		ConsoleOutput: false,
 		GrpcPort: 7777,
 		RestPort: 8080,
+		TCPPort: 10024,
+		TCPAddr: "0.0.0.0",
 		DataOutputDir: default_data_output_dir,
 		MacaroonDBPath: default_macaroon_db_file,
 		TLSCertPath: default_tls_cert_path,
