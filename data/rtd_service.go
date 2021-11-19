@@ -42,6 +42,7 @@ type StateChangeMsg struct {
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
 	Running				int32 // used atomically
+	Stopping			int32
 	Listeners			int32 // used atomically
 	TCPRunning			int32 // used atomically
 	TCPPort				int64
@@ -90,6 +91,7 @@ func (s *RTDService) Start() error {
 // Stop stops the RTD service. It closes all its channels, lifting the burdens from Data providers
 func (s *RTDService) Stop() error {
 	s.Logger.Info().Msg("Stopping RTD Service ...")
+	atomic.AddInt32(&s.Stopping, 1)
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
 	}
@@ -205,16 +207,18 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 		case <-updateStream.Context().Done():
 			_ = atomic.AddInt32(&s.Listeners, -1)
 			if atomic.LoadInt32(&s.Listeners) == 0 {
-				for name, channel := range s.StateChangeChans {
-					if s.ServiceBroadStates[name] {
-						channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-						resp := <- channel
-						if resp.ErrMsg != nil {
-							s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-							return resp.ErrMsg
+				if atomic.LoadInt32(&s.Stopping) == 0 {
+					for name, channel := range s.StateChangeChans {
+						if s.ServiceBroadStates[name] {
+							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
+							resp := <- channel
+							if resp.ErrMsg != nil {
+								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
+								return resp.ErrMsg
+							}
 						}
+						s.ServiceBroadStates[name] = false
 					}
-					s.ServiceBroadStates[name] = false
 				}
 			}
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
