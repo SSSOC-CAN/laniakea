@@ -22,19 +22,13 @@ THE SOFTWARE.
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 	"os"
-	"strconv"
-	"syscall"
 	"github.com/urfave/cli"
+	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/fmtd"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/utils"
-	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -49,8 +43,15 @@ func fatal(err error) {
 }
 
 // getFmtClient returns the FmtClient instance from the fmtrpc package as well as a cleanup function
-func getFmtClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
-	conn := getClientConn(ctx, false)
+func getFmtClient() (fmtrpc.FmtClient, func()) {
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
+	if err != nil {
+		fatal(err)
+	}
 	cleanUp := func() {
 		conn.Close()
 	}
@@ -58,67 +59,51 @@ func getFmtClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
 }
 
 //getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getDataCollectorClient(ctx *cli.Context) (fmtrpc.DataCollectorClient, func()) {
-	conn := getClientConn(ctx, false)
+func getDataCollectorClient() (fmtrpc.DataCollectorClient, func()) {
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
+	if err != nil {
+		fatal(err)
+	}
 	cleanUp := func() {
 		conn.Close()
 	}
 	return fmtrpc.NewDataCollectorClient(conn), cleanUp
 }
 
+//getTestPlanExecutorClient returns the TestPlanExecutorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
+func getTestPlanExecutorClient() (fmtrpc.TestPlanExecutorClient, func()) {
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
+	if err != nil {
+		fatal(err)
+	}
+	cleanUp := func() {
+		conn.Close()
+	}
+	return fmtrpc.NewTestPlanExecutorClient(conn), cleanUp
+}
+
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
-func getUnlockerClient(ctx *cli.Context) (fmtrpc.UnlockerClient, func()) {
-	conn := getClientConn(ctx, true)
+func getUnlockerClient() (fmtrpc.UnlockerClient, func()) {
+	config, err := fmtd.InitConfig()
+	if err != nil {
+		fatal(err)
+	}
+	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, true, int64(0), config.GrpcPort)
+	if err != nil {
+		fatal(err)
+	}
 	cleanUp := func() {
 		conn.Close()
 	}
 	return fmtrpc.NewUnlockerClient(conn), cleanUp
-}
-
-// getClientConn returns the grpc Client connection for use in instantiating FmtClient
-func getClientConn(ctx *cli.Context, skipMacaroons bool) *grpc.ClientConn {
-	config, err := fmtd.InitConfig()
-	if err != nil {
-		fatal(fmt.Errorf("Could not load config: %v", err))
-	}
-	//get TLS credentials from TLS certificate file
-	creds, err := credentials.NewClientTLSFromFile(config.TLSCertPath, "")
-	if err != nil {
-		fatal(err)
-	}
-	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(creds),
-	}
-	if !skipMacaroons {
-		// grab Macaroon data and load it into macaroon.Macaroon struct
-		adminMac, err := os.ReadFile(config.AdminMacPath)
-		if err != nil {
-			fatal(fmt.Errorf("Could not read macaroon at %v: %v", config.AdminMacPath, err))
-		}
-		macHex := hex.EncodeToString(adminMac)
-		mac, err := loadMacaroon(readPassword, macHex)
-		if err != nil {
-			fatal(fmt.Errorf("Could not load macaroon; %v", err))
-		}
-		// Add constraints to our macaroon
-		macConstraints := []macaroons.Constraint{
-			macaroons.TimeoutConstraint(defaultMacaroonTimeout), // prevent a replay attack
-		}
-		constrainedMac, err := macaroons.AddConstraints(mac, macConstraints...)
-		if err != nil {
-			fatal(err)
-		}
-		cred := macaroons.NewMacaroonCredential(constrainedMac)
-		opts = append(opts, grpc.WithPerRPCCredentials(cred))
-	}
-	genericDialer := utils.ClientAddressDialer(strconv.FormatInt(config.GrpcPort, 10))
-	opts = append(opts, grpc.WithContextDialer(genericDialer))
-	opts = append(opts, grpc.WithDefaultCallOptions(maxMsgRecvSize))
-	conn, err := grpc.Dial("localhost:"+strconv.FormatInt(config.GrpcPort, 10), opts...) // TODO:SSSOCPaulCote - Can't have hardcoded port here. Must somehow link config to this method
-	if err != nil {
-		fatal(fmt.Errorf("Unable to connect to RPC server: %v", err))
-	}
-	return conn
 }
 
 // main is the entrypoint for fmtcli
@@ -133,16 +118,13 @@ func main() {
 		loginCommand,
 		startRecording,
 		stopRecording,
+		loadTestPlan,
+		startTestPlan,
+		stopTestPlan,
+		insertROIMarker,
+		bakeMacaroon,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)
 	}
-}
-
-// readPassword prompts the user for a password in the command line
-func readPassword(text string) ([]byte, error) {
-	fmt.Print(text)
-	pw, err := terminal.ReadPassword(int(syscall.Stdin))
-	fmt.Println()
-	return pw, err
 }

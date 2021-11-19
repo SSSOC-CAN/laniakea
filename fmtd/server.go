@@ -22,14 +22,15 @@ THE SOFTWARE.
 package fmtd
 
 import (
+	"fmt"
 	"sync/atomic"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
 )
 
 // Server is the object representing the state of the server
 type Server struct {
 	Active 		int32 // atomic
-	Stopping	int32 // atomic
 	cfg			*Config
 	logger		*zerolog.Logger
 }
@@ -45,13 +46,19 @@ func InitServer(config *Config, logger *zerolog.Logger) (*Server, error) {
 // Start starts the server. Returns an error if any issues occur
 func (s *Server) Start() error {
 	s.logger.Info().Msg("Starting Daemon...")
-	atomic.StoreInt32(&s.Active, 1)
+	if ok := atomic.CompareAndSwapInt32(&s.Active, 0, 1); !ok {
+		return fmt.Errorf("Cannot start daemon: already active")
+	}
+	s.logger.Info().Msg(fmt.Sprintf("Daemon succesfully started. Version: %s", utils.AppVersion))
 	return nil
 }
 
 // Stop stops the server. Returns an error if any issues occur
 func (s *Server) Stop() error {
 	s.logger.Info().Msg("Stopping Daemon...")
-	atomic.StoreInt32(&s.Stopping, 1)
+	if ok := atomic.CompareAndSwapInt32(&s.Active, 0, 1); !ok {
+		return fmt.Errorf("Cannot stop daemon: already inactive")
+	}
+	s.logger.Info().Msg("Daemon succesfully stopped.")
 	return nil
 }

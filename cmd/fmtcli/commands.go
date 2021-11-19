@@ -23,12 +23,16 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"strings"
 	"syscall"
 
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -77,7 +81,7 @@ var stopCommand = cli.Command{
 // stopDaemon is the proxy command between fmtcli and gRPC equivalent.
 func stopDaemon(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx) //This command returns the proto generated FmtClient instance
+	client, cleanUp := getFmtClient() //This command returns the proto generated FmtClient instance
 	defer cleanUp()
 
 	_, err := client.StopDaemon(ctxc, &fmtrpc.StopRequest{})
@@ -98,7 +102,7 @@ var adminTestCommand = cli.Command{
 // Proxy command for the fmtcli
 func adminTest(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx)
+	client, cleanUp := getFmtClient()
 	defer cleanUp()
 	testResp, err := client.AdminTest(ctxc, &fmtrpc.AdminTestRequest{})
 	if err != nil {
@@ -119,7 +123,7 @@ var testCommand = cli.Command{
 // Proxy command for the fmtcli
 func test(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient(ctx)
+	client, cleanUp := getFmtClient()
 	defer cleanUp()
 	testResp, err := client.TestCommand(ctxc, &fmtrpc.TestRequest{})
 	if err != nil {
@@ -148,7 +152,7 @@ var loginCommand = cli.Command{
 // login is the wrapper around the UnlockerClient.Login method
 func login(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getUnlockerClient(ctx)
+	client, cleanUp := getUnlockerClient()
 	defer cleanUp()
 	pw, err := readPasswordFromTerminal("Input password: ")
 	if err != nil {
@@ -168,8 +172,11 @@ func login(ctx *cli.Context) error {
 var startRecording = cli.Command{
 	Name:  "start-record",
 	Usage: "Start recording data in realtime.",
+	ArgsUsage: "service-name",
 	Description: `
-	This command starts the process of recording data from the Fluke DAQ into a timestamped csv file.`,
+	This command starts the process of recording data for the given service into a timestamped csv file. Service-name must be one the following:
+	    - fluke
+		- rga`,
 	Flags: []cli.Flag{
 		cli.Int64Flag{
 			Name:  "polling_interval",
@@ -182,14 +189,28 @@ var startRecording = cli.Command{
 // startRecord is the CLI wrapper around the FlukeService StartRecording method
 func startRecord(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getDataCollectorClient(ctx)
+	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
+		return cli.ShowCommandHelp(ctx, "start-record")
+	}
+	client, cleanUp := getDataCollectorClient()
 	defer cleanUp()
 	var polling_interval int64
+	serviceNameStr := ctx.Args().First()
+	var serviceName fmtrpc.RecordService
 	if ctx.NumFlags() != 0 {
 		polling_interval = ctx.Int64("polling_interval")
 	}
+	switch serviceNameStr {
+	case "fluke":
+		serviceName = fmtrpc.RecordService_FLUKE
+	case "rga":
+		serviceName = fmtrpc.RecordService_RGA
+	default:
+		return fmt.Errorf("Invalid service name %v, service names must be one of the following: fluke and rga", serviceNameStr)
+	}
 	recordRequest := &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
+		Type: serviceName,
 	}
 	recordResponse, err := client.StartRecording(ctxc, recordRequest)
 	if err != nil {
@@ -202,20 +223,277 @@ func startRecord(ctx *cli.Context) error {
 var stopRecording = cli.Command{
 	Name:  "stop-record",
 	Usage: "Stop recording data.",
+	ArgsUsage: "service-name",
 	Description: `
-	This command stops the process of recording data from the Fluke DAQ into a timestamped csv file.`,
+	This command stops the process of recording data from the given service into a timestamped csv file. Service-name must be one the following:
+	- fluke
+	- rga`,
 	Action: stopRecord,
 }
 
 // stopRecord is the CLI wrapper around the FlukeService StopRecording method
 func stopRecord(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getDataCollectorClient(ctx)
+	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
+		return cli.ShowCommandHelp(ctx, "stop-record")
+	}
+	client, cleanUp := getDataCollectorClient()
 	defer cleanUp()
-	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{})
+	serviceNameStr := ctx.Args().First()
+	var serviceName fmtrpc.RecordService
+	switch serviceNameStr {
+	case "fluke":
+		serviceName = fmtrpc.RecordService_FLUKE
+	case "rga":
+		serviceName = fmtrpc.RecordService_RGA
+	default:
+		return fmt.Errorf("Invalid service name %v, service names must be one of the following: fluke and rga", serviceNameStr)
+	}
+	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{Type: serviceName})
 	if err != nil {
 		return err
 	}
 	printRespJSON(recordResponse)
+	return nil
+}
+
+var loadTestPlan = cli.Command{
+	Name:  "load-testplan",
+	Usage: "Load a test plan file.",
+	ArgsUsage: "path-to-testplan",
+	Description: `
+	This command loads a given test plan file. The absolute path must be given. Ex: C:\Users\User\Downloads\testplan.yaml`,
+	Action: loadPlan,
+}
+
+// loadPlan is the CLI wrapper for the Test Plan Executor method LoadTestPlan 
+func loadPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() != 1 {
+		return cli.ShowCommandHelp(ctx, "load-testplan")
+	}
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	testPlanFilePath := ctx.Args().First()
+	loadPlanReq := &fmtrpc.LoadTestPlanRequest{
+		PathToFile: testPlanFilePath,
+	}
+	loadPlanResponse, err := client.LoadTestPlan(ctxc, loadPlanReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(loadPlanResponse)
+	return nil
+}
+
+var startTestPlan = cli.Command{
+	Name:  "start-testplan",
+	Usage: "Start a loaded test plan file.",
+	Description: `
+	This command starts a loaded test plan file. If no test plan has been loaded, an error will be raised.`,
+	Action: startPlan,
+}
+
+// startPlan is the CLI wrapper for the Test Plan Executor method StartTestPlan 
+func startPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	startPlanResponse, err := client.StartTestPlan(ctxc, &fmtrpc.StartTestPlanRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(startPlanResponse)
+	return nil
+}
+
+var stopTestPlan = cli.Command{
+	Name:  "stop-testplan",
+	Usage: "Stops a currently executing test plan",
+	Description: `
+	This command stops a running test plan. If no test plan is being executed, an error will be raised.`,
+	Action: stopPlan,
+}
+
+// stopPlan is the CLI wrapper for the Test Plan Executor method StopTestPlan 
+func stopPlan(ctx *cli.Context) error {
+	ctxc := getContext()
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	stopPlanResponse, err := client.StopTestPlan(ctxc, &fmtrpc.StopTestPlanRequest{})
+	if err != nil {
+		return err
+	}
+	printRespJSON(stopPlanResponse)
+	return nil
+}
+
+var insertROIMarker = cli.Command{
+	Name:  "insert-roi",
+	Usage: "Inserts a Region of Interest marker in the test plan report",
+	ArgsUsage: "message",
+	Description: `
+	This command inserts a Region of Interest marker in the test plan report. If no test plan is currently running, an error is raised.`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "report_lvl",
+			Usage: `If set, then the entries level of importance in the report file will be marked accordingly. Must be one of the following:
+			- INFO
+			- ERROR
+			- DEBUG
+			- WARN
+			- FATAL
+			INFO by default.`,
+		},
+		cli.StringFlag{
+			Name: "author",
+			Usage: "If set, the author of the entry will be marked accordingly. FMT by default.",
+		},
+	},
+	Action: insertROI,
+}
+
+// insertROI is the CLI wrapper for the Test Plan Executor method InsertROIMarker
+func insertROI(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() != 1 || ctx.NumFlags() > 2 {
+		return cli.ShowCommandHelp(ctx, "insert-roi")
+	}
+	client, cleanUp := getTestPlanExecutorClient()
+	defer cleanUp()
+	markerText := ctx.Args().First()
+	reportLvl := fmtrpc.ReportLvl_INFO
+	author := "FMT"
+	if ctx.String("report_lvl") != "" {
+		switch ctx.String("report_lvl") {
+		case "INFO":
+			reportLvl = fmtrpc.ReportLvl_INFO
+		case "ERROR":
+			reportLvl = fmtrpc.ReportLvl_ERROR
+		case "DEBUG":
+			reportLvl = fmtrpc.ReportLvl_DEBUG
+		case "WARN":
+			reportLvl = fmtrpc.ReportLvl_WARN
+		case "FATAL":
+			reportLvl = fmtrpc.ReportLvl_FATAL
+		default:
+			return cli.ShowCommandHelp(ctx, "insert-roi")
+		}
+	}
+	if ctx.String("author") != "" {
+		author = ctx.String("author")
+	}
+	insertROIReq := &fmtrpc.InsertROIRequest{
+		Text: markerText,
+		ReportLvl: reportLvl,
+		Author: author,
+	}
+	insertROIResponse, err := client.InsertROIMarker(ctxc, insertROIReq)
+	if err != nil {
+		return err
+	}
+	printRespJSON(insertROIResponse)
+	return nil
+}
+
+var bakeMacaroon = cli.Command{
+	Name:  "bake-macaroon",
+	Usage: "Bakes a new macaroon",
+	ArgsUsage: "permissions",
+	Description: `
+	This command bakes a new macaroon based on the provided permissions and optional constraints. Permissions must be of the following format: entity:action
+	For specific commands, the format is uri:<command_uri> example: fmtd:write, uri:/fmtrpc.Fmt/Test this would generate a macaroon with write permissions for any commands associated to the fmtd entity as well as the fmtrpc.Fmt.Test command
+	`,
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "timeout_unit",
+			Usage: `If set, then the the timeout given will be in the specified units. Possible units are:
+			- day
+			- hour
+			- minute
+			- second
+			second is the default.`,
+		},
+		cli.Int64Flag{
+			Name: "timeout",
+			Usage: "If set, the macaroon will timeout after the given number of units. The default unit is seconds. The default timeout is 24 hours",
+		},
+		cli.StringFlag{
+			Name: "save_to",
+			Usage: "If set, the macaroon will be saved as a .macaroon file at the specified path. The hex encoded macaroon is printed to the console by default",
+		},
+	},
+	Action: bakeMac,
+}
+
+func bakeMac(ctx *cli.Context) error {
+	ctxc := getContext()
+	if ctx.NArg() < 1 || ctx.NumFlags() > 3 {
+		return cli.ShowCommandHelp(ctx, "bake-macaroon")
+	}
+	client, cleanUp := getFmtClient()
+	defer cleanUp()
+	permissions := ctx.Args()
+	timeoutType := fmtrpc.TimeoutType_SECOND
+	timeout := int64(60*60*24)
+	if ctx.Int64("timeout") != 0 {
+		timeout = ctx.Int64("author")
+	}
+	if ttype := ctx.String("timeout_type"); ttype != "" {
+		switch ttype {
+		case "day":
+			timeoutType = fmtrpc.TimeoutType_DAY
+		case "hour":
+			timeoutType = fmtrpc.TimeoutType_HOUR
+		case "minute":
+			timeoutType = fmtrpc.TimeoutType_MINUTE
+		}
+	}
+	var parsedPerms []*fmtrpc.MacaroonPermission
+	for _, perm := range permissions {
+		tuple := strings.Split(perm, ":")
+		if len(tuple) != 2 {
+			return fmt.Errorf("Unable to parse permission tuple: %s", perm)
+		}
+		entity, action := tuple[0], tuple[1]
+		if entity == "" {
+			return fmt.Errorf("Invalid permission %s: entity cannot be empty", perm)
+		}
+		if action == "" {
+			return fmt.Errorf("Invalid permission %s: action cannot be empty", perm)
+		}
+		parsedPerms = append(parsedPerms, &fmtrpc.MacaroonPermission{
+			Entity: entity,
+			Action: action,
+		})
+	}
+	bakeMacReq := &fmtrpc.BakeMacaroonRequest{
+		Timeout: timeout,
+		TimeoutType: timeoutType,
+		Permissions: parsedPerms,
+	}
+	bakeMacResponse, err := client.BakeMacaroon(ctxc, bakeMacReq)
+	if err != nil {
+		return err
+	}
+	if path := ctx.String("save_to"); path != "" {
+		macBytes, err := hex.DecodeString(bakeMacResponse.Macaroon)
+		if err != nil {
+			return err
+		}
+		if !utils.FileExists(path) {
+			file, err := os.Create(path)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+		}
+		err = ioutil.WriteFile(path, macBytes, 0755)
+		if err != nil {
+			_ = os.Remove(path)
+			return err
+		}
+	} 
+	printRespJSON(bakeMacResponse)
 	return nil
 }
