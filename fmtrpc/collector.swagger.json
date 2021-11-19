@@ -16,9 +16,44 @@
     "application/json"
   ],
   "paths": {
+    "/v1/download/{source}": {
+      "get": {
+        "summary": "DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file",
+        "operationId": "DataCollector_DownloadHistoricalData",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcHistoricalDataResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "enum": [
+              "FLUKE",
+              "RGA"
+            ]
+          }
+        ],
+        "tags": [
+          "DataCollector"
+        ]
+      }
+    },
     "/v1/start/recording": {
       "post": {
-        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from Fluke software and writing it.",
+        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from specified service and writing it.",
         "operationId": "DataCollector_StartRecording",
         "responses": {
           "200": {
@@ -50,8 +85,8 @@
       }
     },
     "/v1/stop/recording": {
-      "get": {
-        "summary": "fmtcli: `stop-record`\nStopRecording will end the recording of data from Fluke software.",
+      "post": {
+        "summary": "fmtcli: `stop-record`\nStopRecording will end the recording of data from specified service.",
         "operationId": "DataCollector_StopRecording",
         "responses": {
           "200": {
@@ -67,6 +102,16 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcStopRecRequest"
+            }
+          }
+        ],
         "tags": [
           "DataCollector"
         ]
@@ -118,14 +163,31 @@
         }
       }
     },
+    "fmtrpcHistoricalDataResponse": {
+      "type": "object",
+      "properties": {
+        "server_port": {
+          "type": "string",
+          "format": "int64"
+        },
+        "buffer_size": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
     "fmtrpcRealTimeData": {
       "type": "object",
       "properties": {
+        "source": {
+          "type": "string"
+        },
         "is_scanning": {
           "type": "boolean"
         },
         "timestamp": {
-          "type": "string"
+          "type": "string",
+          "format": "int64"
         },
         "data": {
           "type": "object",
@@ -141,6 +203,9 @@
         "polling_interval": {
           "type": "string",
           "format": "int64"
+        },
+        "type": {
+          "$ref": "#/definitions/fmtrpcRecordService"
         }
       }
     },
@@ -149,6 +214,22 @@
       "properties": {
         "msg": {
           "type": "string"
+        }
+      }
+    },
+    "fmtrpcRecordService": {
+      "type": "string",
+      "enum": [
+        "FLUKE",
+        "RGA"
+      ],
+      "default": "FLUKE"
+    },
+    "fmtrpcStopRecRequest": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/fmtrpcRecordService"
         }
       }
     },

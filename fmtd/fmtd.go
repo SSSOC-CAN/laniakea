@@ -33,10 +33,12 @@ import (
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bolt "go.etcd.io/bbolt"
@@ -56,6 +58,10 @@ var (
 			Entity: "macaroon",
 			Action: "read",
 		},
+		{
+			Entity: "tpex",
+			Action: "read",
+		},
 	}
 	writePermissions = []bakery.Op{
 		{
@@ -70,12 +76,17 @@ var (
 			Entity: "macaroon",
 			Action: "write",
 		},
+		{
+			Entity: "tpex",
+			Action: "write",
+		},
 	}
 	tempPwd = []byte("abcdefgh")
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
+	var services []data.Service
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -85,12 +96,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg("Could not start server")
 		return err
 	}
-	server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
+	// server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
 	defer server.Stop()
 
 	// Get TLS config
 	server.logger.Info().Msg("Loading TLS configuration...")
-	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath)
+	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath, server.cfg.ExtraIPAddr)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Could not load TLS configuration: %v", err))
 		return err
@@ -98,7 +109,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("TLS configuration successfully loaded.")
 	defer cleanUp()
 
-	// Starting RPC server
+	// Instantiating RPC server
 	rpcServer, err := NewRpcServer(interceptor, server.cfg, server.logger)
 	if err != nil {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize RPC server: %v", err))
@@ -114,6 +125,17 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_server := grpc.NewServer(serverOpts...)
 	rpcServer.AddGrpcServer(grpc_server)
 
+	// Instantiate RTD Service
+	server.logger.Info().Msg("Instantiating RTD subservice...")
+	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, server.cfg.TCPAddr, server.cfg.TCPPort)
+	err = rtdService.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
+		return err
+	}
+	services = append(services, rtdService)
+	server.logger.Info().Msg("RTD service instantiated.")
+
 	// Instantiate Fluke service and register with gRPC server but NOT start
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
 	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
@@ -121,11 +143,33 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
 		return err
 	}
-	err = flukeService.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	flukeService.RegisterWithRTDService(rtdService)
+	services = append(services, flukeService)
+
+	// Instantiate RGA service and register with gRPC server and Fluke Service but NOT start
+	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate RGA service: %v", err))
+		return err
+	}
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
 		return err
 	}
+	rgaService.RegisterWithRTDService(rtdService)
+	rgaService.RegisterWithFlukeService(flukeService)
+	services = append(services, rgaService)
+
+	// Instantiate Test Plan Executor and register with gRPC server but NOT start
+	testPlanExecutor := testplan.NewTestPlanService(
+		&NewSubLogger(server.logger, "TPEX").SubLogger,
+		server.cfg.TLSCertPath,
+		server.cfg.AdminMacPath,
+		server.cfg.GrpcPort,
+	)
+	testPlanExecutor.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	services = append(services, testPlanExecutor)
+
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
 	// Starting bbolt kvdb
@@ -216,14 +260,17 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
+	rpcServer.AddMacaroonService(macaroonService)
 
-	// Start Recording Data from Fluke
-	err = flukeService.Start()
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to start Fluke service: %v", err))
-		return err
+	// Starting services TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
+	for _, s := range services {
+		err = s.Start()
+		if err != nil {
+			server.logger.Error().Msg(fmt.Sprintf("Unable to start %S service: %v", s.Name(), err))
+			return err
+		}
+		defer s.Stop()
 	}
-	defer flukeService.Stop()
 	
 	<-interceptor.ShutdownChannel()
 	return nil

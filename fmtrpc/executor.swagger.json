@@ -1,12 +1,12 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "fmt.proto",
+    "title": "executor.proto",
     "version": "version not set"
   },
   "tags": [
     {
-      "name": "Fmt"
+      "name": "TestPlanExecutor"
     }
   ],
   "consumes": [
@@ -16,38 +16,15 @@
     "application/json"
   ],
   "paths": {
-    "/v1/admin/test": {
-      "get": {
-        "summary": "fmtcli: `admin-test`\nAdminTest will send a string response if the proper macaroon is provided.",
-        "operationId": "Fmt_AdminTest",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/fmtrpcAdminTestResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "tags": [
-          "Fmt"
-        ]
-      }
-    },
-    "/v1/bake/macaroon": {
+    "/v1/insert/roi": {
       "post": {
-        "summary": "fmtcli: `bake-macaroon`\nBakeMacaroon will bake a new macaroon based on input permissions and constraints.",
-        "operationId": "Fmt_BakeMacaroon",
+        "summary": "fmtcli: `insert-roi`\nInsertROIMarker will insert a Region of Interest (ROI) marker within the test report based on given parameters.",
+        "operationId": "TestPlanExecutor_InsertROIMarker",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcBakeMacaroonResponse"
+              "$ref": "#/definitions/fmtrpcInsertROIResponse"
             }
           },
           "default": {
@@ -63,24 +40,24 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/fmtrpcBakeMacaroonRequest"
+              "$ref": "#/definitions/fmtrpcInsertROIRequest"
             }
           }
         ],
         "tags": [
-          "Fmt"
+          "TestPlanExecutor"
         ]
       }
     },
-    "/v1/stop": {
-      "post": {
-        "summary": "fmtcli: `stop`\nStopDaemon will send a shutdown request to the interrupt handler, triggering\na graceful shutdown of the daemon.",
-        "operationId": "Fmt_StopDaemon",
+    "/v1/load/testplan/{path_to_file}": {
+      "get": {
+        "summary": "fmtcli: `load-test`\nLoadTestPlan will load the inputted test plan and ensure the FMT can currently run it.",
+        "operationId": "TestPlanExecutor_LoadTestPlan",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcStopResponse"
+              "$ref": "#/definitions/fmtrpcLoadTestPlanResponse"
             }
           },
           "default": {
@@ -92,28 +69,26 @@
         },
         "parameters": [
           {
-            "name": "body",
-            "in": "body",
+            "name": "path_to_file",
+            "in": "path",
             "required": true,
-            "schema": {
-              "$ref": "#/definitions/fmtrpcStopRequest"
-            }
+            "type": "string"
           }
         ],
         "tags": [
-          "Fmt"
+          "TestPlanExecutor"
         ]
       }
     },
-    "/v1/test": {
+    "/v1/start/testplan": {
       "get": {
-        "summary": "fmtcli: `test`\nTestCommand will send a string response regardless if a macaroon is provided or not.",
-        "operationId": "Fmt_TestCommand",
+        "summary": "fmtcli: `start-test`\nStartTestPlan will start the loaded test plan. This will automatically start recording from services as need be.",
+        "operationId": "TestPlanExecutor_StartTestPlan",
         "responses": {
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcTestResponse"
+              "$ref": "#/definitions/fmtrpcStartTestPlanResponse"
             }
           },
           "default": {
@@ -124,13 +99,50 @@
           }
         },
         "tags": [
-          "Fmt"
+          "TestPlanExecutor"
+        ]
+      }
+    },
+    "/v1/stop/testplan": {
+      "get": {
+        "summary": "fmtcli: `stop-test`\nStopTestPlan will stop the currently running test plan. This will automatically stop all data recording.",
+        "operationId": "TestPlanExecutor_StopTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcStopTestPlanResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "TestPlanExecutor"
         ]
       }
     }
   },
   "definitions": {
-    "fmtrpcAdminTestResponse": {
+    "fmtrpcInsertROIRequest": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "report_lvl": {
+          "$ref": "#/definitions/fmtrpcReportLvl"
+        },
+        "author": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcInsertROIResponse": {
       "type": "object",
       "properties": {
         "msg": {
@@ -138,50 +150,7 @@
         }
       }
     },
-    "fmtrpcBakeMacaroonRequest": {
-      "type": "object",
-      "properties": {
-        "timeout": {
-          "type": "string",
-          "format": "int64"
-        },
-        "timeout_type": {
-          "$ref": "#/definitions/fmtrpcTimeoutType"
-        },
-        "permissions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/fmtrpcMacaroonPermission"
-          }
-        }
-      }
-    },
-    "fmtrpcBakeMacaroonResponse": {
-      "type": "object",
-      "properties": {
-        "macaroon": {
-          "type": "string"
-        }
-      }
-    },
-    "fmtrpcMacaroonPermission": {
-      "type": "object",
-      "properties": {
-        "entity": {
-          "type": "string"
-        },
-        "action": {
-          "type": "string"
-        }
-      }
-    },
-    "fmtrpcStopRequest": {
-      "type": "object"
-    },
-    "fmtrpcStopResponse": {
-      "type": "object"
-    },
-    "fmtrpcTestResponse": {
+    "fmtrpcLoadTestPlanResponse": {
       "type": "object",
       "properties": {
         "msg": {
@@ -189,15 +158,32 @@
         }
       }
     },
-    "fmtrpcTimeoutType": {
+    "fmtrpcReportLvl": {
       "type": "string",
       "enum": [
-        "SECOND",
-        "MINUTE",
-        "HOUR",
-        "DAY"
+        "INFO",
+        "ERROR",
+        "DEBUG",
+        "WARN",
+        "FATAL"
       ],
-      "default": "SECOND"
+      "default": "INFO"
+    },
+    "fmtrpcStartTestPlanResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
+    },
+    "fmtrpcStopTestPlanResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string"
+        }
+      }
     },
     "protobufAny": {
       "type": "object",
