@@ -8,7 +8,9 @@ import (
 	"os"
 	"net"
 	"strconv"
+	"sync"
 	"sync/atomic"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"google.golang.org/grpc"
@@ -38,17 +40,30 @@ type StateChangeMsg struct {
 	ErrMsg	error
 	Msg		string
 }
+type ThreadSafeMap struct {
+	Lock 		sync.RWMutex
+	ListenerIds	map[string]struct{}
+} 
+
+type BufferItem struct {
+	Data 				*fmtrpc.RealTimeData
+	ListenerIDs			*ThreadSafeMap
+}
 
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
 	Running				int32 // used atomically
-	Stopping			int32
+	Stopping			int32 // used atomically
 	Listeners			int32 // used atomically
 	TCPRunning			int32 // used atomically
+	DataReceiverRunning	int32 // used atomically
 	TCPPort				int64
 	TCPAddr				string
 	Logger				*zerolog.Logger
 	DataProviderChan	chan *fmtrpc.RealTimeData
+	CancelChan			chan struct{}
+	dataBuffer			[]*BufferItem
+	listenerIDs			*ThreadSafeMap
 	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
 	ServiceBroadStates	map[string]bool
@@ -61,10 +76,12 @@ type RTDService struct {
 func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64) *RTDService {
 	return &RTDService{
 		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
+		CancelChan:			make(chan struct{}),
 		ServiceRecStates: 	make(map[string]bool),
 		ServiceBroadStates: make(map[string]bool),
 		StateChangeChans: 	make(map[string]chan *StateChangeMsg),
 		ServiceFilePaths:	make(map[fmtrpc.RecordService]string),
+		listenerIDs:		&ThreadSafeMap{Lock: sync.RWMutex{}, ListenerIds: make(map[string]struct{})},
 		Logger: log,
 		name: RtdName,
 		TCPAddr: tcpAddr,
@@ -98,6 +115,7 @@ func (s *RTDService) Stop() error {
 	for _, channel := range s.StateChangeChans {
 		close(channel)
 	}
+	close(s.CancelChan)
 	s.Logger.Info().Msg("RTD Service stopped.")
 	return nil
 }
@@ -169,62 +187,122 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 	}, nil
 }
 
-// SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
-func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
-	s.Logger.Info().Msg("Have a new data listener.")
-	_ = atomic.AddInt32(&s.Listeners, 1)
+// updateServiceBroadcastingState updates the broadcasting state of all registered services
+func (s *RTDService) updateServiceBroadcastingState(state bool) error {
 	for name, channel := range s.StateChangeChans {
 		if !s.ServiceBroadStates[name] {
-			channel <- &StateChangeMsg{Type: BROADCASTING, State: true, ErrMsg: nil}
+			channel <- &StateChangeMsg{Type: BROADCASTING, State: state, ErrMsg: nil}
 			resp := <- channel
 			if resp.ErrMsg != nil {
 				s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
 				return resp.ErrMsg
 			}
-			s.ServiceBroadStates[name] = true
+			s.ServiceBroadStates[name] = state
 		}
 	}
+	return nil
+}
+
+// listenForData is run as a goroutine to listen for all new RTD objects from Data providers and store them in a buffer
+func (s *RTDService) listenForData() {
 	for {
 		select {
 		case RTD := <-s.DataProviderChan:
-			if err := updateStream.Send(RTD); err != nil {
-				_ = atomic.AddInt32(&s.Listeners, -1)
-				if atomic.LoadInt32(&s.Listeners) == 0 {
-					for name, channel := range s.StateChangeChans {
-						if s.ServiceBroadStates[name] {
-							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-							resp := <- channel
-							if resp.ErrMsg != nil {
-								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-								return resp.ErrMsg
-							}
-						}
-						s.ServiceBroadStates[name] = false
-					}
-				}
-				return err
+			s.dataBuffer = append(s.dataBuffer, &BufferItem{Data: RTD, ListenerIDs: &ThreadSafeMap{Lock: sync.RWMutex{}, ListenerIds: make(map[string]struct{})}})
+		case <-s.CancelChan:
+			s.Logger.Info().Msg("Shuttind down data receiver goroutine...")
+			if ok := atomic.CompareAndSwapInt32(&s.DataReceiverRunning, 1, 0); !ok {
+				s.Logger.Error().Msg("Starting could not stop data receiver goroutine: already stopped.")
 			}
+			s.Logger.Info().Msg("data receiver goroutine stopped.")
+			return
+		default:
+			var newBuf []*BufferItem
+			for _, buf := range s.dataBuffer {
+				canDelete := true
+				s.listenerIDs.Lock.RLock()
+				for id, _ := range s.listenerIDs.ListenerIds {
+					// if an ID from the registered list of IDs is not in the buf signatures, then we can't delete this item as it hasn't been sent off yet
+					buf.ListenerIDs.Lock.RLock()
+					if _, ok := buf.ListenerIDs.ListenerIds[id]; !ok {
+						canDelete = false
+						break
+					}
+					buf.ListenerIDs.Lock.RUnlock()
+				}
+				s.listenerIDs.Lock.RUnlock()
+				if !canDelete {
+					newBuf = append(newBuf, buf)
+				}
+			}
+			s.dataBuffer = newBuf
+		}
+	}
+}
+
+// SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
+func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
+	s.Logger.Info().Msg("Have a new data listener.")
+	_ = atomic.AddInt32(&s.Listeners, 1)
+	listenerId := uuid.New().String()
+	s.listenerIDs.Lock.Lock()
+	s.listenerIDs.ListenerIds[listenerId] = struct{}{}
+	s.listenerIDs.Lock.Unlock()
+	if ok := atomic.CompareAndSwapInt32(&s.DataReceiverRunning, 0, 1); ok {
+		s.Logger.Info().Msg("Starting data receiver goroutine...")
+		go s.listenForData()
+		s.Logger.Info().Msg("Data receiver goroutine started.")
+	}
+	err := s.updateServiceBroadcastingState(true)
+	if err != nil {
+		return err
+	}
+	for {
+		select {		
 		case <-updateStream.Context().Done():
 			_ = atomic.AddInt32(&s.Listeners, -1)
+			s.listenerIDs.Lock.Lock()
+			delete(s.listenerIDs.ListenerIds, listenerId)
+			s.listenerIDs.Lock.Unlock()
 			if atomic.LoadInt32(&s.Listeners) == 0 {
 				if atomic.LoadInt32(&s.Stopping) == 0 {
-					for name, channel := range s.StateChangeChans {
-						if s.ServiceBroadStates[name] {
-							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-							resp := <- channel
-							if resp.ErrMsg != nil {
-								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-								return resp.ErrMsg
-							}
-						}
-						s.ServiceBroadStates[name] = false
+					err := s.updateServiceBroadcastingState(false)
+					if err != nil {
+						return err
 					}
+					s.CancelChan<-struct{}{}
 				}
 			}
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil
 			}
 			return updateStream.Context().Err()
+		default:
+			if len(s.dataBuffer) > 0 {
+				// check if this listener has sent the item in the first index
+				s.dataBuffer[0].ListenerIDs.Lock.RLock()
+				if _, ok := s.dataBuffer[0].ListenerIDs.ListenerIds[listenerId]; !ok {
+					if err := updateStream.Send(s.dataBuffer[0].Data); err != nil {
+						_ = atomic.AddInt32(&s.Listeners, -1)
+						s.listenerIDs.Lock.Lock()
+						delete(s.listenerIDs.ListenerIds, listenerId)
+						s.listenerIDs.Lock.Unlock()
+						if atomic.LoadInt32(&s.Listeners) == 0 {
+							err := s.updateServiceBroadcastingState(false)
+							if err != nil {
+								return err
+							}
+							s.CancelChan<-struct{}{}
+						}
+						return err
+					} else {
+						s.dataBuffer[0].ListenerIDs.Lock.Lock()
+						s.dataBuffer[0].ListenerIDs.ListenerIds[listenerId] = struct{}{}
+						s.dataBuffer[0].ListenerIDs.Lock.Unlock()
+					}
+				}
+				s.dataBuffer[0].ListenerIDs.Lock.RUnlock()
+			}
 		}
 	}
 }
