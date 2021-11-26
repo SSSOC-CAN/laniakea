@@ -340,9 +340,17 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 		reading := s.connection.ReadItem(s.tagMap[i].tag)
 		if i != 0 {
 			if atomic.LoadInt32(&s.Broadcasting) == 1 {
-				dataField[int64(i)]= &fmtrpc.DataField{
-					Name: s.tagMap[i].name,
-					Value: reading.Value.(float64),
+				switch v := reading.Value.(type) {
+				case float64:
+					dataField[int64(i)]= &fmtrpc.DataField{
+						Name: s.tagMap[i].name,
+						Value: v,
+					}
+				case float32:
+					dataField[int64(i)]= &fmtrpc.DataField{
+						Name: s.tagMap[i].name,
+						Value: float64(v),
+					}
 				}
 			}
 			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
