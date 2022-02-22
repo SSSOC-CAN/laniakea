@@ -37,11 +37,11 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
-	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -140,9 +140,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
-	// Starting bbolt kvdb
+	// Starting kvdb
 	server.logger.Info().Msg("Opening database...")
-	db, err := bolt.Open(server.cfg.MacaroonDBPath, 0755, nil)
+	db, err := kvdb.NewDB(server.cfg.MacaroonDBPath)
 	if err != nil {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize Macaroon DB: %v", err))
 		return err
@@ -152,7 +152,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiate Unlocker Service and register with gRPC server
 	server.logger.Info().Msg("Initializing unlocker service...")
-	unlockerService, err := unlocker.InitUnlockerService(*db)
+	unlockerService, err := unlocker.InitUnlockerService(db, []string{server.cfg.AdminMacPath, server.cfg.TestMacPath})
 	if err != nil {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize unlocker service: %v", err))
 		return err

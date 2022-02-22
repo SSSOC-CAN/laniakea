@@ -28,8 +28,8 @@ import (
 	"path"
 	"reflect"
 	"testing"
+	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/btcsuite/btcwallet/snacl"
-	bolt "go.etcd.io/bbolt"
 )
 
 // createDummyRootKeyStore returns a temporary directory, a cleanup function and an instantiated RootKeyStorage
@@ -38,7 +38,7 @@ func createDummyRootKeyStorage(t *testing.T) (string, func(), *RootKeyStorage) {
 	if err != nil {
 		t.Fatalf("Error creating temporary directory: %v", err)
 	}
-	db, err := bolt.Open(path.Join(tempDir, "macaroon.db"), 0755, nil)
+	db, err := kvdb.NewDB(path.Join(tempDir, "macaroon.db"))
 	if err != nil {
 		t.Fatalf("Could not create macaroon.db in temporary directory: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestStorage(t *testing.T) {
 	cleanUp()
 
 	// Try reopening
-	db, err := bolt.Open(path.Join(tempDir, "macaroon.db"), 0755, nil)
+	db, err := kvdb.NewDB(path.Join(tempDir, "macaroon.db"))
 	if err != nil {
 		t.Fatalf("Could not create/open macaroon.db in temporary directory: %v", err)
 	}

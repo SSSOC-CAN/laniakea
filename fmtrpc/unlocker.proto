@@ -23,7 +23,6 @@ message LoginRequest {
     bytes password = 1;
 }
 message LoginResponse {
-    string msg = 1;
 }
 message SetPwdRequest {
     bytes password = 1;
