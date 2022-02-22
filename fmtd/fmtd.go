@@ -49,38 +49,6 @@ import (
 )
 
 var (
-	readPermissions = []bakery.Op{
-		{
-			Entity: "fmtd",
-			Action: "read",
-		},
-		{
-			Entity: "macaroon",
-			Action: "read",
-		},
-		{
-			Entity: "tpex",
-			Action: "read",
-		},
-	}
-	writePermissions = []bakery.Op{
-		{
-			Entity: "fmtd",
-			Action: "write",
-		},
-		{
-			Entity: "macaroon",
-			Action: "generate",
-		},
-		{
-			Entity: "macaroon",
-			Action: "write",
-		},
-		{
-			Entity: "tpex",
-			Action: "write",
-		},
-	}
 	tempPwd = []byte("abcdefgh")
 )
 
@@ -119,7 +87,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Creating gRPC server and Server options
 	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, false)
-	err = grpc_interceptor.AddPermissions(intercept.MainGrpcServerPermissions())
+	err = grpc_interceptor.AddPermissions(MainGrpcServerPermissions())
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
 	serverOpts = append(serverOpts, rpcServerOpts...)
 	grpc_server := grpc.NewServer(serverOpts...)
@@ -213,11 +181,13 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer stopProxy()
 
 	// Wait for password
+	grpc_interceptor.SetDaemonLocked()
 	server.logger.Info().Msg("Waiting for password. Use `fmtcli login` to login.")
 	pwd, err := waitForPassword(unlockerService, interceptor.ShutdownChannel())
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
 	}
+	grpc_interceptor.SetDaemonUnlocked()
 	server.logger.Info().Msg("Login successful")
 
 	// Instantiating Macaroon Service
@@ -271,6 +241,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		}
 		defer s.Stop()
 	}
+
+	// Change RPC state to active
+	grpc_interceptor.SetRPCActive()
 	
 	<-interceptor.ShutdownChannel()
 	return nil

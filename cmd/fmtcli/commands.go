@@ -63,10 +63,6 @@ func printRespJSON(resp proto.Message) {
 		Indent:        "    ",
 	}
 	jsonStr := jsonMarshaler.Format(resp)
-	// if err != nil {
-	// 	fmt.Println("Unable to decode response: ", err)
-	// 	return
-	// }
 	fmt.Println(jsonStr)
 }
 
@@ -81,7 +77,7 @@ var stopCommand = cli.Command{
 // stopDaemon is the proxy command between fmtcli and gRPC equivalent.
 func stopDaemon(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient() //This command returns the proto generated FmtClient instance
+	client, cleanUp := getFmtClient(ctx) //This command returns the proto generated FmtClient instance
 	defer cleanUp()
 
 	_, err := client.StopDaemon(ctxc, &fmtrpc.StopRequest{})
@@ -102,7 +98,7 @@ var adminTestCommand = cli.Command{
 // Proxy command for the fmtcli
 func adminTest(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient()
+	client, cleanUp := getFmtClient(ctx)
 	defer cleanUp()
 	testResp, err := client.AdminTest(ctxc, &fmtrpc.AdminTestRequest{})
 	if err != nil {
@@ -123,7 +119,7 @@ var testCommand = cli.Command{
 // Proxy command for the fmtcli
 func test(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getFmtClient()
+	client, cleanUp := getFmtClient(ctx)
 	defer cleanUp()
 	testResp, err := client.TestCommand(ctxc, &fmtrpc.TestRequest{})
 	if err != nil {
@@ -152,7 +148,7 @@ var loginCommand = cli.Command{
 // login is the wrapper around the UnlockerClient.Login method
 func login(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getUnlockerClient()
+	client, cleanUp := getUnlockerClient(ctx)
 	defer cleanUp()
 	pw, err := readPasswordFromTerminal("Input password: ")
 	if err != nil {
@@ -192,7 +188,7 @@ func startRecord(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
 		return cli.ShowCommandHelp(ctx, "start-record")
 	}
-	client, cleanUp := getDataCollectorClient()
+	client, cleanUp := getDataCollectorClient(ctx)
 	defer cleanUp()
 	var polling_interval int64
 	serviceNameStr := ctx.Args().First()
@@ -237,7 +233,7 @@ func stopRecord(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
 		return cli.ShowCommandHelp(ctx, "stop-record")
 	}
-	client, cleanUp := getDataCollectorClient()
+	client, cleanUp := getDataCollectorClient(ctx)
 	defer cleanUp()
 	serviceNameStr := ctx.Args().First()
 	var serviceName fmtrpc.RecordService
@@ -272,7 +268,7 @@ func loadPlan(ctx *cli.Context) error {
 	if ctx.NArg() != 1 {
 		return cli.ShowCommandHelp(ctx, "load-testplan")
 	}
-	client, cleanUp := getTestPlanExecutorClient()
+	client, cleanUp := getTestPlanExecutorClient(ctx)
 	defer cleanUp()
 	testPlanFilePath := ctx.Args().First()
 	loadPlanReq := &fmtrpc.LoadTestPlanRequest{
@@ -297,7 +293,7 @@ var startTestPlan = cli.Command{
 // startPlan is the CLI wrapper for the Test Plan Executor method StartTestPlan 
 func startPlan(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getTestPlanExecutorClient()
+	client, cleanUp := getTestPlanExecutorClient(ctx)
 	defer cleanUp()
 	startPlanResponse, err := client.StartTestPlan(ctxc, &fmtrpc.StartTestPlanRequest{})
 	if err != nil {
@@ -318,7 +314,7 @@ var stopTestPlan = cli.Command{
 // stopPlan is the CLI wrapper for the Test Plan Executor method StopTestPlan 
 func stopPlan(ctx *cli.Context) error {
 	ctxc := getContext()
-	client, cleanUp := getTestPlanExecutorClient()
+	client, cleanUp := getTestPlanExecutorClient(ctx)
 	defer cleanUp()
 	stopPlanResponse, err := client.StopTestPlan(ctxc, &fmtrpc.StopTestPlanRequest{})
 	if err != nil {
@@ -359,7 +355,7 @@ func insertROI(ctx *cli.Context) error {
 	if ctx.NArg() != 1 || ctx.NumFlags() > 2 {
 		return cli.ShowCommandHelp(ctx, "insert-roi")
 	}
-	client, cleanUp := getTestPlanExecutorClient()
+	client, cleanUp := getTestPlanExecutorClient(ctx)
 	defer cleanUp()
 	markerText := ctx.Args().First()
 	reportLvl := fmtrpc.ReportLvl_INFO
@@ -431,7 +427,7 @@ func bakeMac(ctx *cli.Context) error {
 	if ctx.NArg() < 1 || ctx.NumFlags() > 3 {
 		return cli.ShowCommandHelp(ctx, "bake-macaroon")
 	}
-	client, cleanUp := getFmtClient()
+	client, cleanUp := getFmtClient(ctx)
 	defer cleanUp()
 	permissions := ctx.Args()
 	timeoutType := fmtrpc.TimeoutType_SECOND

@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"strconv"
 	"syscall"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -17,8 +16,8 @@ var (
 	maxMsgRecvSize = grpc.MaxCallRecvMsgSize(1 * 1024 * 1024 * 200)
 )
 
-// GetClientConn returns the grpc Client connection for use in instantiating FmtClient
-func GetClientConn(tlsCertPath, adminMacPath string, skipMacaroons bool, macaroon_timeout, grpcPort int64) (*grpc.ClientConn, error) {
+// GetClientConn returns the grpc Client connection for use in instantiating gRPC Clients
+func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath string, skipMacaroons bool, macaroon_timeout int64) (*grpc.ClientConn, error) {
 	//get TLS credentials from TLS certificate file
 	creds, err := credentials.NewClientTLSFromFile(tlsCertPath, "")
 	if err != nil {
@@ -34,7 +33,7 @@ func GetClientConn(tlsCertPath, adminMacPath string, skipMacaroons bool, macaroo
 			return nil, fmt.Errorf("Could not read macaroon at %v: %v", adminMacPath, err)
 		}
 		macHex := hex.EncodeToString(adminMac)
-		mac, err := loadMacaroon(readPassword, macHex)
+		mac, err := loadMacaroon(ReadPassword, macHex)
 		if err != nil {
 			return nil, fmt.Errorf("Could not load macaroon; %v", err)
 		}
@@ -49,18 +48,19 @@ func GetClientConn(tlsCertPath, adminMacPath string, skipMacaroons bool, macaroo
 		cred := macaroons.NewMacaroonCredential(constrainedMac)
 		opts = append(opts, grpc.WithPerRPCCredentials(cred))
 	}
-	genericDialer := utils.ClientAddressDialer(strconv.FormatInt(grpcPort, 10))
+	genericDialer := utils.ClientAddressDialer(grpcServerPort)
 	opts = append(opts, grpc.WithContextDialer(genericDialer))
 	opts = append(opts, grpc.WithDefaultCallOptions(maxMsgRecvSize))
-	conn, err := grpc.Dial("localhost:"+strconv.FormatInt(grpcPort, 10), opts...)
+	conn, err := grpc.Dial(grpcServerAddr+":"+grpcServerPort, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to connect to RPC server: %v", err)
 	}
 	return conn, nil
 }
 
-// readPassword prompts the user for a password in the command line
-func readPassword(text string) ([]byte, error) {
+
+// ReadPassword prompts the user for a password in the command line
+func ReadPassword(text string) ([]byte, error) {
 	fmt.Print(text)
 	pw, err := terminal.ReadPassword(int(syscall.Stdin))
 	fmt.Println()

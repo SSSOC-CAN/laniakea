@@ -40,9 +40,91 @@ import (
 )
 
 var (
+	readPermissions = []bakery.Op{
+		{
+			Entity: "fmtd",
+			Action: "read",
+		},
+		{
+			Entity: "macaroon",
+			Action: "read",
+		},
+		{
+			Entity: "tpex",
+			Action: "read",
+		},
+	}
+	writePermissions = []bakery.Op{
+		{
+			Entity: "fmtd",
+			Action: "write",
+		},
+		{
+			Entity: "macaroon",
+			Action: "generate",
+		},
+		{
+			Entity: "macaroon",
+			Action: "write",
+		},
+		{
+			Entity: "tpex",
+			Action: "write",
+		},
+	}
 	validActions = []string{"read", "write"}
 	validEntities = []string{"fmtd", "macaroon", "tpex", macaroons.PermissionEntityCustomURI}
 )
+
+// MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
+func MainGrpcServerPermissions() map[string][]bakery.Op {
+	return map[string][]bakery.Op{
+		"/fmtrpc.Fmt/StopDaemon": {{
+			Entity: "fmtd",
+			Action:	"write",
+		}},
+		"/fmtrpc.Fmt/AdminTest": {{
+			Entity: "fmtd",
+			Action: "read",
+		}},
+		"/fmtrpc.DataCollector/StartRecording": {{
+			Entity: "fmtd",
+			Action: "write",
+		}},
+		"/fmtrpc.DataCollector/StopRecording": {{
+			Entity: "fmtd",
+			Action: "write",
+		}},
+		"/fmtrpc.DataCollector/SubscribeDataStream": {{
+			Entity: "fmtd",
+			Action: "read",
+		}},
+		"/fmtrpc.DataCollector/DownloadHistoricalData": {{
+			Entity: "fmtd",
+			Action: "read",
+		}},
+		"/fmtrpc.TestPlanExecutor/LoadTestPlan": {{
+			Entity: "tpex",
+			Action: "write",
+		}},
+		"/fmtrpc.TestPlanExecutor/StartTestPlan": {{
+			Entity: "tpex",
+			Action: "write",
+		}},
+		"/fmtrpc.TestPlanExecutor/StopTestPlan": {{
+			Entity: "tpex",
+			Action: "write",
+		}},
+		"/fmtrpc.TestPlanExecutor/InsertROIMarker": {{
+			Entity: "tpex",
+			Action:	"write",
+		}},
+		"/fmtrpc.Fmt/BakeMacaroon": {{
+			Entity: "macaroon",
+			Action: "write",
+		}},
+	}
+}
 
 // RpcServer is a child of the fmtrpc.UnimplementedFmtServer struct. Meant to host all related attributes to the rpcserver
 type RpcServer struct {
@@ -165,7 +247,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			return nil, fmt.Errorf("Could not bake macaroon: invalid permission entity")
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
-			allPermissions := intercept.MainGrpcServerPermissions()
+			allPermissions := MainGrpcServerPermissions()
 			if _, ok := allPermissions[op.Action]; !ok {
 				return nil, fmt.Errorf("Could not bake macaroon: %s is not a valid action", op.Action)
 			}
