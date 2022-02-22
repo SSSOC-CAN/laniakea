@@ -152,6 +152,8 @@ func main() {
 		adminTestCommand,
 		testCommand,
 		loginCommand,
+		setPassword,
+		changePassword,
 		startRecording,
 		stopRecording,
 		loadTestPlan,

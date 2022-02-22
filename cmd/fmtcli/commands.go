@@ -129,42 +129,6 @@ func test(ctx *cli.Context) error {
 	return nil
 }
 
-// readPasswordFromTerminal will prompt the user on the terminal with the msg string and return the response
-func readPasswordFromTerminal(msg string) ([]byte, error) {
-	fmt.Print(msg)
-	pw, err := terminal.ReadPassword(int(syscall.Stdin))
-	fmt.Println()
-	return pw, err
-}
-
-var loginCommand = cli.Command{
-	Name:  "login",
-	Usage: "Login into the FMTD",
-	Description: `
-	When invoked, user will be prompted to enter a password. Either create one or use an existing one.`,
-	Action: login,
-}
-
-// login is the wrapper around the UnlockerClient.Login method
-func login(ctx *cli.Context) error {
-	ctxc := getContext()
-	client, cleanUp := getUnlockerClient(ctx)
-	defer cleanUp()
-	pw, err := readPasswordFromTerminal("Input password: ")
-	if err != nil {
-		return err
-	}
-	loginReq := &fmtrpc.LoginRequest{
-		Password: pw,
-	}
-	loginResp, err := client.Login(ctxc, loginReq)
-	if err != nil {
-		return err
-	}
-	printRespJSON(loginResp)
-	return nil
-}
-
 var startRecording = cli.Command{
 	Name:  "start-record",
 	Usage: "Start recording data in realtime.",

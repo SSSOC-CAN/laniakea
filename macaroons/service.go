@@ -25,7 +25,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	bolt "go.etcd.io/bbolt"
+	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"google.golang.org/grpc/metadata"
 	macaroon "gopkg.in/macaroon.v2"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -34,7 +34,7 @@ import (
 
 var (
 	PermissionEntityCustomURI = "uri"
-	ErrMissingRootKeyID = fmt.Errorf("Missing root key ID")
+	ErrMissingRootKeyID 	  = fmt.Errorf("Missing root key ID")
 )
 
 type MacaroonValidator interface {
@@ -49,7 +49,7 @@ type Service struct {
 }
 
 // InitService returns initializes the rootkeystorage for the Macaroon service and returns the initialized service
-func InitService(db bolt.DB, location string, checks ...Checker) (*Service, error) {
+func InitService(db kvdb.DB, location string, checks ...Checker) (*Service, error) {
 	rks, err := InitRootKeyStorage(db)
 	if err != nil {
 		return nil, err
@@ -178,4 +178,9 @@ func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, noCaveats b
 		return s.Oven.NewMacaroon(ctx, bakery.LatestVersion, nil, ops...)
 	}
 	return s.Oven.NewMacaroon(ctx, bakery.LatestVersion, cav, ops...)
+}
+
+// ChangePassword calls the underlying root key store's ChangePassword and returns the result.
+func (svc *Service) ChangePassword(oldPw, newPw []byte) error {
+	return svc.rks.ChangePassword(oldPw, newPw)
 }

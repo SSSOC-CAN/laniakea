@@ -28,7 +28,7 @@ import (
 	"os"
 	"path"
 	"testing"
-	bolt "go.etcd.io/bbolt"
+	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"google.golang.org/grpc/metadata"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
@@ -51,7 +51,7 @@ func createDummyRootKeyStore(t *testing.T) (string, *bolt.DB) {
 	if err != nil {
 		t.Fatalf("Error creating temporary directory: %v", err)
 	}
-	db, err := bolt.Open(path.Join(tempDir, "macaroon.db"), 0755, nil)
+	db, err := kvdb.NewDB(path.Join(tempDir, "macaroon.db"))
 	if err != nil {
 		t.Fatalf("Could not create macaroon.db in temporary directory: %v", err)
 	}
