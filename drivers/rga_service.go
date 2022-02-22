@@ -239,10 +239,16 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			}
 		}
 	}
-	err = writer.Write(dataString)
-	if err != nil {
-		return err
-	}
+	//Write to csv in go routine
+	errChan := make(chan error)
+	go func(echan chan error) {
+		err := writer.Write(dataString)
+		if err != nil {
+			echan<-err
+		}
+		echan<-nil
+	}(errChan)
+
 	if atomic.LoadInt32(&s.Broadcasting) == 1 {
 		dataFrame := &fmtrpc.RealTimeData{
 			Source: s.name,
@@ -251,6 +257,9 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			Data: dataField,
 		}
 		s.OutputChan <- dataFrame // may need to go into a goroutine
+	}
+	if err := <-errChan; err != nil {
+		return err
 	}
 	return nil
 }
