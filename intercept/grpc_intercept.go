@@ -50,8 +50,10 @@ var (
 
 	// List of commands that don't need macaroons
 	macaroonWhitelist = map[string]struct{}{
-		"/fmtrpc.Fmt/TestCommand":	{},
-		"/fmtrpc.Unlocker/Login":	{}, //don't need a macaroon to login because succesful login will create macaroons
+		"/fmtrpc.Fmt/TestCommand":		   {},
+		"/fmtrpc.Unlocker/Login":		   {}, //don't need a macaroon to login because succesful login will create macaroons
+		"/fmtrpc.Unlocker/SetPassword":    {},
+		"/fmtrpc.Unlocker/ChangePassword": {},
 	}
 )
 

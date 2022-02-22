@@ -27,7 +27,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"sync"
 	"github.com/btcsuite/btcwallet/snacl"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	bolt "go.etcd.io/bbolt"

@@ -20,14 +20,10 @@ package main
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
-	"io/ioutil"
-	"os"
 
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/urfave/cli"
 )
 
@@ -51,9 +47,8 @@ func setPwd(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := client.SetPassword(ctxc, &fmtrpc.SetPwdRequest{
+	_, err = client.SetPassword(ctxc, &fmtrpc.SetPwdRequest{
 		Password:      pwd,
-		StatelessInit: statelessInit,
 	})
 	if err != nil {
 		return err
@@ -82,7 +77,7 @@ func login(ctx *cli.Context) error {
 	loginReq := &fmtrpc.LoginRequest{
 		Password: pwd,
 	}
-	_, err := client.Login(ctxc, loginReq)
+	_, err = client.Login(ctxc, loginReq)
 	if err != nil {
 		return err
 	}
@@ -122,7 +117,7 @@ func changePwd(ctx *cli.Context) error {
 	newPwd, err := capturePassword(
 		"Input new password: ",
 	)
-	resp, err := client.ChangePassword(ctxc, &fmtrpc.ChangePwdRequest{
+	_, err = client.ChangePassword(ctxc, &fmtrpc.ChangePwdRequest{
 		CurrentPassword:    oldPwd,
 		NewPassword:        newPwd,
 		NewMacaroonRootKey: ctx.Bool("new_mac_root_key"),
