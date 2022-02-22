@@ -146,12 +146,7 @@
       }
     },
     "fmtrpcLoginResponse": {
-      "type": "object",
-      "properties": {
-        "msg": {
-          "type": "string"
-        }
-      }
+      "type": "object"
     },
     "fmtrpcSetPwdRequest": {
       "type": "object",
