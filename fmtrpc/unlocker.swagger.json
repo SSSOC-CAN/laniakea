@@ -16,9 +16,42 @@
     "application/json"
   ],
   "paths": {
+    "/v1/changepassword": {
+      "post": {
+        "summary": "fmtcli: `changepassword`\nChangePassword prompts the user to enter the current password and enter a new password. If no password has been set, it prompts the user to set one",
+        "operationId": "Unlocker_ChangePassword",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcChangePwdResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcChangePwdRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Unlocker"
+        ]
+      }
+    },
     "/v1/login": {
       "post": {
-        "summary": "fmtcli: `Login`\nLogin will prompt the user to provide a password and send the response to the unlocker service for authentication.",
+        "summary": "fmtcli: `login`\nLogin will prompt the user to provide a password and send the response to the unlocker service for authentication.",
         "operationId": "Unlocker_Login",
         "responses": {
           "200": {
@@ -48,9 +81,61 @@
           "Unlocker"
         ]
       }
+    },
+    "/v1/setpassword": {
+      "post": {
+        "summary": "fmtcli: `setpassword`\nSetPassword prompts the user to set a password on first startup if no password has already been set.",
+        "operationId": "Unlocker_SetPassword",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcSetPwdResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcSetPwdRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Unlocker"
+        ]
+      }
     }
   },
   "definitions": {
+    "fmtrpcChangePwdRequest": {
+      "type": "object",
+      "properties": {
+        "current_password": {
+          "type": "string",
+          "format": "byte"
+        },
+        "new_password": {
+          "type": "string",
+          "format": "byte"
+        },
+        "new_macaroon_root_key": {
+          "type": "boolean"
+        }
+      }
+    },
+    "fmtrpcChangePwdResponse": {
+      "type": "object"
+    },
     "fmtrpcLoginRequest": {
       "type": "object",
       "properties": {
@@ -67,6 +152,18 @@
           "type": "string"
         }
       }
+    },
+    "fmtrpcSetPwdRequest": {
+      "type": "object",
+      "properties": {
+        "password": {
+          "type": "string",
+          "format": "byte"
+        }
+      }
+    },
+    "fmtrpcSetPwdResponse": {
+      "type": "object"
     },
     "protobufAny": {
       "type": "object",
