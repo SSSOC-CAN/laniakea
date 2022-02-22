@@ -24,17 +24,31 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"github.com/urfave/cli"
 	"github.com/SSSOC-CAN/fmtd/auth"
-	"github.com/SSSOC-CAN/fmtd/fmtd"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"google.golang.org/grpc"
+	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 var (
+	defaultRPCAddr               = "localhost"
+	defaultRPCPort               = "3567"
+	defaultTLSCertFilename       = "tls.cert"
+	defaultFmtdDir           	 = utils.AppDataDir("fmtd", false)
+	defaultTLSCertPath           = filepath.Join(defaultFmtdDir, defaultTLSCertFilename)
 	defaultMacaroonTimeout int64 = 60
-	maxMsgRecvSize = grpc.MaxCallRecvMsgSize(1 * 1024 * 1024 * 200)
+	defaultAdminMacName          = "admin.macaroon"
+	defaultMacPath               = filepath.Join(defaultFmtdDir, defaultAdminMacName)
 )
+
+type Args struct {
+	RPCAddr      string
+	RPCPort      string
+	TLSCertPath  string
+	AdminMacPath string
+}
+
 
 // fatal exits the process and prints out error information
 func fatal(err error) {
@@ -43,12 +57,9 @@ func fatal(err error) {
 }
 
 // getFmtClient returns the FmtClient instance from the fmtrpc package as well as a cleanup function
-func getFmtClient() (fmtrpc.FmtClient, func()) {
-	config, err := fmtd.InitConfig()
-	if err != nil {
-		fatal(err)
-	}
-	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
+func getFmtClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
 	if err != nil {
 		fatal(err)
 	}
@@ -59,12 +70,9 @@ func getFmtClient() (fmtrpc.FmtClient, func()) {
 }
 
 //getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getDataCollectorClient() (fmtrpc.DataCollectorClient, func()) {
-	config, err := fmtd.InitConfig()
-	if err != nil {
-		fatal(err)
-	}
-	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
+func getDataCollectorClient(ctx *cli.Context) (fmtrpc.DataCollectorClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
 	if err != nil {
 		fatal(err)
 	}
@@ -75,12 +83,9 @@ func getDataCollectorClient() (fmtrpc.DataCollectorClient, func()) {
 }
 
 //getTestPlanExecutorClient returns the TestPlanExecutorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getTestPlanExecutorClient() (fmtrpc.TestPlanExecutorClient, func()) {
-	config, err := fmtd.InitConfig()
-	if err != nil {
-		fatal(err)
-	}
-	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, false, defaultMacaroonTimeout, config.GrpcPort)
+func getTestPlanExecutorClient(ctx *cli.Context) (fmtrpc.TestPlanExecutorClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
 	if err != nil {
 		fatal(err)
 	}
@@ -91,12 +96,9 @@ func getTestPlanExecutorClient() (fmtrpc.TestPlanExecutorClient, func()) {
 }
 
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
-func getUnlockerClient() (fmtrpc.UnlockerClient, func()) {
-	config, err := fmtd.InitConfig()
-	if err != nil {
-		fatal(err)
-	}
-	conn, err := auth.GetClientConn(config.TLSCertPath, config.AdminMacPath, true, int64(0), config.GrpcPort)
+func getUnlockerClient(ctx *cli.Context) (fmtrpc.UnlockerClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, true, defaultMacaroonTimeout)
 	if err != nil {
 		fatal(err)
 	}
@@ -106,11 +108,45 @@ func getUnlockerClient() (fmtrpc.UnlockerClient, func()) {
 	return fmtrpc.NewUnlockerClient(conn), cleanUp
 }
 
+// extractArgs extracts the arguments inputted to the heartcli command
+func extractArgs(ctx *cli.Context) *Args {
+	return &Args{
+		RPCAddr:      ctx.GlobalString("rpc_addr"),
+		RPCPort:      ctx.GlobalString("rpc_port"),
+		TLSCertPath:  ctx.GlobalString("tlscertpath"),
+		AdminMacPath: ctx.GlobalString("macaroonpath"),
+	}
+}
+
 // main is the entrypoint for fmtcli
 func main() {
 	app := cli.NewApp()
 	app.Name = "fmtcli"
-	app.Usage = "Control panel for the Facility Management Tool Daemon (fmtd)"
+	app.Usage = "Control panel for the Facility Management Tool daemon (fmtd)"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "rpc_addr",
+			Value: defaultRPCAddr,
+			Usage: "The host address of the Facility Management Tool daemon (exclude the port)",
+		},
+		cli.StringFlag{
+			Name:  "rpc_port",
+			Value: defaultRPCPort,
+			Usage: "The host port of the Facility Management Tool daemon",
+		},
+		cli.StringFlag{
+			Name:      "tlscertpath",
+			Value:     defaultTLSCertPath,
+			Usage:     "The path to fmtd's TLS certificate.",
+			TakesFile: true,
+		},
+		cli.StringFlag{
+			Name:      "macaroonpath",
+			Value:     defaultMacPath,
+			Usage:     "The path to fmtd's macaroons.",
+			TakesFile: true,
+		},
+	}
 	app.Commands = []cli.Command{
 		stopCommand,
 		adminTestCommand,

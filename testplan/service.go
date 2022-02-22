@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,7 @@ var (
 	}
 	minChamberPressure float64 = 0.00005
 	defaultAuthor = "FMT"
+	defaultGrpcAddr = "localhost"
 )
 
 type TestPlanService struct {
@@ -44,13 +46,13 @@ type TestPlanService struct {
 	reportWriter 		*csv.Writer
 	tlsCertPath			string
 	adminMacPath		string
-	grpcPort			int64
+	grpcPort			string
 	wg					sync.WaitGroup
 }
 
 //getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getDataCollectorClient(macaroon_timeout, grpcPort int64, tlsCertPath, adminMacPath string) (fmtrpc.DataCollectorClient, *grpc.ClientConn, error) {
-	conn, err := auth.GetClientConn(tlsCertPath, adminMacPath, false, macaroon_timeout, grpcPort)
+func getDataCollectorClient(macaroon_timeout int64, grpcAddr, grpcPort, tlsCertPath, adminMacPath string) (fmtrpc.DataCollectorClient, *grpc.ClientConn, error) {
+	conn, err := auth.GetClientConn(grpcAddr, grpcPort, tlsCertPath, adminMacPath, false, macaroon_timeout)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -84,7 +86,7 @@ func NewTestPlanService(logger *zerolog.Logger, tlsCertPath, adminMacPath string
 		CancelChan: make(chan struct{}),
 		tlsCertPath: tlsCertPath,
 		adminMacPath: adminMacPath,
-		grpcPort: grpcPort,
+		grpcPort: strconv.FormatInt(grpcPort, 10),
 		wg: wg,
 	}
 }
@@ -173,7 +175,7 @@ func (s *TestPlanService) startTestPlan() error {
 	s.reportWriter = reportWriter
 	reportWriter.Write([]string{"Test", "1", "2", "3"})
 	// Get DataCollector client connection
-	dataCollectorClient, clientConn, err := getDataCollectorClient(s.testPlan.TestDuration, s.grpcPort, s.tlsCertPath, s.adminMacPath)
+	dataCollectorClient, clientConn, err := getDataCollectorClient(s.testPlan.TestDuration, defaultGrpcAddr, s.grpcPort, s.tlsCertPath, s.adminMacPath)
 	if err != nil {
 		return fmt.Errorf("Could not get Data Collector Client connection: %v", err)
 	}

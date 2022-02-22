@@ -24,14 +24,30 @@ package intercept
 import (
 	"context"
 	"fmt"
+	"sync"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
+type rpcState uint8
+
+const (
+	waitingToStart rpcState = iota
+	daemonLocked
+	daemonUnlocked
+	rpcActive
+)
+
 var (
+	ErrWaitingToStart = fmt.Errorf("waiting to start, RPC services not available")
+	ErrDaemonLocked = fmt.Errorf("daemon locked, unlock it to enable full RPC access")
+	ErrDaemonUnlocked = fmt.Errorf("daemon already unlocked, Unlocker service is no longer available")
+	ErrRPCStarting = fmt.Errorf("the RPC server is in the process of starting up, but not yet ready to accept calls")
+
 	// List of commands that don't need macaroons
 	macaroonWhitelist = map[string]struct{}{
 		"/fmtrpc.Fmt/TestCommand":	{},
@@ -41,19 +57,43 @@ var (
 
 // GrpcInteceptor struct is a data structure with attributes relevant to creating the gRPC interceptor
 type GrpcInterceptor struct {
+	state 		rpcState
 	noMacaroons bool
 	log *zerolog.Logger
 	permissionMap map[string][]bakery.Op
 	svc *macaroons.Service
+	sync.RWMutex
 }
 
 // NewGrpcInterceptor instantiates a new GrpcInterceptor struct
 func NewGrpcInterceptor(log *zerolog.Logger, noMacaroons bool) *GrpcInterceptor {
 	return &GrpcInterceptor{
+		state: 		 waitingToStart,
 		noMacaroons: noMacaroons,
 		permissionMap: make(map[string][]bakery.Op),
 		log: log,
 	}
+}
+
+// SetDaemonLocked changes the RPC state from waitingToStart to locked
+func (i *GrpcInterceptor) SetDaemonLocked() {
+	i.Lock()
+	defer i.Unlock()
+	i.state = daemonLocked
+}
+
+// SetDaemonUnlocked changes the RPC state from locked to unlocked
+func (i *GrpcInterceptor) SetDaemonUnlocked() {
+	i.Lock()
+	defer i.Unlock()
+	i.state = daemonUnlocked
+}
+
+// SetRPCActive changes the RPC state from unlocked to rpcActive
+func (i *GrpcInterceptor) SetRPCActive() {
+	i.Lock()
+	defer i.Unlock()
+	i.state = rpcActive
 }
 
 // CreateGrpcOptions creates a array of gRPC interceptors
@@ -66,6 +106,14 @@ func (i *GrpcInterceptor) CreateGrpcOptions() []grpc.ServerOption {
 	)
 	strmInterceptors = append(
 		strmInterceptors, logStreamServerInterceptor(i.log),
+	)
+	// Next we'll add our RPC state check interceptors, that will check
+	// whether the attempted call is allowed in the current state.
+	unaryInterceptors = append(
+		unaryInterceptors, i.rpcStateUnaryServerInterceptor(),
+	)
+	strmInterceptors = append(
+		strmInterceptors, i.rpcStateStreamServerInterceptor(),
 	)
 	// add macaroon interceptors
 	unaryInterceptors = append(
@@ -83,6 +131,59 @@ func (i *GrpcInterceptor) CreateGrpcOptions() []grpc.ServerOption {
 	)
 	serverOpts := []grpc.ServerOption{chainedUnary, chainedStream}
 	return serverOpts
+}
+
+// checkRPCState checks whether a call to the given server is allowed in the current RPC state
+func (i *GrpcInterceptor) checkRPCState(srv interface{}) error {
+	i.RLock()
+	state := i.state
+	i.RUnlock()
+
+	switch state {
+	case waitingToStart:
+		return ErrWaitingToStart
+	case daemonLocked: 
+		_, ok := srv.(fmtrpc.UnlockerServer)
+		if !ok {
+			return ErrDaemonLocked
+		}
+	case daemonUnlocked, rpcActive:
+		_, ok := srv.(fmtrpc.UnlockerServer)
+		if ok {
+			return ErrDaemonUnlocked
+		}
+	default:
+		return fmt.Errorf("unknown RPC state: %v", state)
+	}
+	return nil
+}
+
+// rpcStateUnaryServerInterceptor is a GRPC interceptor that checks whether
+// calls to the given gGRPC server is allowed in the current rpc state.
+func (i *GrpcInterceptor) rpcStateUnaryServerInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (interface{}, error) {
+
+		if err := i.checkRPCState(info.Server); err != nil {
+			return nil, err
+		}
+
+		return handler(ctx, req)
+	}
+}
+
+// rpcStateStreamServerInterceptor is a GRPC interceptor that checks whether
+// calls to the given gGRPC server is allowed in the current rpc state.
+func (i *GrpcInterceptor) rpcStateStreamServerInterceptor() grpc.StreamServerInterceptor {
+	return func(srv interface{}, ss grpc.ServerStream,
+		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+
+		if err := i.checkRPCState(srv); err != nil {
+			return err
+		}
+
+		return handler(srv, ss)
+	}
 }
 
 // AddPermissions adds the inputted permission to the permissionMap attribute of the GrpcInterceptor struct
@@ -216,54 +317,4 @@ func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInt
 // Adds the macaroon service provided to GrpcInterceptor struct attributes
 func (i *GrpcInterceptor) AddMacaroonService(service *macaroons.Service) {
 	i.svc = service
-}
-
-// MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
-func MainGrpcServerPermissions() map[string][]bakery.Op {
-	return map[string][]bakery.Op{
-		"/fmtrpc.Fmt/StopDaemon": {{
-			Entity: "fmtd",
-			Action:	"write",
-		}},
-		"/fmtrpc.Fmt/AdminTest": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.DataCollector/StartRecording": {{
-			Entity: "fmtd",
-			Action: "write",
-		}},
-		"/fmtrpc.DataCollector/StopRecording": {{
-			Entity: "fmtd",
-			Action: "write",
-		}},
-		"/fmtrpc.DataCollector/SubscribeDataStream": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.DataCollector/DownloadHistoricalData": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.TestPlanExecutor/LoadTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/StartTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/StopTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/InsertROIMarker": {{
-			Entity: "tpex",
-			Action:	"write",
-		}},
-		"/fmtrpc.Fmt/BakeMacaroon": {{
-			Entity: "macaroon",
-			Action: "write",
-		}},
-	}
 }

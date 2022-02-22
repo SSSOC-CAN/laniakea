@@ -133,16 +133,16 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not add Barchart: %v", err)
 	}
-	_, err = s.connection.AddPeakJump("PeakJump1", Rga_PeakCenter, 5, 0, 0, 0)
-	if err != nil {
-		return fmt.Errorf("Could not add PeakJump: %v", err)
-	}
-	for i := 1; i < 6; i++ { // TODO:SSSOCPaulCote - Change this for test next week
-		_, err = s.connection.MeasurementAddMass(i)
-		if err != nil {
-			return fmt.Errorf("Could not add measurement mass: %v", err)
-		}
-	}
+	// _, err = s.connection.AddPeakJump("PeakJump1", Rga_PeakCenter, 5, 0, 0, 0)
+	// if err != nil {
+	// 	return fmt.Errorf("Could not add PeakJump: %v", err)
+	// }
+	// for i := 1; i < 6; i++ { // TODO:SSSOCPaulCote - Change this for test next week
+	// 	_, err = s.connection.MeasurementAddMass(i)
+	// 	if err != nil {
+	// 		return fmt.Errorf("Could not add measurement mass: %v", err)
+	// 	}
+	// }
 	_, err = s.connection.ScanAdd("Bar1")
 	if err != nil {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
