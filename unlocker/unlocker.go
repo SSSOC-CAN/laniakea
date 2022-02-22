@@ -28,6 +28,7 @@ import (
 	"reflect"
 	"sync"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
 )
@@ -40,7 +41,7 @@ var (
 	pwdKeyID = []byte("pwd")
 )
 
-type LoginMsg struct {
+type PasswordMsg struct {
 	Password	*[]byte
 	Err			error
 }
@@ -48,7 +49,7 @@ type LoginMsg struct {
 type UnlockerService struct {
 	fmtrpc.UnimplementedUnlockerServer
 	ps *PasswordStorage
-	LoginMsgs chan *LoginMsg
+	PasswordMsgs chan *PasswordMsg
 }
 
 type PasswordStorage struct {
@@ -62,7 +63,7 @@ func InitUnlockerService(db bolt.DB) (*UnlockerService, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &UnlockerService{ps: ps, LoginMsgs: make(chan *LoginMsg, 1)}, nil
+	return &UnlockerService{ps: ps, PasswordMsgs: make(chan *PasswordMsg, 1)}, nil
 }
 
 // initPasswordStore initializes the bucket for password storage within the db
@@ -84,8 +85,19 @@ func (u *UnlockerService) RegisterWithGrpcServer(grpcServer *grpc.Server) error 
 	return nil
 }
 
+// RegisterWithRestProxy registers the UnlockerService with the REST proxy
+func (u *UnlockerService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+	err := fmtrpc.RegisterUnlockerHandlerFromEndpoint(
+		ctx, mux, restProxyDest, restDialOpts,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // setPassword will set the password if one has not already been set
-func (u *UnlockerService) setPassword(password *[]byte) error {
+func (u *UnlockerService) setPassword(password []byte, overwrite bool) error {
 	u.ps.passwordMutex.Lock()
 	defer u.ps.passwordMutex.Unlock()
 	return u.ps.Update(func(tx *bolt.Tx) error {
@@ -94,13 +106,15 @@ func (u *UnlockerService) setPassword(password *[]byte) error {
 			return fmt.Errorf("Password bucket not found")
 		}
 		pwd := bucket.Get(pwdKeyID) //get the password kv pair
-		if len(pwd) > 0 {
+		if len(pwd) > 0 && !overwrite {
+			tx.Rollback()
 			return ErrPasswordAlreadySet
 		}
 		// no pwd has been set so creating a new one
-		hash := sha256.Sum256(*password)
+		hash := sha256.Sum256(password)
 		err := bucket.Put(pwdKeyID, hash[:])
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
 		return nil
@@ -108,7 +122,7 @@ func (u *UnlockerService) setPassword(password *[]byte) error {
 }
 
 // readPassword will read the password provided and compare to what's in the db
-func (u *UnlockerService) readPassword(password *[]byte) error {
+func (u *UnlockerService) readPassword(password []byte) error {
 	u.ps.passwordMutex.Lock()
 	defer u.ps.passwordMutex.Unlock()
 	return u.ps.Update(func(tx *bolt.Tx) error {
@@ -118,10 +132,10 @@ func (u *UnlockerService) readPassword(password *[]byte) error {
 		}
 		pwd := bucket.Get(pwdKeyID) //get the password kv pair
 		if len(pwd) == 0 {
-			return u.setPassword(password)
+			return ErrPasswordNotSet
 		}
 		// pwd has been set so comparing
-		hash := sha256.Sum256(*password)
+		hash := sha256.Sum256(password)
 		if !reflect.DeepEqual(hash[:], pwd) {
 			return ErrWrongPassword
 		}
@@ -131,19 +145,13 @@ func (u *UnlockerService) readPassword(password *[]byte) error {
 
 // Login will login a user
 func (u *UnlockerService) Login(ctx context.Context, req *fmtrpc.LoginRequest) (*fmtrpc.LoginResponse, error) {
-	err := u.setPassword(&req.Password)
-	if err != ErrPasswordAlreadySet && err != nil {
+	err = u.readPassword(&req.Password)
+	if err != nil {
 		return nil, err
 	}
-	if err == ErrPasswordAlreadySet {
-		err = u.readPassword(&req.Password)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// We can now send the a LoginMsg through the channel and return a successful loging message
+	// We can now send the a PasswordMsg through the channel and return a successful loging message
 	select {
-	case u.LoginMsgs <- &LoginMsg{Password: &req.Password, Err: nil}:
+	case u.PasswordMsgs <- &PasswordMsg{Password: &req.Password, Err: nil}:
 		return &fmtrpc.LoginResponse{Msg: "Login successful"}, nil
 	case <-ctx.Done():
 		return nil, fmt.Errorf("Login timed out.")
