@@ -96,7 +96,6 @@ func (u *UnlockerService) setPassword(password []byte, overwrite bool) error {
 		}
 		pwd := bucket.Get(pwdKeyID) //get the password kv pair
 		if len(pwd) > 0 && !overwrite {
-			tx.Rollback()
 			return ErrPasswordAlreadySet
 		}
 		// no pwd has been set so creating a new one
