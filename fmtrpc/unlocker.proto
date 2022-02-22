@@ -5,10 +5,18 @@ package fmtrpc;
 option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 service Unlocker{
-    /* fmtcli: `Login`
+    /* fmtcli: `login`
     Login will prompt the user to provide a password and send the response to the unlocker service for authentication.
     */
     rpc Login (LoginRequest) returns (LoginResponse);
+    /* fmtcli: `setpassword`
+    SetPassword prompts the user to set a password on first startup if no password has already been set.
+    */
+    rpc SetPassword (SetPwdRequest) returns (SetPwdResponse);
+    /* fmtcli: `changepassword`
+    ChangePassword prompts the user to enter the current password and enter a new password. If no password has been set, it prompts the user to set one
+    */
+    rpc ChangePassword (ChangePwdRequest) returns (ChangePwdResponse);
 }
 
 message LoginRequest {
@@ -16,4 +24,16 @@ message LoginRequest {
 }
 message LoginResponse {
     string msg = 1;
+}
+message SetPwdRequest {
+    bytes password = 1;
+}
+message SetPwdResponse {
+}
+message ChangePwdRequest {
+    bytes current_password = 1;
+    bytes new_password = 2;
+    bool new_macaroon_root_key = 3;
+}
+message ChangePwdResponse {
 }

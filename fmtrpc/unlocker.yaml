@@ -6,3 +6,9 @@ http:
     - selector: fmtrpc.Unlocker.Login
       post: "/v1/login"
       body: "*"
+    - selector: fmtrpc.Unlocker.SetPassword
+      post: "/v1/setpassword"
+      body: "*"
+    - selector: fmtrpc.Unlocker.ChangePassword
+      post: "/v1/changepassword"
+      body: "*"
