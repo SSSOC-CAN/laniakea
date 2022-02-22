@@ -25,12 +25,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"reflect"
-	"sync"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
@@ -46,7 +45,7 @@ var (
 )
 
 type PasswordMsg struct {
-	Password	*[]byte
+	Password	[]byte
 	Err			error
 }
 
@@ -65,7 +64,7 @@ func InitUnlockerService(db *kvdb.DB, macaroonFiles []string) (*UnlockerService,
 	}); err != nil {
 		return nil, err
 	}
-	return &UnlockerService{ps: ps, PasswordMsgs: make(chan *PasswordMsg, 1), macaroonFiles: macaroonFiles}, nil
+	return &UnlockerService{ps: db, PasswordMsgs: make(chan *PasswordMsg, 1), macaroonFiles: macaroonFiles}, nil
 }
 
 
@@ -135,7 +134,7 @@ func (u *UnlockerService) readPassword(password []byte) error {
 
 // Login will login a user
 func (u *UnlockerService) Login(ctx context.Context, req *fmtrpc.LoginRequest) (*fmtrpc.LoginResponse, error) {
-	err = u.readPassword(req.Password)
+	err := u.readPassword(req.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +185,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 		}
 	}
 	// Then we have to load the macaroon key-store, unlock it, change the old password and then shut it down
-	macaroonService, err := macaroons.InitService(*u.macaroonDB, "fmtd")
+	macaroonService, err := macaroons.InitService(*u.ps, "fmtd")
 	if err != nil {
 		return nil, err
 	}

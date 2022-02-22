@@ -182,7 +182,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Wait for password
 	grpc_interceptor.SetDaemonLocked()
-	server.logger.Info().Msg("Waiting for password. Use `fmtcli login` to login.")
+	server.logger.Info().Msg("Waiting for password. Use `fmtcli setpassword` to set a password for the first time, " +
+	"`fmtcli login` to unlock the daemon with an existing password, or `fmtcli changepassword` to change the " +
+	"existing password and unlock the daemon.")
 	pwd, err := waitForPassword(unlockerService, interceptor.ShutdownChannel())
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
@@ -202,7 +204,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Unlock Macaroon Store
 	server.logger.Info().Msg("Unlocking macaroon store...")
-	err = macaroonService.CreateUnlock(pwd)
+	err = macaroonService.CreateUnlock(&pwd)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to unlock macaroon store: %v", err))
 		return err
@@ -287,9 +289,9 @@ func adminPermissions() []bakery.Op {
 }
 
 // waitForPassword hangs until a password is provided or a shutdown request is receieved
-func waitForPassword(u *unlocker.UnlockerService, shutdownChan <-chan struct{}) (*[]byte, error) {
+func waitForPassword(u *unlocker.UnlockerService, shutdownChan <-chan struct{}) ([]byte, error) {
 	select {
-	case msg := <-u.LoginMsgs:
+	case msg := <-u.PasswordMsgs:
 		if msg.Err != nil {
 			return nil, msg.Err
 		}
