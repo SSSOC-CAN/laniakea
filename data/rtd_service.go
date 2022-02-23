@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"net"
+	"os"
+	"reflect"
 	"strconv"
 	"sync/atomic"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"google.golang.org/grpc"
 )
 
@@ -55,10 +57,11 @@ type RTDService struct {
 	ServiceFilePaths	map[fmtrpc.RecordService]string
 	name				string
 	tcpServer			net.Listener
+	stateStore			*state.Store
 }
 
 //NewDataBuffer returns an instantiated DataBuffer struct
-func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64) *RTDService {
+func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64, s *state.Store) *RTDService {
 	return &RTDService{
 		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
 		ServiceRecStates: 	make(map[string]bool),
@@ -69,6 +72,7 @@ func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64) *RTDServi
 		name: RtdName,
 		TCPAddr: tcpAddr,
 		TCPPort: tcpPort,
+		stateStore: s,
 	}
 }
 
@@ -173,54 +177,34 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
 	_ = atomic.AddInt32(&s.Listeners, 1)
-	for name, channel := range s.StateChangeChans {
-		if !s.ServiceBroadStates[name] {
-			channel <- &StateChangeMsg{Type: BROADCASTING, State: true, ErrMsg: nil}
-			resp := <- channel
-			if resp.ErrMsg != nil {
-				s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-				return resp.ErrMsg
-			}
-			s.ServiceBroadStates[name] = true
-		}
+	updateChan := make(chan struct{})
+	lastSentRTDTimestamp := int64(0)
+	idx, unsub := s.stateStore.Subscribe(func() {
+		updateChan<-struct{}{}
+	})
+	cleanUp := func() {
+		unsub(s.stateStore, idx)
+		close(updateChan)
 	}
+	defer cleanUp()
 	for {
-		select {
-		case RTD := <-s.DataProviderChan:
-			if err := updateStream.Send(RTD); err != nil {
+		select {	
+		case <-updateChan:
+			currentState := s.stateStore.GetState()
+			RTD, ok := currentState.(fmtrpc.RealTimeData)
+			if !ok {
+				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
+			}
+			if RTD.Timestamp < lastSentRTDTimestamp {
+				continue
+			} 
+			if err := updateStream.Send(&RTD); err != nil {
 				_ = atomic.AddInt32(&s.Listeners, -1)
-				if atomic.LoadInt32(&s.Listeners) == 0 {
-					for name, channel := range s.StateChangeChans {
-						if s.ServiceBroadStates[name] {
-							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-							resp := <- channel
-							if resp.ErrMsg != nil {
-								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-								return resp.ErrMsg
-							}
-						}
-						s.ServiceBroadStates[name] = false
-					}
-				}
 				return err
 			}
+			lastSentRTDTimestamp = RTD.Timestamp
 		case <-updateStream.Context().Done():
 			_ = atomic.AddInt32(&s.Listeners, -1)
-			if atomic.LoadInt32(&s.Listeners) == 0 {
-				if atomic.LoadInt32(&s.Stopping) == 0 {
-					for name, channel := range s.StateChangeChans {
-						if s.ServiceBroadStates[name] {
-							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-							resp := <- channel
-							if resp.ErrMsg != nil {
-								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-								return resp.ErrMsg
-							}
-						}
-						s.ServiceBroadStates[name] = false
-					}
-				}
-			}
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil
 			}
