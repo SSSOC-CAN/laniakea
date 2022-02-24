@@ -4,26 +4,28 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"sync/atomic"
 	"time"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 var (
 	minimumPressure float64 = 0.00005
 	minRgaPollingInterval int64 = 15 // Arbitrary not sure what this value should be - After manual testing, value will be 15 seconds
+	pressureRead int64 = 122
 )
 
 type RGAService struct {
 	Running				int32 //atomically
 	Recording			int32 //atomically
-	Broadcasting		int32 //atomically
+	stateStore			*state.Store
 	Logger				*zerolog.Logger
-	OutputChan			chan *fmtrpc.RealTimeData
 	PressureChan		chan float64
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}
@@ -39,12 +41,13 @@ type RGAService struct {
 var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
-func NewRGAService(logger *zerolog.Logger, outputDir string) (*RGAService, error) {
+func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store) (*RGAService, error) {
 	c, err := ConnectToRGA()
 	if err != nil {
 		return nil, fmt.Errorf("Unable to connect to RGA: %v", err)
 	}
 	return &RGAService{
+		stateStore: store,
 		Logger: logger,
 		QuitChan: make(chan struct{}),
 		CancelChan: make(chan struct{}),
@@ -133,16 +136,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not add Barchart: %v", err)
 	}
-	// _, err = s.connection.AddPeakJump("PeakJump1", Rga_PeakCenter, 5, 0, 0, 0)
-	// if err != nil {
-	// 	return fmt.Errorf("Could not add PeakJump: %v", err)
-	// }
-	// for i := 1; i < 6; i++ { // TODO:SSSOCPaulCote - Change this for test next week
-	// 	_, err = s.connection.MeasurementAddMass(i)
-	// 	if err != nil {
-	// 		return fmt.Errorf("Could not add measurement mass: %v", err)
-	// 	}
-	// }
 	_, err = s.connection.ScanAdd("Bar1")
 	if err != nil {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
@@ -226,12 +219,10 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			return fmt.Errorf("Could not read response: %v", err)
 		}
 		if resp.ErrMsg.CommandName == massReading {
-			if atomic.LoadInt32(&s.Broadcasting) == 1 {
-				massPos := resp.Fields["MassPosition"].Value.(int64)
-				dataField[massPos]= &fmtrpc.DataField{
-					Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
-					Value: resp.Fields["Value"].Value.(float64),
-				}
+			massPos := resp.Fields["MassPosition"].Value.(int64)
+			dataField[massPos]= &fmtrpc.DataField{
+				Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
+				Value: resp.Fields["Value"].Value.(float64),
 			}
 			dataString = append(dataString, fmt.Sprintf("%g", resp.Fields["Value"].Value.(float64)))
 			if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
@@ -248,17 +239,22 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		}
 		echan<-nil
 	}(errChan)
-
-	if atomic.LoadInt32(&s.Broadcasting) == 1 {
-		dataFrame := &fmtrpc.RealTimeData{
-			Source: s.name,
-			IsScanning: true,
-			Timestamp: current_time.UnixMilli(),
-			Data: dataField,
-		}
-		s.OutputChan <- dataFrame // may need to go into a goroutine
+	
+	err = s.stateStore.Dispatch(
+		state.Action{
+			Type: 	 "rga/update",
+			Payload: fmtrpc.RealTimeData{
+				Source: s.name,
+				IsScanning: true,
+				Timestamp: current_time.UnixMilli(),
+				Data: dataField,
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err := <-errChan; err != nil {
+	if err = <-errChan; err != nil {
 		return err
 	}
 	return nil
@@ -283,26 +279,19 @@ func (s *RGAService) stopRecording() error {
 
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
+	signalChan := make(chan struct{})
+	idx, unsub := s.stateStore.Subscribe(func() {
+		signalChan<-struct{}{}
+	})
+	cleanUp := func() {
+		unsub(s.stateStore, idx)
+		close(signalChan)
+	}
+	defer cleanUp()
 	for {
 		select {
 		case msg := <- s.StateChangeChan:
 			switch msg.Type {
-			case data.BROADCASTING:
-				if msg.State {
-					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
-						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service: already broadcasting")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: false, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
-					} else {
-						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
-					}
-				} else {
-					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
-						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service: already stopped broadcasting")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: true, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
-					} else {
-						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
-					}
-				}
 			case data.RECORDING:
 				if msg.State {
 					err := s.startRecording(0)
@@ -325,9 +314,18 @@ func (s *RGAService) ListenForRTDSignal() {
 					}
 				}
 			}
-		case p := <- s.PressureChan:
-			s.currentPressure = p
-			if p >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
+		case <- signalChan:
+			currentState := s.stateStore.GetState()
+			cState, ok := currentState.(fmtrpc.RealTimeData)
+			if !ok {
+				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(fmtrpc.RealTimeData{})))
+				err := s.stopRecording()
+				if err != nil {
+					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
+				}
+			}
+			s.currentPressure = cState.Data[pressureRead].Value
+			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
@@ -342,12 +340,5 @@ func (s *RGAService) ListenForRTDSignal() {
 // RegisterWithRTDService adds the RTD Service channels to the RGA Service Struct and incrememnts the number of registered data providers on the RTD
 func (s *RGAService) RegisterWithRTDService(rtd *data.RTDService) {
 	rtd.RegisterDataProvider(s.name)
-	s.OutputChan = rtd.DataProviderChan
 	s.StateChangeChan = rtd.StateChangeChans[s.name]
-}
-
-// RegisterWithFlukeService adds the Fluke Service pressure channel to the RGA service struct in order to have realtime pressure measurements.
-func (s *RGAService) RegisterWithFlukeService(f *FlukeService) {
-	s.PressureChan = f.PressureChan
-	f.IsRGAReady = true
 }
