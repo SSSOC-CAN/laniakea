@@ -66,6 +66,8 @@ func (s *Store) Dispatch(action Action) error {
 // Subscribe adds a callback function to the list of listeners which will be executed upon each Dispatch call.
 // Returns the index in the listener slice belonging to callback and unsubscribe function
 func (s *Store) Subscribe(f func()) (int, func(*Store, int)) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	s.listeners = append(s.listeners, f)
 	return len(s.listeners) - 1, s.unsub
 }

@@ -23,7 +23,6 @@ type Tag struct {
 }
 
 var (
-	pressureRead int = 122
 	customerChannelString = "customer channel "
 	coldfingerSup         = "Coldfinger sup"
 	coldfingerRet         = "Coldfinger ret"
@@ -175,9 +174,8 @@ var (
 
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
-	Active     				int32 // atomic
-	Stopping   				int32 // atomic
-	Recording  				int32 // atomic
+	Running     			int32 // atomic
+	Recording				int32 // atomic
 	stateStore				*state.Store
 	Logger     				*zerolog.Logger
 	name					string
@@ -188,8 +186,6 @@ type FlukeService struct {
 	CancelChan				chan struct{}
 	outputDir  				string
 	StateChangeChan			chan *data.StateChangeMsg
-	PressureChan			chan float64
-	IsRGAReady				bool
 	filepath				string
 }
 
@@ -204,22 +200,23 @@ func NewFlukeService(logger *zerolog.Logger, outputDir string, store *state.Stor
 		return nil, fmt.Errorf("Could not retrieve all tags: %v", err)
 	}
 	return &FlukeService{
-		stateStore:   store,
-		Logger:       logger,
-		tags:         tags,
-		tagMap:       defaultTagMap(tags),
-		QuitChan:     make(chan struct{}),
-		CancelChan:   make(chan struct{}),
-		PressureChan: make(chan float64),
-		outputDir:    outputDir,
-		name: 	      data.FlukeName,
+		stateStore:   	  store,
+		Logger:       	  logger,
+		tags:         	  tags,
+		tagMap:       	  defaultTagMap(tags),
+		QuitChan:     	  make(chan struct{}),
+		CancelChan:   	  make(chan struct{}),
+		outputDir:   	  outputDir,
+		name: 	      	  data.FlukeName,
 	}, nil
 }
 
 // Start starts the service. Returns an error if any issues occur
 func (s *FlukeService) Start() error {
 	s.Logger.Info().Msg("Starting Fluke Service...")
-	atomic.StoreInt32(&s.Active, 1)
+	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
+		return fmt.Errorf("Could not start Fluke service: service already started.")
+	}
 	c, err := opc.NewConnection(
 		flukeOPCServerName,
 		[]string{flukeOPCServerHost},
@@ -242,7 +239,9 @@ func (s *FlukeService) Start() error {
 // Stop stops the service. Returns an error if any issues occur
 func (s *FlukeService) Stop() error {
 	s.Logger.Info().Msg("Stopping Fluke Service...")
-	atomic.StoreInt32(&s.Stopping, 1)
+	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
+		return fmt.Errorf("Could not stop Fluke service: service already stopped.")
+	}
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
@@ -257,7 +256,6 @@ func (s *FlukeService) Stop() error {
 		return err
 	}
 	s.connection.Close()
-	close(s.PressureChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -353,11 +351,6 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 				}
 			}
 			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
-			if s.IsRGAReady {
-				if i == pressureRead {
-					s.PressureChan <- reading.Value.(float64)
-				}
-			}
 		}
 	}
 	//Write to csv in go routine
@@ -390,6 +383,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	return nil
 }
 
+// stopRecording sends an empty struct down the CancelChan to innitiate the stop recording process
 func (s *FlukeService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
 		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
@@ -406,7 +400,12 @@ func (s *FlukeService) ListenForRTDSignal() {
 			switch msg.Type {
 			case data.RECORDING:
 				if msg.State {
-					err := s.startRecording(DefaultPollingInterval) // TODO:SSSOCPaulCote - RecordingState data will include polling interval
+					var err error
+					if n, err := strconv.ParseInt(msg.Msg, 10, 64); err != nil {
+						err = s.startRecording(DefaultPollingInterval)
+					} else {
+						err = s.startRecording(n)
+					}
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}

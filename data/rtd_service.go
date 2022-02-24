@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"time"
 	"sync/atomic"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -44,16 +45,12 @@ type StateChangeMsg struct {
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
 	Running				int32 // used atomically
-	Stopping			int32
-	Listeners			int32 // used atomically
 	TCPRunning			int32 // used atomically
 	TCPPort				int64
 	TCPAddr				string
 	Logger				*zerolog.Logger
-	DataProviderChan	chan *fmtrpc.RealTimeData
 	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
-	ServiceBroadStates	map[string]bool
 	ServiceFilePaths	map[fmtrpc.RecordService]string
 	name				string
 	tcpServer			net.Listener
@@ -63,9 +60,7 @@ type RTDService struct {
 //NewDataBuffer returns an instantiated DataBuffer struct
 func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64, s *state.Store) *RTDService {
 	return &RTDService{
-		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
 		ServiceRecStates: 	make(map[string]bool),
-		ServiceBroadStates: make(map[string]bool),
 		StateChangeChans: 	make(map[string]chan *StateChangeMsg),
 		ServiceFilePaths:	make(map[fmtrpc.RecordService]string),
 		Logger: log,
@@ -95,7 +90,6 @@ func (s *RTDService) Start() error {
 // Stop stops the RTD service. It closes all its channels, lifting the burdens from Data providers
 func (s *RTDService) Stop() error {
 	s.Logger.Info().Msg("Stopping RTD Service ...")
-	atomic.AddInt32(&s.Stopping, 1)
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
 	}
@@ -119,16 +113,13 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 	if _, ok := s.ServiceRecStates[serviceName]; !ok {
 		s.ServiceRecStates[serviceName] = false
 	}
-	if _, ok := s.ServiceBroadStates[serviceName]; !ok {
-		s.ServiceBroadStates[serviceName] = false
-	}
 }
 
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	switch req.Type {
 	case fmtrpc.RecordService_FLUKE:
-		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil}
+		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.PollingInterval)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
@@ -176,7 +167,6 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
-	_ = atomic.AddInt32(&s.Listeners, 1)
 	updateChan := make(chan struct{})
 	lastSentRTDTimestamp := int64(0)
 	idx, unsub := s.stateStore.Subscribe(func() {
@@ -184,6 +174,7 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 	})
 	cleanUp := func() {
 		unsub(s.stateStore, idx)
+		time.Sleep(5)
 		close(updateChan)
 	}
 	defer cleanUp()
@@ -199,12 +190,10 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 				continue
 			} 
 			if err := updateStream.Send(&RTD); err != nil {
-				_ = atomic.AddInt32(&s.Listeners, -1)
 				return err
 			}
 			lastSentRTDTimestamp = RTD.Timestamp
 		case <-updateStream.Context().Done():
-			_ = atomic.AddInt32(&s.Listeners, -1)
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil
 			}
