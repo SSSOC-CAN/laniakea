@@ -26,14 +26,16 @@ func CreateStore(initialState interface{}, rootReducer Reducer) *Store {
 	return &Store{
 		state:   initialState,
 		reducer: rootReducer,
-		unsub: func(s *Store, i int) {
+		unsub: func(store *Store, i int) {
+			store.mutex.Lock()
+			defer store.mutex.Unlock()
 			var ls []func()
-			for j, s := range s.listeners {
+			for j, s := range store.listeners {
 				if j != i {
 					ls = append(ls, s)
 				}
 			}
-			s.listeners = ls
+			store.listeners = ls[:]
 		},
 	}
 }
