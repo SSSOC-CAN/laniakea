@@ -46,7 +46,7 @@ var (
 )
 
 // createDummyRootKeyStore creates a dummy RootKeyStorage from the test password in a temporary directory
-func createDummyRootKeyStore(t *testing.T) (string, *bolt.DB) {
+func createDummyRootKeyStore(t *testing.T) (string, *kvdb.DB) {
 	tempDir, err := ioutil.TempDir("", "macaroonstore-")
 	if err != nil {
 		t.Fatalf("Error creating temporary directory: %v", err)
