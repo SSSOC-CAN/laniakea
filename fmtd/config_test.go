@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"github.com/google/go-cmp/cmp"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
@@ -20,7 +21,7 @@ func TestInitConfigNoYAML(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	if config != default_config() {
+	if !cmp.Equal(config, default_config()) {
 		t.Errorf("InitConfig did not produce a default config when config.yaml was not present")
 	}
 }
@@ -71,19 +72,19 @@ func TestInitConfigFromYAML(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	_, err = config_file.WriteString(fmt.Sprintf("GrpcPort: %v", d_config.GrpcPort))
+	_, err = config_file.WriteString(fmt.Sprintf("GrpcPort: %v\n", d_config.GrpcPort))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	_, err = config_file.WriteString(fmt.Sprintf("RestPort: %v", d_config.RestPort))
+	_, err = config_file.WriteString(fmt.Sprintf("RestPort: %v\n", d_config.RestPort))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	_, err = config_file.WriteString(fmt.Sprintf("TCPPort: %v", d_config.TCPPort))
+	_, err = config_file.WriteString(fmt.Sprintf("TCPPort: %v\n", d_config.TCPPort))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	_, err = config_file.WriteString(fmt.Sprintf("TCPAddr: %v", d_config.TCPAddr))
+	_, err = config_file.WriteString(fmt.Sprintf("TCPAddr: %v\n", d_config.TCPAddr))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
@@ -93,7 +94,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	if config != d_config {
+	if !cmp.Equal(config, d_config) {
 		t.Errorf("InitConfig did not properly read the config file: %v", config)
 	}
 }
@@ -126,7 +127,7 @@ func TestDefaultConfig(t *testing.T) {
 		WSPingInterval: default_ws_ping_interval,
 		WSPongWait: default_ws_pong_wait,
 	}
-	if d_config != default_config() {
+	if !cmp.Equal(d_config, default_config()) {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())
 	}
 }

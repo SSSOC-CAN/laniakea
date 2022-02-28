@@ -251,7 +251,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	for _, s := range services {
 		err = s.Start()
 		if err != nil {
-			server.logger.Error().Msg(fmt.Sprintf("Unable to start %S service: %v", s.Name(), err))
+			server.logger.Error().Msg(fmt.Sprintf("Unable to start %s service: %v", s.Name(), err))
 			return err
 		}
 		defer s.Stop()
