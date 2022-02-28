@@ -31,7 +31,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	//"io/ioutil"
 	"math/big"
 	"net"
 	"os"
@@ -184,7 +183,7 @@ func parseNetwork(addr net.Addr) string {
 	}
 }
 
-// getTLSConfig returns a TLS configuration for the gRPC server and credentials
+// GetTLSConfig returns a TLS configuration for the gRPC server and credentials
 // and a proxy destination for the REST reverse proxy.
 func GetTLSConfig(certPath, keyPath string, extraIPAddr []string) ([]grpc.ServerOption, []grpc.DialOption,
 	func(net.Addr) (net.Listener, error), func(), error) {
