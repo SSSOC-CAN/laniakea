@@ -99,6 +99,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
 	serverOpts = append(serverOpts, rpcServerOpts...)
 	grpc_server := grpc.NewServer(serverOpts...)
+	defer grpc_server.Stop()
 	rpcServer.RegisterWithGrpcServer(grpc_server)
 
 	// Instantiate RTD Service
