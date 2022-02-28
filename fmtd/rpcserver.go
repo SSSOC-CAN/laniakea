@@ -130,6 +130,7 @@ type RpcServer struct {
 	shutdown 						int32
 	fmtrpc.UnimplementedFmtServer
 	interceptor 					*intercept.Interceptor
+	grpcInterceptor					*intercept.GrpcInterceptor
 	cfg 							*Config
 	quit 							chan struct{}
 	SubLogger 						*zerolog.Logger
@@ -171,9 +172,14 @@ func(s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMu
 	return nil
 }
 
-// func AddMacaroonService adds the macaroon service to the attributes of the RpcServer
+// AddMacaroonService adds the macaroon service to the attributes of the RpcServer
 func (s *RpcServer) AddMacaroonService(svc *macaroons.Service) {
 	s.macSvc = svc
+}
+
+// AddGrpcInterceptor adds the grpc middleware to the RpcServer
+func (s *RpcServer) AddGrpcInterceptor(i *intercept.GrpcInterceptor) {
+	s.grpcInterceptor = i
 }
 
 // Start starts the RpcServer subserver
@@ -225,7 +231,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			return nil, fmt.Errorf("Could not bake macaroon: invalid permission entity")
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
-			allPermissions := MainGrpcServerPermissions()
+			allPermissions := s.grpcInterceptor.Permissions()
 			if _, ok := allPermissions[op.Action]; !ok {
 				return nil, fmt.Errorf("Could not bake macaroon: %s is not a valid action", op.Action)
 			}
