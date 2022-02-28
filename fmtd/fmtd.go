@@ -101,6 +101,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_server := grpc.NewServer(serverOpts...)
 	defer grpc_server.Stop()
 	rpcServer.RegisterWithGrpcServer(grpc_server)
+	rpcServer.AddGrpcInterceptor(grpc_interceptor)
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
