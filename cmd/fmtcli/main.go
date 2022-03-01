@@ -49,7 +49,6 @@ type Args struct {
 	AdminMacPath string
 }
 
-
 // fatal exits the process and prints out error information
 func fatal(err error) {
 	fmt.Fprintf(os.Stderr, "[fmtcli] %v\n", err)

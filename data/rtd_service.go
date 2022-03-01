@@ -93,6 +93,14 @@ func (s *RTDService) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
 	}
+	if atomic.LoadInt32(&s.TCPRunning) == 1 {
+		s.Logger.Info().Msg("Shutting down tcp server...")
+		if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 1, 0); !ok {
+			s.Logger.Error().Msg("TCP server already stopped")
+		}
+		s.tcpServer.Close()
+		s.Logger.Info().Msg("TCP shutdown complete.")
+	}
 	for _, channel := range s.StateChangeChans {
 		close(channel)
 	}
@@ -117,6 +125,9 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
+	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
+		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+	}
 	switch req.Type {
 	case fmtrpc.RecordService_FLUKE:
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.PollingInterval)}
@@ -151,6 +162,9 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
+	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
+		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+	}
 	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
 	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 	if resp.ErrMsg != nil {
@@ -216,10 +230,10 @@ func (s *RTDService) startTCPServer() (error) {
 func (s *RTDService) tcpServerListen(file_type fmtrpc.RecordService) {
 	shutdown := func() {
 		s.Logger.Info().Msg("Shutting down tcp server...")
-		s.tcpServer.Close()
 		if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 1, 0); !ok {
 			s.Logger.Error().Msg("TCP server already stopped")
 		}
+		s.tcpServer.Close()
 		s.Logger.Info().Msg("TCP shutdown complete.")
 	}
 	defer shutdown()
