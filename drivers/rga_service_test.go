@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
@@ -16,7 +17,8 @@ func TestNewMessage(t *testing.T) {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmp_dir)
-	rga, err := NewRGAService(&log, tmp_dir)
+	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
+	rga, err := NewRGAService(&log, tmp_dir, stateStore)
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}

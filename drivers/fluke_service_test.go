@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
@@ -26,7 +27,8 @@ func TestNewFlukeService(t *testing.T) {
 	}
 	defer os.RemoveAll(tmp_dir)
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	flukeService, err := NewFlukeService(&log, tmp_dir)
+	stateStore := state.CreateStore(FlukeInitialState, FlukeReducer)
+	flukeService, err := NewFlukeService(&log, tmp_dir, stateStore)
 	if err != nil {
 		t.Errorf("Could not instantiate FlukeService struct: %v", err)
 	}
