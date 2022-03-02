@@ -96,6 +96,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Creating gRPC server and Server options
 	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, false)
 	err = grpc_interceptor.AddPermissions(MainGrpcServerPermissions())
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Could not add permissions to gRPC middleware: %v", err))
+		return err
+	}
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
 	serverOpts = append(serverOpts, rpcServerOpts...)
 	grpc_server := grpc.NewServer(serverOpts...)
