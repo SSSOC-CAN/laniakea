@@ -24,6 +24,8 @@ func TestNewMessage(t *testing.T) {
 	}
 	RGAServiceStart(t, rga)
 	RGATestConnection(t, rga)
+	RGAStartRecord(t, rga)
+	RGAStopRecord(t, rga)
 	RGAServiceStop(t, rga)
 }
 
@@ -60,4 +62,20 @@ func RGATestConnection(t *testing.T, s *RGAService) {
 		t.Errorf("Unable to communicate with RGA: %v", err)
 	}
 	t.Logf("FilamentInfo msg: %v", resp)
+}
+
+// RGAStartRecord tests the startRecording method and expects an error
+func RGAStartRecord(t *testing.T, s *RGAService) {
+	err := s.startRecording(minRgaPollingInterval)
+	if err == nil {
+		t.Fatalf("Expected an error and none occured")
+	}
+}
+
+// RGAStopRecord tests the stopRecording method and expects an error
+func RGAStopRecord(t *testing.T, s *RGAService) {
+	err := s.stopRecording()
+	if err == nil {
+		t.Fatalf("Expected an error and none occured")
+	}
 }
