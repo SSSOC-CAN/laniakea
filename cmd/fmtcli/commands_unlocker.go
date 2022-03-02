@@ -90,8 +90,7 @@ var changePassword = cli.Command{
 	Usage: "Changes the previously set password.",
 	Description: `
 	Changes the previously set password used to unlock the macaroon key-store.
-	There are two required arguments for this command, the old password and the new password. There are optional flags for stateless_init
-	and save_to for saving the returned macaroon to a specified file.`,
+	There are two required arguments for this command, the old password and the new password.`,
 	Flags: []cli.Flag{
 		cli.BoolFlag{
 			Name: "new_mac_root_key",

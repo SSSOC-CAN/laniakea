@@ -21,7 +21,7 @@ var (
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
 		if !ok {
-			return nil, fmt.Errorf("Invalid state type %v: expected type %v", reflect.TypeOf(s), reflect.TypeOf(fmtrpc.RealTimeData{}))
+			return nil, state.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -29,11 +29,11 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, fmt.Errorf("Invalid payload type %v: expected type %v", reflect.TypeOf(a.Payload), reflect.TypeOf(fmtrpc.RealTimeData{}))
+				return nil, state.ErrInvalidPayloadType
 			}
 			return newState, nil
 		default:
-			return nil, fmt.Errorf("Invalid action: %v", a.Type)
+			return nil, state.ErrInvalidAction
 		} 
 	}
 	bufSize = 1 * 1024 * 1024
