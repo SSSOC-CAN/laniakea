@@ -1,7 +1,14 @@
 package state
 
 import (
+	"fmt"
 	"sync"
+)
+
+var (
+	ErrInvalidPayloadType = fmt.Errorf("Invalid payload type")
+	ErrInvalidStateType = fmt.Errorf("Invalid state type")
+	ErrInvalidAction = fmt.Errorf("Invalid action")
 )
 
 type (
