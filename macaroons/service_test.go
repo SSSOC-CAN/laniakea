@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"reflect"
 	"testing"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"google.golang.org/grpc/metadata"
@@ -129,5 +130,136 @@ func TestValidateMacaroon(t *testing.T) {
 	err = service.ValidateMacaroon(dummyContext, []bakery.Op{{Entity: "Yikes"}}, "Test")
 	if err != nil {
 		t.Fatalf("Could not validate macaroon: %v", err)
+	}
+}
+
+// TestListMacaroonIDs checks that ListMacaroonIDs returns the expected result
+func TestListMacaroonIDs(t *testing.T) {
+	tempDir, db := createDummyRootKeyStore(t)
+	defer db.Close()
+	defer os.RemoveAll(tempDir)
+	service, err := InitService(*db, "fmtd")
+	if err != nil {
+		t.Fatalf("Error creating new service: %v", err)
+	}
+	defer service.Close()
+	err = service.CreateUnlock(&testPw)
+	if err != nil {
+		t.Fatalf("Could not unlock rks: %v", err)
+	}
+
+	expectedIDs := [][]byte{{1}, {2}, {3}}
+	for _, v := range expectedIDs {
+		_, err := service.NewMacaroon(context.TODO(), v, false, nil, testOp)
+		if err != nil {
+			t.Errorf("Error creating macaroon from service: %v", err)
+		}
+	}
+
+	ids, _ := service.ListMacaroonIDs(context.TODO())
+	if !reflect.DeepEqual(expectedIDs, ids) {
+		t.Errorf("root key IDs mismatch expected: %v actual: %v", expectedIDs, ids)
+	}
+}
+
+// TestDeleteMacaroonID tests if we can remove the specific root key ID
+func TestDeleteMacaroonID(t *testing.T) {
+	ctxb := context.Background()
+	tempDir, db := createDummyRootKeyStore(t)
+	defer db.Close()
+	defer os.RemoveAll(tempDir)
+	service, err := InitService(*db, "fmtd")
+	if err != nil {
+		t.Fatalf("Error creating new service: %v", err)
+	}
+	defer service.Close()
+	err = service.CreateUnlock(&testPw)
+	if err != nil {
+		t.Fatalf("Could not unlock rks: %v", err)
+	}
+	// Checks that removing encryptedKeyID returns an error.
+	encryptedKeyID := []byte("enckey")
+	_, err = service.DeleteMacaroonID(ctxb, encryptedKeyID)
+	if err != ErrDeletionForbidden {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// Check if removing DefaultRootKeyID returns an error
+	_, err = service.DeleteMacaroonID(ctxb, DefaultRootKeyID)
+	if err != ErrDeletionForbidden {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// Check that removing empty key id returns an error
+	_, err = service.DeleteMacaroonID(ctxb, []byte{})
+	if err != ErrMissingRootKeyID {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// Check that returning non-existing ids returns nil
+	nonExistingID := []byte("doesnt-exist")
+	deletedID, err := service.DeleteMacaroonID(ctxb, nonExistingID)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if deletedID != nil {
+		t.Errorf("Unexpected return value: %v", deletedID)
+	}
+	// create 3 new macaroons and delete one
+	expectedIDs := [][]byte{{1}, {2}, {3}}
+	for _, v := range expectedIDs {
+		_, err := service.NewMacaroon(context.TODO(), v, false, nil, testOp)
+		if err != nil {
+			t.Errorf("Error creating macaroon from service: %v", err)
+		}
+	}
+	deletedID, err = service.DeleteMacaroonID(ctxb, expectedIDs[0])
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(expectedIDs[0], deletedID) {
+		t.Errorf("Unexpected return value: %v", deletedID)
+	}
+	// check that ID is deleted
+	ids, _ := service.ListMacaroonIDs(context.TODO())
+	if !reflect.DeepEqual(expectedIDs[1:], ids) {
+		t.Errorf("root key IDs mismatch expected: %v actual: %v", expectedIDs, ids)
+	}
+}
+
+// TestCloneMacaroons test that macaroons can be cloned correcty and any modifications do not affect the original
+func TestCloneMacaroons(t *testing.T) {
+	constraintFunc := TimeoutConstraint(3)
+
+	testMac := createDummyMacaroon(t)
+	err := constraintFunc(testMac)
+	if err != nil {
+		t.Errorf("Unexpected error adding constraint to macaroon: %v", err)
+	}
+	if loc := testMac.Caveats()[0].Location; loc != "" {
+		t.Errorf("Expected caveat location to be empty, found: %s", loc)
+	}
+	newMacCred, err := NewMacaroonCredential(testMac)
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	newMac := newMacCred.Macaroon
+	if loc := newMac.Caveats()[0].Location; loc != "" {
+		t.Errorf("Expected caveat location to be empty, found: %s", loc)
+	}
+	testMacBytes, err := testMac.MarshalBinary()
+	if err != nil {
+		t.Errorf("Unexpeted error when getting macaroon bytes: %v", err)
+	}
+	newMacBytes, err := newMac.MarshalBinary()
+	if err != nil {
+		t.Errorf("Unexpeted error when getting macaroon bytes: %v", err)
+	}
+	if !reflect.DeepEqual(testMacBytes, newMacBytes) {
+		t.Errorf("Macaroon bytes mismatch, expected: %v actual: %v", testMacBytes, newMacBytes)
+	}
+	testMac.Caveats()[0].Location = "mars"
+	if loc := testMac.Caveats()[0].Location; loc != "mars" {
+		t.Errorf("Expected caveat location to be mars, found: %s", loc)
+	}
+	if loc := newMac.Caveats()[0].Location; loc != "" {
+		t.Errorf("Expected caveat location to be empty, found: %s", loc)
 	}
 }
