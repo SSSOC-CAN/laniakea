@@ -45,7 +45,10 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 		if err != nil {
 			return nil, err
 		}
-		cred := macaroons.NewMacaroonCredential(constrainedMac)
+		cred, err := macaroons.NewMacaroonCredential(constrainedMac)
+		if err != nil {
+			return nil, err
+		}
 		opts = append(opts, grpc.WithPerRPCCredentials(cred))
 	}
 	genericDialer := utils.ClientAddressDialer(grpcServerPort)
