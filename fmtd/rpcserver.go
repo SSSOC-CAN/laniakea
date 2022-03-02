@@ -198,6 +198,10 @@ func (s *RpcServer) Stop() (error) {
 		return nil
 	}
 	close(s.quit)
+	err := s.Listener.Close()
+	if err != nil {
+		s.SubLogger.Error().Msg(fmt.Sprintf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close()))
+	}
 	return nil
 }
 
@@ -221,6 +225,9 @@ func (s *RpcServer) TestCommand(_ context.Context, _*fmtrpc.TestRequest) (*fmtrp
 func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRequest) (*fmtrpc.BakeMacaroonResponse, error) {
 	if s.macSvc == nil {
 		return nil, fmt.Errorf("Could not bake macaroon: macaroon service not initialized")
+	}
+	if s.grpcInterceptor == nil {
+		return nil, fmt.Errorf("Could not bake macaroon: gRPC middleware not initialized")
 	}
 	if len(req.Permissions) == 0 {
 		return nil, fmt.Errorf("Could not bake macaroon: empty permissions list")
