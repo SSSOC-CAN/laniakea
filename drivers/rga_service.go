@@ -103,7 +103,7 @@ func (s *RGAService) startRecording(pol_int int64) error {
 		pol_int = minRgaPollingInterval
 	}
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return fmt.Errorf("Could not start recording. Data recording already started")
+		return ErrAlreadyRecording
 	}
 	// Create or Open csv
 	current_time := time.Now()
@@ -263,7 +263,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 // stopRecording stops the data recording process
 func (s *RGAService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+		return ErrAlreadyStoppedRecording
 	}
 	s.CancelChan <- struct{}{}
 	_, err := s.connection.FilamentControl("Off")

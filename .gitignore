@@ -16,3 +16,6 @@
 
 # shell scripts
 *.sh
+
+# random test files
+rga_testerino.go

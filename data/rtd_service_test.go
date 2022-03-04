@@ -45,7 +45,11 @@ var (
 func TestRTDServiceStartStop(t *testing.T) {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	stateStore := state.CreateStore(fmtrpc.RealTimeData{}, testReducer)
-	rtdService := NewRTDService(&logger, defaultTestingTCPAddr, defaultTestingTCPPort, stateStore)
+	rtdService := NewRTDService(&logger,
+		defaultTestingTCPAddr,
+		defaultTestingTCPPort,
+		stateStore,
+	)
 	err := rtdService.Start()
 	if err != nil {
 		t.Fatalf("Could not start rtdService: %v", err)
