@@ -1,14 +1,14 @@
 package state
 
 import (
-	"fmt"
 	"sync"
+	"github.com/SSSOC-CAN/fmtd/errors"
 )
 
-var (
-	ErrInvalidPayloadType = fmt.Errorf("Invalid payload type")
-	ErrInvalidStateType = fmt.Errorf("Invalid state type")
-	ErrInvalidAction = fmt.Errorf("Invalid action")
+const (
+	ErrInvalidPayloadType = errors.Error("Invalid payload type")
+	ErrInvalidStateType = errors.Error("Invalid state type")
+	ErrInvalidAction = errors.Error("Invalid action")
 )
 
 type (
