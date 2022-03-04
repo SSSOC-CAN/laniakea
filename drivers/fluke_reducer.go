@@ -1,8 +1,6 @@
 package drivers
 
 import (
-	"fmt"
-	"reflect"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 )

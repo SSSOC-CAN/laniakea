@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
@@ -54,6 +55,7 @@ var (
 		rtd: drivers.FlukeInitialState,
 	}
 	tempPwd = []byte("abcdefgh")
+	defaultMacTimeout int64 = 60
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
@@ -142,11 +144,27 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	services = append(services, rgaService)
 
 	// Instantiate Test Plan Executor and register with gRPC server but NOT start
+	getConnectionFunc := func() (fmtrpc.DataCollectorClient, func(), error) {
+		conn, err := auth.GetClientConn(
+			"localhost",
+			strconv.FormatInt(server.cfg.GrpcPort, 10),
+			server.cfg.TLSCertPath,
+			server.cfg.AdminMacPath,
+			false,
+			defaultMacTimeout,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		cleanUp := func() {
+			conn.Close()
+		}
+		return fmtrpc.NewDataCollectorClient(conn), cleanUp, nil
+	}
 	testPlanExecutor := testplan.NewTestPlanService(
 		&NewSubLogger(server.logger, "TPEX").SubLogger,
-		server.cfg.TLSCertPath,
-		server.cfg.AdminMacPath,
-		server.cfg.GrpcPort,
+		getConnectionFunc,
+		rtdStateStore,
 	)
 	testPlanExecutor.RegisterWithGrpcServer(grpc_server)
 	services = append(services, testPlanExecutor)

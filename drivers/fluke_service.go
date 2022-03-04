@@ -170,6 +170,8 @@ var (
 	flukeOPCServerHost           = "localhost"
 	DefaultPollingInterval int64 = 10
 	minPollingInterval     int64 = 5
+	ErrAlreadyRecording			 = fmt.Errorf("Could not start recording. Data recording already started")
+	ErrAlreadyStoppedRecording   = fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 )
 
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
@@ -273,7 +275,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 		pol_int = DefaultPollingInterval
 	}
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return fmt.Errorf("Could not start recording. Data recording already started")
+		return ErrAlreadyRecording
 	}
 	current_time := time.Now()
 	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
@@ -386,7 +388,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 // stopRecording sends an empty struct down the CancelChan to innitiate the stop recording process
 func (s *FlukeService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+		return ErrAlreadyStoppedRecording
 	}
 	s.CancelChan<-struct{}{}
 	return nil
