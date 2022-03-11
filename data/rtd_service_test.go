@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"net"
-	"reflect"
 	"testing"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
