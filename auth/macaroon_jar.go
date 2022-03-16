@@ -25,7 +25,6 @@ import(
 	"encoding/base64"
 	"encoding/hex"
 	e "errors"
-	"fmt"
 	"strings"
 	"github.com/btcsuite/btcwallet/snacl"
 	"github.com/SSSOC-CAN/fmtd/errors"

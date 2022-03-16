@@ -10,7 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
@@ -58,6 +60,9 @@ type TestPlanService struct {
 	wg					sync.WaitGroup
 }
 
+// Compile time check to ensure TestPlanService implements api.RestProxyService
+var _ api.RestProxyService = (*TestPlanService)(nil)
+
 // writeHeaderToReport writes a header including the date, name of the test and version number for the FMTD
 func writeHeaderToReport(report goroutineSafeCSVWriter, testName string) error {
 	report.Mutex.Lock()
@@ -93,6 +98,17 @@ func NewTestPlanService(logger *zerolog.Logger, getConnection func() (fmtrpc.Dat
 // RegisterWithGrpcServer registers the gRPC server to the unlocker service
 func (s *TestPlanService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	fmtrpc.RegisterTestPlanExecutorServer(grpcServer, s)
+	return nil
+}
+
+// RegisterWithRestProxy registers the TestPlanService with the REST proxy
+func(s *TestPlanService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+	err := fmtrpc.RegisterTestPlanExecutorHandlerFromEndpoint(
+		ctx, mux, restProxyDest, restDialOpts,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
