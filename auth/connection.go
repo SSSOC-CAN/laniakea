@@ -2,7 +2,7 @@ package auth
 
 import (
 	"encoding/hex"
-	e "errors"
+	e "github.com/pkg/errors"
 	"fmt"
 	"os"
 	"syscall"

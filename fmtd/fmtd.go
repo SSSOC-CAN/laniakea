@@ -210,8 +210,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Starting REST proxy
 	stopProxy, err := startRestProxy(
-		server.cfg, 
-		[]*api.RestProxyService{
+		server.cfg,
+		rpcServer, 
+		[]api.RestProxyService{
 			rpcServer,
 			rtdService,
 			testPlanExecutor,
@@ -359,7 +360,7 @@ func startGrpcListen(grpcServer *grpc.Server, listener net.Listener) error {
 }
 
 // startRestProxy starts the given REST proxy on the listeners found in the config.
-func startRestProxy(cfg *Config, services []*api.RestProxyService, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
+func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyService, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
 	restProxyDestNet, err := utils.NormalizeAddresses([]string{fmt.Sprintf("localhost:%d", cfg.GrpcPort)}, strconv.FormatInt(cfg.GrpcPort, 10), net.ResolveTCPAddr)
 	if err != nil {
 		return nil, err
