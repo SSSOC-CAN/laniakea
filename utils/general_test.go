@@ -3,6 +3,7 @@ package utils
 import (
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 )
@@ -35,5 +36,25 @@ func TestUniqueFileName(t *testing.T) {
 				t.Errorf("Expected: %s, recieved: %s", filepath.Join(tmp_dir, expected), new_file_name)
 			}
 		}
+	}
+}
+
+// TestFileExists tests the FileExists function
+func TestFileExists(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "utils-")
+	if err != nil {
+		t.Fatalf("Error creating temporary directory: %v", err)
+	}
+	adminMacPath := path.Join(tempDir, "admin.macaroon")
+	_, err = os.OpenFile(adminMacPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
+	if err != nil {
+		t.Fatalf("Could not open/create file: %v", err)
+	}
+	testMacPath := path.Join(tempDir, "test.macaroon")
+	if !FileExists(adminMacPath) {
+		t.Fatal("File doesn't exist when it should")
+	}
+	if FileExists(testMacPath) {
+		t.Fatal("File exists when it shouldn't")
 	}
 }
