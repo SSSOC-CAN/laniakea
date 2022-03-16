@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -137,6 +138,9 @@ type RpcServer struct {
 	macSvc							*macaroons.Service
 	Listener						net.Listener
 }
+
+// Compile time check to ensure RpcServer implements api.RestProxyService
+var _ api.RestProxyService = (*RpcServer)(nil)
 
 // NewRpcServer creates an instance of the GrpcServer struct
 func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerolog.Logger) (*RpcServer, error) {

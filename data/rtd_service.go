@@ -11,7 +11,9 @@ import (
 	"strconv"
 	"time"
 	"sync/atomic"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"google.golang.org/grpc"
@@ -57,6 +59,9 @@ type RTDService struct {
 	stateStore			*state.Store
 }
 
+// Compile time check to ensure RTDService implements api.RestProxyService
+var _ api.RestProxyService = (*RTDService)(nil)
+
 //NewDataBuffer returns an instantiated DataBuffer struct
 func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64, s *state.Store) *RTDService {
 	return &RTDService{
@@ -71,9 +76,20 @@ func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64, s *state.
 	}
 }
 
-// RegisterWithGrpcServer registers the gRPC server to the unlocker service
+// RegisterWithGrpcServer registers the gRPC server to the RTDService
 func (s *RTDService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	fmtrpc.RegisterDataCollectorServer(grpcServer, s)
+	return nil
+}
+
+// RegisterWithRestProxy registers the RTDService with the REST proxy
+func(s *RTDService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+	err := fmtrpc.RegisterDataCollectorHandlerFromEndpoint(
+		ctx, mux, restProxyDest, restDialOpts,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

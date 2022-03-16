@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/data"
@@ -209,7 +210,15 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Starting REST proxy
 	stopProxy, err := startRestProxy(
-		server.cfg, rpcServer, restDialOpts, restListen,
+		server.cfg, 
+		[]*api.RestProxyService{
+			rpcServer,
+			rtdService,
+			testPlanExecutor,
+			unlockerService,
+		}, 
+		restDialOpts,
+		restListen,
 	)
 	if err != nil {
 		return err
@@ -350,7 +359,7 @@ func startGrpcListen(grpcServer *grpc.Server, listener net.Listener) error {
 }
 
 // startRestProxy starts the given REST proxy on the listeners found in the config.
-func startRestProxy(cfg *Config, rpcServer *RpcServer, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
+func startRestProxy(cfg *Config, services []*api.RestProxyService, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
 	restProxyDestNet, err := utils.NormalizeAddresses([]string{fmt.Sprintf("localhost:%d", cfg.GrpcPort)}, strconv.FormatInt(cfg.GrpcPort, 10), net.ResolveTCPAddr)
 	if err != nil {
 		return nil, err
@@ -388,11 +397,13 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, restDialOpts []grpc.DialO
 	if err != nil {
 		return nil, err
 	}
-	err = rpcServer.RegisterWithRestProxy(
-		ctx, mux, restDialOpts, restProxyDest,
-	)
-	if err != nil {
-		return nil, err
+	for _, s := range services {
+		err = s.RegisterWithRestProxy(
+			ctx, mux, restDialOpts, restProxyDest,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Wrap the default grpc-gateway handler with the WebSocket handler.
 	restHandler := fmtrpc.NewWebSocketProxy(
