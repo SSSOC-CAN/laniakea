@@ -24,7 +24,8 @@ package auth
 import(
 	"encoding/base64"
 	"encoding/hex"
-	e "errors"
+	e "github.com/pkg/errors"
+	"fmt"
 	"strings"
 	"github.com/btcsuite/btcwallet/snacl"
 	"github.com/SSSOC-CAN/fmtd/errors"
@@ -52,6 +53,7 @@ func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 	key := &snacl.SecretKey{}
 	err = key.Unmarshal(keyData)
 	if err != nil {
+		return nil, fmt.Errorf("could not unmarshall encryption key: %v", err)
 		return nil, e.Wrap(err, "could not unmarshall encryption key")
 	}
 	err = key.DeriveKey(&pw)
