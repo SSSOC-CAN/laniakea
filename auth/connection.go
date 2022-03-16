@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/hex"
+	e "github.com/pkg/errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -21,7 +22,7 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 	//get TLS credentials from TLS certificate file
 	creds, err := credentials.NewClientTLSFromFile(tlsCertPath, "")
 	if err != nil {
-		return nil, err
+		return nil, e.Wrap(err, "could not get TLS credentials from file")
 	}
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
@@ -30,12 +31,12 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 		// grab Macaroon data and load it into macaroon.Macaroon struct
 		adminMac, err := os.ReadFile(adminMacPath)
 		if err != nil {
-			return nil, fmt.Errorf("Could not read macaroon at %v: %v", adminMacPath, err)
+			return nil, e.Wrapf(err, "Could not read macaroon at %v", adminMacPath)
 		}
 		macHex := hex.EncodeToString(adminMac)
 		mac, err := loadMacaroon(ReadPassword, macHex)
 		if err != nil {
-			return nil, fmt.Errorf("Could not load macaroon; %v", err)
+			return nil, err
 		}
 		// Add constraints to our macaroon
 		macConstraints := []macaroons.Constraint{
@@ -45,7 +46,10 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 		if err != nil {
 			return nil, err
 		}
-		cred := macaroons.NewMacaroonCredential(constrainedMac)
+		cred, err := macaroons.NewMacaroonCredential(constrainedMac)
+		if err != nil {
+			return nil, err
+		}
 		opts = append(opts, grpc.WithPerRPCCredentials(cred))
 	}
 	genericDialer := utils.ClientAddressDialer(grpcServerPort)
@@ -53,7 +57,7 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 	opts = append(opts, grpc.WithDefaultCallOptions(maxMsgRecvSize))
 	conn, err := grpc.Dial(grpcServerAddr+":"+grpcServerPort, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to connect to RPC server: %v", err)
+		return nil, e.Wrap(err, "unable to dial gRPC server")
 	}
 	return conn, nil
 }

@@ -32,6 +32,8 @@ import (
 	"strings"
 	"sync"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
@@ -39,6 +41,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -49,7 +52,11 @@ import (
 )
 
 var (
+	initialState = struct{rtd fmtrpc.RealTimeData}{
+		rtd: drivers.FlukeInitialState,
+	}
 	tempPwd = []byte("abcdefgh")
+	defaultMacTimeout int64 = 60
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
@@ -58,6 +65,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Create State store
+	rtdStateStore := state.CreateStore(drivers.FlukeInitialState, drivers.FlukeReducer)
+
 	// Starting main server
 	err := server.Start()
 	if err != nil {
@@ -88,15 +99,21 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Creating gRPC server and Server options
 	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, false)
 	err = grpc_interceptor.AddPermissions(MainGrpcServerPermissions())
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Could not add permissions to gRPC middleware: %v", err))
+		return err
+	}
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
 	serverOpts = append(serverOpts, rpcServerOpts...)
 	grpc_server := grpc.NewServer(serverOpts...)
-	rpcServer.AddGrpcServer(grpc_server)
+	defer grpc_server.Stop()
+	rpcServer.RegisterWithGrpcServer(grpc_server)
+	rpcServer.AddGrpcInterceptor(grpc_interceptor)
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
-	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, server.cfg.TCPAddr, server.cfg.TCPPort)
-	err = rtdService.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, server.cfg.TCPAddr, server.cfg.TCPPort, rtdStateStore)
+	err = rtdService.RegisterWithGrpcServer(grpc_server)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
 		return err
@@ -106,7 +123,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiate Fluke service and register with gRPC server but NOT start
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
-	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir)
+	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir, rtdStateStore)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
 		return err
@@ -115,7 +132,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	services = append(services, flukeService)
 
 	// Instantiate RGA service and register with gRPC server and Fluke Service but NOT start
-	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir)
+	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir, rtdStateStore)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate RGA service: %v", err))
 		return err
@@ -125,17 +142,32 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	rgaService.RegisterWithRTDService(rtdService)
-	rgaService.RegisterWithFlukeService(flukeService)
 	services = append(services, rgaService)
 
 	// Instantiate Test Plan Executor and register with gRPC server but NOT start
+	getConnectionFunc := func() (fmtrpc.DataCollectorClient, func(), error) {
+		conn, err := auth.GetClientConn(
+			"localhost",
+			strconv.FormatInt(server.cfg.GrpcPort, 10),
+			server.cfg.TLSCertPath,
+			server.cfg.AdminMacPath,
+			false,
+			defaultMacTimeout,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		cleanUp := func() {
+			conn.Close()
+		}
+		return fmtrpc.NewDataCollectorClient(conn), cleanUp, nil
+	}
 	testPlanExecutor := testplan.NewTestPlanService(
 		&NewSubLogger(server.logger, "TPEX").SubLogger,
-		server.cfg.TLSCertPath,
-		server.cfg.AdminMacPath,
-		server.cfg.GrpcPort,
+		getConnectionFunc,
+		rtdStateStore,
 	)
-	testPlanExecutor.RegisterWithGrpcServer(rpcServer.GrpcServer)
+	testPlanExecutor.RegisterWithGrpcServer(grpc_server)
 	services = append(services, testPlanExecutor)
 
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
@@ -157,23 +189,37 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize unlocker service: %v", err))
 		return err
 	}
-	unlockerService.RegisterWithGrpcServer(rpcServer.GrpcServer)
-	rpcServer.AddUnlockerService(unlockerService)
+	unlockerService.RegisterWithGrpcServer(grpc_server)
 	server.logger.Info().Msg("Unlocker service initialized.")
 
-	//Starting RPC and gRPC Servers
-	server.logger.Info().Msg("Starting RPC server...")
+	// Starting RPC server
 	err = rpcServer.Start()
 	if err != nil {
 		server.logger.Fatal().Msg(fmt.Sprintf("Could not start RPC server: %v", err))
 		return err
 	}
 	defer rpcServer.Stop()
-	server.logger.Info().Msg("RPC Server Started")
+	
+	// Start gRPC listening
+	err = startGrpcListen(grpc_server, rpcServer.Listener)
+	if err != nil {
+		rpcServer.SubLogger.Fatal().Msg(fmt.Sprintf("Could not start gRPC listen on %v:%v", rpcServer.Listener.Addr(), err))
+		return err
+	}
+	rpcServer.SubLogger.Info().Msg(fmt.Sprintf("gRPC listening on %v", rpcServer.Listener.Addr()))
 
 	// Starting REST proxy
 	stopProxy, err := startRestProxy(
-		server.cfg, &rpcServer, restDialOpts, restListen,
+		server.cfg,
+		rpcServer, 
+		[]api.RestProxyService{
+			rpcServer,
+			rtdService,
+			testPlanExecutor,
+			unlockerService,
+		}, 
+		restDialOpts,
+		restListen,
 	)
 	if err != nil {
 		return err
@@ -238,7 +284,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	for _, s := range services {
 		err = s.Start()
 		if err != nil {
-			server.logger.Error().Msg(fmt.Sprintf("Unable to start %S service: %v", s.Name(), err))
+			server.logger.Error().Msg(fmt.Sprintf("Unable to start %s service: %v", s.Name(), err))
 			return err
 		}
 		defer s.Stop()
@@ -301,8 +347,20 @@ func waitForPassword(u *unlocker.UnlockerService, shutdownChan <-chan struct{}) 
 	}
 }
 
+// startGrpcListen starts the gRPC listening on given ports
+func startGrpcListen(grpcServer *grpc.Server, listener net.Listener) error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(lis net.Listener) {
+		wg.Done()
+		_ = grpcServer.Serve(lis)
+	}(listener)
+	wg.Wait()
+	return nil
+}
+
 // startRestProxy starts the given REST proxy on the listeners found in the config.
-func startRestProxy(cfg *Config, rpcServer *RpcServer, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
+func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyService, restDialOpts []grpc.DialOption, restListen func(net.Addr) (net.Listener, error)) (func(), error) {
 	restProxyDestNet, err := utils.NormalizeAddresses([]string{fmt.Sprintf("localhost:%d", cfg.GrpcPort)}, strconv.FormatInt(cfg.GrpcPort, 10), net.ResolveTCPAddr)
 	if err != nil {
 		return nil, err
@@ -340,11 +398,13 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, restDialOpts []grpc.DialO
 	if err != nil {
 		return nil, err
 	}
-	err = rpcServer.RegisterWithRestProxy(
-		ctx, mux, restDialOpts, restProxyDest,
-	)
-	if err != nil {
-		return nil, err
+	for _, s := range services {
+		err = s.RegisterWithRestProxy(
+			ctx, mux, restDialOpts, restProxyDest,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	// Wrap the default grpc-gateway handler with the WebSocket handler.
 	restHandler := fmtrpc.NewWebSocketProxy(

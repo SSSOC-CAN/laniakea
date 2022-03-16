@@ -11,6 +11,7 @@ import (
 
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/konimarti/opc"
 	"github.com/rs/zerolog"
@@ -22,7 +23,6 @@ type Tag struct {
 }
 
 var (
-	pressureRead int = 122
 	customerChannelString = "customer channel "
 	coldfingerSup         = "Coldfinger sup"
 	coldfingerRet         = "Coldfinger ret"
@@ -170,14 +170,15 @@ var (
 	flukeOPCServerHost           = "localhost"
 	DefaultPollingInterval int64 = 10
 	minPollingInterval     int64 = 5
+	ErrAlreadyRecording			 = fmt.Errorf("Could not start recording. Data recording already started")
+	ErrAlreadyStoppedRecording   = fmt.Errorf("Could not stop data recording. Data recording already stopped.")
 )
 
 // FlukeService is a struct for holding all relevant attributes to interfacing with the Fluke DAQ
 type FlukeService struct {
-	Active     				int32 // atomic
-	Stopping   				int32 // atomic
-	Recording  				int32 // atomic
-	Broadcasting			int32 // atomic
+	Running     			int32 // atomic
+	Recording				int32 // atomic
+	stateStore				*state.Store
 	Logger     				*zerolog.Logger
 	name					string
 	tags       				[]string
@@ -186,10 +187,7 @@ type FlukeService struct {
 	QuitChan   				chan struct{}
 	CancelChan				chan struct{}
 	outputDir  				string
-	BuffedChan				chan *fmtrpc.RealTimeData
 	StateChangeChan			chan *data.StateChangeMsg
-	PressureChan			chan float64
-	IsRGAReady				bool
 	filepath				string
 }
 
@@ -198,27 +196,29 @@ var _ data.Service = (*FlukeService) (nil)
 
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
-func NewFlukeService(logger *zerolog.Logger, outputDir string) (*FlukeService, error) {
+func NewFlukeService(logger *zerolog.Logger, outputDir string, store *state.Store) (*FlukeService, error) {
 	tags, err := GetAllTags()
 	if err != nil {
 		return nil, fmt.Errorf("Could not retrieve all tags: %v", err)
 	}
 	return &FlukeService{
-		Logger:    logger,
-		tags:      tags,
-		tagMap:    defaultTagMap(tags),
-		QuitChan:  make(chan struct{}),
-		CancelChan: make(chan struct{}),
-		PressureChan: make(chan float64),
-		outputDir: outputDir,
-		name: 	   data.FlukeName,
+		stateStore:   	  store,
+		Logger:       	  logger,
+		tags:         	  tags,
+		tagMap:       	  defaultTagMap(tags),
+		QuitChan:     	  make(chan struct{}),
+		CancelChan:   	  make(chan struct{}),
+		outputDir:   	  outputDir,
+		name: 	      	  data.FlukeName,
 	}, nil
 }
 
 // Start starts the service. Returns an error if any issues occur
 func (s *FlukeService) Start() error {
 	s.Logger.Info().Msg("Starting Fluke Service...")
-	atomic.StoreInt32(&s.Active, 1)
+	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
+		return fmt.Errorf("Could not start Fluke service: service already started.")
+	}
 	c, err := opc.NewConnection(
 		flukeOPCServerName,
 		[]string{flukeOPCServerHost},
@@ -241,7 +241,9 @@ func (s *FlukeService) Start() error {
 // Stop stops the service. Returns an error if any issues occur
 func (s *FlukeService) Stop() error {
 	s.Logger.Info().Msg("Stopping Fluke Service...")
-	atomic.StoreInt32(&s.Stopping, 1)
+	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
+		return fmt.Errorf("Could not stop Fluke service: service already stopped.")
+	}
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
@@ -256,7 +258,6 @@ func (s *FlukeService) Stop() error {
 		return err
 	}
 	s.connection.Close()
-	close(s.PressureChan)
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -274,7 +275,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 		pol_int = DefaultPollingInterval
 	}
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return fmt.Errorf("Could not start recording. Data recording already started")
+		return ErrAlreadyRecording
 	}
 	current_time := time.Now()
 	file_name := fmt.Sprintf("%s/%02d-%02d-%d-fluke.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
@@ -339,26 +340,19 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 	for _, i := range idxs {
 		reading := s.connection.ReadItem(s.tagMap[i].tag)
 		if i != 0 {
-			if atomic.LoadInt32(&s.Broadcasting) == 1 {
-				switch v := reading.Value.(type) {
-				case float64:
-					dataField[int64(i)]= &fmtrpc.DataField{
-						Name: s.tagMap[i].name,
-						Value: v,
-					}
-				case float32:
-					dataField[int64(i)]= &fmtrpc.DataField{
-						Name: s.tagMap[i].name,
-						Value: float64(v),
-					}
+			switch v := reading.Value.(type) {
+			case float64:
+				dataField[int64(i)]= &fmtrpc.DataField{
+					Name: s.tagMap[i].name,
+					Value: v,
+				}
+			case float32:
+				dataField[int64(i)]= &fmtrpc.DataField{
+					Name: s.tagMap[i].name,
+					Value: float64(v),
 				}
 			}
 			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
-			if s.IsRGAReady {
-				if i == pressureRead {
-					s.PressureChan <- reading.Value.(float64)
-				}
-			}
 		}
 	}
 	//Write to csv in go routine
@@ -371,24 +365,30 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 		echan<-nil
 	}(errChan)
 	
-	if atomic.LoadInt32(&s.Broadcasting) == 1 {
-		dataFrame := &fmtrpc.RealTimeData{
-			Source: s.name,
-			IsScanning: true,
-			Timestamp: current_time.UnixMilli(),
-			Data: dataField,
-		}
-		s.BuffedChan <- dataFrame // may need to go into a goroutine
+	err := s.stateStore.Dispatch(
+		state.Action{
+			Type: 	 "fluke/update",
+			Payload: fmtrpc.RealTimeData{
+				Source: s.name,
+				IsScanning: true,
+				Timestamp: current_time.UnixMilli(),
+				Data: dataField,
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err := <-errChan; err != nil {
+	if err = <-errChan; err != nil {
 		return err
 	}
 	return nil
 }
 
+// stopRecording sends an empty struct down the CancelChan to innitiate the stop recording process
 func (s *FlukeService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+		return ErrAlreadyStoppedRecording
 	}
 	s.CancelChan<-struct{}{}
 	return nil
@@ -400,25 +400,14 @@ func (s *FlukeService) ListenForRTDSignal() {
 		select {
 		case msg := <-s.StateChangeChan:
 			switch msg.Type {
-			case data.BROADCASTING:
-				if msg.State {
-					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 0, 1); !ok {
-						s.Logger.Warn().Msg("Could not start broadcasting to RTD Service: Already broadcasting")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: false, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
-					} else {
-						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
-					}
-				} else {
-					if ok := atomic.CompareAndSwapInt32(&s.Broadcasting, 1, 0); !ok {
-						s.Logger.Warn().Msg("Could not stop broadcasting to RTD Service: Already stopped broadcasting")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.BROADCASTING, State: true, ErrMsg: fmt.Errorf("Could not change broadcasting state.")}
-					} else {
-						s.StateChangeChan <- &data.StateChangeMsg{Type: msg.Type, State: msg.State, ErrMsg: nil}
-					}
-				}
 			case data.RECORDING:
 				if msg.State {
-					err := s.startRecording(DefaultPollingInterval) // TODO:SSSOCPaulCote - RecordingState data will include polling interval
+					var err error
+					if n, err := strconv.ParseInt(msg.Msg, 10, 64); err != nil {
+						err = s.startRecording(DefaultPollingInterval)
+					} else {
+						err = s.startRecording(n)
+					}
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
@@ -447,6 +436,5 @@ func (s *FlukeService) ListenForRTDSignal() {
 // RegisterWithRTDService adds the RTD Service channels to the Fluke Service Struct and incrememnts the number of registered data providers on the RTD
 func (s *FlukeService) RegisterWithRTDService(rtd *data.RTDService) {
 	rtd.RegisterDataProvider(s.name)
-	s.BuffedChan = rtd.DataProviderChan
 	s.StateChangeChan = rtd.StateChangeChans[s.name]
 }

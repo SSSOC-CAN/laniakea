@@ -24,14 +24,18 @@ package auth
 import(
 	"encoding/base64"
 	"encoding/hex"
+	e "github.com/pkg/errors"
 	"fmt"
 	"strings"
 	"github.com/btcsuite/btcwallet/snacl"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	macaroon "gopkg.in/macaroon.v2"
 )
 
 const (
 	encryptionPrefix = "snacl:"
+	ErrEmptyMac = errors.Error("macaroon data is empty")
+	ErrInvalidMacEncrypt = errors.Error("invalid encrypted macaroon. Format expected: 'snacl:<key_base64>:<encrypted_macaroon_base64>'")
 )
 
 type getPasswordFunc func(prompt string) ([]byte, error)
@@ -40,24 +44,25 @@ type getPasswordFunc func(prompt string) ([]byte, error)
 func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 	keyData, err := base64.StdEncoding.DecodeString(keyBase64)
 	if err != nil {
-		return nil, fmt.Errorf("Could not base64 decode encryption key: %v", err)
+		return nil, e.Wrap(err, "could not base64 decode encryption key")
 	}
 	encryptedMac, err := base64.StdEncoding.DecodeString(dataBase64)
 	if err != nil {
-		return nil, fmt.Errorf("Could not base64 decode encrypted macaroon: %v", err)
+		return nil, e.Wrap(err, "could not base64 decode encypted macaroon")	
 	}
 	key := &snacl.SecretKey{}
 	err = key.Unmarshal(keyData)
 	if err != nil {
-		return nil, fmt.Errorf("Could not unmarshall encryption key: %v", err)
+		return nil, fmt.Errorf("could not unmarshall encryption key: %v", err)
+		return nil, e.Wrap(err, "could not unmarshall encryption key")
 	}
 	err = key.DeriveKey(&pw)
 	if err != nil {
-		return nil, fmt.Errorf("Could not derive encryption key possibly due to incorrect password: %v", err)
+		return nil, e.Wrap(err, "could not derive encryption key")
 	}
 	macBytes, err := key.Decrypt(encryptedMac)
 	if err != nil {
-		return nil, fmt.Errorf("Could not decrypt macaroon: %v", err)
+		return nil, e.Wrap(err, "could not decrypt macaroon")
 	}
 	return macBytes, nil
 }
@@ -65,7 +70,7 @@ func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 // loadMacaroon takes a password prompting function and hex encoded macaroon and returns an instantiated macaroon object
 func loadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon, error) {
 	if len(strings.TrimSpace(macHex)) == 0 {
-		return nil, fmt.Errorf("macaroon data is empty")
+		return nil, ErrEmptyMac
 	}
 	var (
 		macBytes	[]byte
@@ -74,25 +79,25 @@ func loadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon
 	if strings.HasPrefix(macHex, encryptionPrefix) {
 		parts := strings.Split(macHex, ":")
 		if len(parts) != 3 {
-			return nil, fmt.Errorf("Invalid encrypted macaroon. Format expected: 'snacl:<key_base64>:<encrypted_macaroon_base64>'")
+			return nil, ErrInvalidMacEncrypt
 		}
 		pw, err := pwCallback("Enter macaroon encryption password: ")
 		if err != nil {
-			return nil, fmt.Errorf("Could not read password from terminal: %v", err)
+			return nil, e.Wrap(err, "could not read password from terminal")
 		}
 		macBytes, err = decryptMacaroon(parts[1], parts[2], pw)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to decrypt macaroon: %v", err)
+			return nil, err
 		}	
 	} else {
 		macBytes, err = hex.DecodeString(macHex)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to hex decode macaroon: %v", err)
+			return nil, e.Wrap(err, "unable to hex decode macaroon")
 		}
 	}
 	mac := &macaroon.Macaroon{}
 	if err = mac.UnmarshalBinary(macBytes); err != nil {
-		return nil, fmt.Errorf("Unable to decode macaroon: %v", err)
+		return nil, e.Wrap(err, "unable to decode macaroon")
 	}
 	return mac, nil
 }

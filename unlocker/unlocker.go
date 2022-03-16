@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -55,6 +56,9 @@ type UnlockerService struct {
 	PasswordMsgs 	chan *PasswordMsg
 	macaroonFiles 	[]string
 }
+
+// Compile time check to ensure UnlockerService implements api.RestProxyService
+var _ api.RestProxyService = (*UnlockerService)(nil)
 
 // InitUnlockerService instantiates the UnlockerService
 func InitUnlockerService(db *kvdb.DB, macaroonFiles []string) (*UnlockerService, error) {

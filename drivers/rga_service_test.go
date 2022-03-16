@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
@@ -16,12 +17,15 @@ func TestNewMessage(t *testing.T) {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmp_dir)
-	rga, err := NewRGAService(&log, tmp_dir)
+	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
+	rga, err := NewRGAService(&log, tmp_dir, stateStore)
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
 	RGAServiceStart(t, rga)
 	RGATestConnection(t, rga)
+	RGAStartRecord(t, rga)
+	RGAStopRecord(t, rga)
 	RGAServiceStop(t, rga)
 }
 
@@ -58,4 +62,20 @@ func RGATestConnection(t *testing.T, s *RGAService) {
 		t.Errorf("Unable to communicate with RGA: %v", err)
 	}
 	t.Logf("FilamentInfo msg: %v", resp)
+}
+
+// RGAStartRecord tests the startRecording method and expects an error
+func RGAStartRecord(t *testing.T, s *RGAService) {
+	err := s.startRecording(minRgaPollingInterval)
+	if err == nil {
+		t.Fatalf("Expected an error and none occured")
+	}
+}
+
+// RGAStopRecord tests the stopRecording method and expects an error
+func RGAStopRecord(t *testing.T, s *RGAService) {
+	err := s.stopRecording()
+	if err == nil {
+		t.Fatalf("Expected an error and none occured")
+	}
 }
