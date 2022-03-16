@@ -188,7 +188,7 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 	})
 	cleanUp := func() {
 		unsub(s.stateStore, idx)
-		time.Sleep(5)
+		time.Sleep(9*time.Second)
 		close(updateChan)
 	}
 	defer cleanUp()
