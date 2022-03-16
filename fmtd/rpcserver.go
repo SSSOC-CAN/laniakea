@@ -27,13 +27,12 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -132,31 +131,32 @@ type RpcServer struct {
 	shutdown 						int32
 	fmtrpc.UnimplementedFmtServer
 	interceptor 					*intercept.Interceptor
-	GrpcServer						*grpc.Server
+	grpcInterceptor					*intercept.GrpcInterceptor
 	cfg 							*Config
 	quit 							chan struct{}
 	SubLogger 						*zerolog.Logger
-	unlockService 					*unlocker.UnlockerService
 	macSvc							*macaroons.Service
+	Listener						net.Listener
 }
 
+// Compile time check to ensure RpcServer implements api.RestProxyService
+var _ api.RestProxyService = (*RpcServer)(nil)
+
 // NewRpcServer creates an instance of the GrpcServer struct
-func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerolog.Logger) (RpcServer, error) {
-	return RpcServer{
+func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerolog.Logger) (*RpcServer, error) {
+	logger := &NewSubLogger(log, "RPCS").SubLogger
+	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(config.GrpcPort, 10))
+	if err != nil {
+		logger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err))
+		return nil, err
+	}
+	return &RpcServer{
 		interceptor: interceptor,
 		cfg: config,
 		quit: make(chan struct{}, 1),
-		SubLogger: &NewSubLogger(log, "RPCS").SubLogger,
+		SubLogger: logger,
+		Listener: listener,
 	}, nil
-}
-
-// AddGrpcServer adds a gRPC server to the attributes of the RpcServer struct
-func (r *RpcServer) AddGrpcServer(server *grpc.Server) {
-	r.GrpcServer = server
-}
-
-func (r *RpcServer) AddUnlockerService(s *unlocker.UnlockerService) {
-	r.unlockService = s
 }
 
 // RegisterWithGrpcServer registers the rpcServer with the root gRPC server.
@@ -176,34 +176,23 @@ func(s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMu
 	return nil
 }
 
-// func AddMacaroonService adds the macaroon service to the attributes of the RpcServer
+// AddMacaroonService adds the macaroon service to the attributes of the RpcServer
 func (s *RpcServer) AddMacaroonService(svc *macaroons.Service) {
 	s.macSvc = svc
 }
 
+// AddGrpcInterceptor adds the grpc middleware to the RpcServer
+func (s *RpcServer) AddGrpcInterceptor(i *intercept.GrpcInterceptor) {
+	s.grpcInterceptor = i
+}
+
 // Start starts the RpcServer subserver
 func (s *RpcServer) Start() (error) {
+	s.SubLogger.Info().Msg("Starting RPC server...")
 	if atomic.AddInt32(&s.started, 1) != 1 {
-		return nil
+		return fmt.Errorf("Could not start RPC server: server already started")
 	}
-	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(s.cfg.GrpcPort, 10))
-	if err != nil {
-		s.SubLogger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", s.cfg.GrpcPort, err))
-		return err
-	}
-	err = s.RegisterWithGrpcServer(s.GrpcServer)
-	if err != nil {
-		s.SubLogger.Error().Msg(fmt.Sprintf("Couldn't register with gRPC server: %v", err))
-		return err
-	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(lis *net.Listener) {
-		wg.Done()
-		_ = s.GrpcServer.Serve(listener)
-	}(&listener)
-	wg.Wait()
-	s.SubLogger.Info().Msg(fmt.Sprintf("gRPC listening on port %v", s.cfg.GrpcPort))
+	s.SubLogger.Info().Msg("RPC server started")
 	return nil
 }
 
@@ -213,7 +202,10 @@ func (s *RpcServer) Stop() (error) {
 		return nil
 	}
 	close(s.quit)
-	s.GrpcServer.Stop()
+	err := s.Listener.Close()
+	if err != nil {
+		s.SubLogger.Error().Msg(fmt.Sprintf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close()))
+	}
 	return nil
 }
 
@@ -238,6 +230,9 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	if s.macSvc == nil {
 		return nil, fmt.Errorf("Could not bake macaroon: macaroon service not initialized")
 	}
+	if s.grpcInterceptor == nil {
+		return nil, fmt.Errorf("Could not bake macaroon: gRPC middleware not initialized")
+	}
 	if len(req.Permissions) == 0 {
 		return nil, fmt.Errorf("Could not bake macaroon: empty permissions list")
 	}
@@ -247,7 +242,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			return nil, fmt.Errorf("Could not bake macaroon: invalid permission entity")
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
-			allPermissions := MainGrpcServerPermissions()
+			allPermissions := s.grpcInterceptor.Permissions()
 			if _, ok := allPermissions[op.Action]; !ok {
 				return nil, fmt.Errorf("Could not bake macaroon: %s is not a valid action", op.Action)
 			}

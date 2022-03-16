@@ -184,3 +184,34 @@ func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, noCaveats b
 func (svc *Service) ChangePassword(oldPw, newPw []byte) error {
 	return svc.rks.ChangePassword(oldPw, newPw)
 }
+
+// ListMacaroonIDs returns all the root key ID values except the value of
+// encryptedKeyID.
+func (svc *Service) ListMacaroonIDs(ctxt context.Context) ([][]byte, error) {
+	return svc.rks.ListMacaroonIDs(ctxt)
+}
+
+// DeleteMacaroonID removes one specific root key ID. If the root key ID is
+// found and deleted, it will be returned.
+func (svc *Service) DeleteMacaroonID(ctxt context.Context,
+	rootKeyID []byte) ([]byte, error) {
+	return svc.rks.DeleteMacaroonID(ctxt, rootKeyID)
+}
+
+// SafeCopyMacaroon creates a copy of a macaroon that is safe to be used and
+// modified. This is necessary because the macaroon library's own Clone() method
+// is unsafe for certain edge cases, resulting in both the cloned and the
+// original macaroons to be modified.
+func SafeCopyMacaroon(mac *macaroon.Macaroon) (*macaroon.Macaroon, error) {
+	macBytes, err := mac.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	newMac := &macaroon.Macaroon{}
+	if err := newMac.UnmarshalBinary(macBytes); err != nil {
+		return nil, err
+	}
+
+	return newMac, nil
+}

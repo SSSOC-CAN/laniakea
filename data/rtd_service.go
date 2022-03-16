@@ -5,12 +5,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"net"
+	"os"
+	"reflect"
 	"strconv"
+	"time"
 	"sync/atomic"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/state"
 	"google.golang.org/grpc"
 )
 
@@ -42,39 +47,49 @@ type StateChangeMsg struct {
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
 	Running				int32 // used atomically
-	Stopping			int32
-	Listeners			int32 // used atomically
 	TCPRunning			int32 // used atomically
 	TCPPort				int64
 	TCPAddr				string
 	Logger				*zerolog.Logger
-	DataProviderChan	chan *fmtrpc.RealTimeData
 	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
-	ServiceBroadStates	map[string]bool
 	ServiceFilePaths	map[fmtrpc.RecordService]string
 	name				string
 	tcpServer			net.Listener
+	stateStore			*state.Store
 }
 
+// Compile time check to ensure RTDService implements api.RestProxyService
+var _ api.RestProxyService = (*RTDService)(nil)
+
 //NewDataBuffer returns an instantiated DataBuffer struct
-func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64) *RTDService {
+func NewRTDService(log *zerolog.Logger, tcpAddr string, tcpPort int64, s *state.Store) *RTDService {
 	return &RTDService{
-		DataProviderChan: 	make(chan *fmtrpc.RealTimeData),
 		ServiceRecStates: 	make(map[string]bool),
-		ServiceBroadStates: make(map[string]bool),
 		StateChangeChans: 	make(map[string]chan *StateChangeMsg),
 		ServiceFilePaths:	make(map[fmtrpc.RecordService]string),
 		Logger: log,
 		name: RtdName,
 		TCPAddr: tcpAddr,
 		TCPPort: tcpPort,
+		stateStore: s,
 	}
 }
 
-// RegisterWithGrpcServer registers the gRPC server to the unlocker service
+// RegisterWithGrpcServer registers the gRPC server to the RTDService
 func (s *RTDService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	fmtrpc.RegisterDataCollectorServer(grpcServer, s)
+	return nil
+}
+
+// RegisterWithRestProxy registers the RTDService with the REST proxy
+func(s *RTDService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+	err := fmtrpc.RegisterDataCollectorHandlerFromEndpoint(
+		ctx, mux, restProxyDest, restDialOpts,
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -91,9 +106,16 @@ func (s *RTDService) Start() error {
 // Stop stops the RTD service. It closes all its channels, lifting the burdens from Data providers
 func (s *RTDService) Stop() error {
 	s.Logger.Info().Msg("Stopping RTD Service ...")
-	atomic.AddInt32(&s.Stopping, 1)
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
+	}
+	if atomic.LoadInt32(&s.TCPRunning) == 1 {
+		s.Logger.Info().Msg("Shutting down tcp server...")
+		if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 1, 0); !ok {
+			s.Logger.Error().Msg("TCP server already stopped")
+		}
+		s.tcpServer.Close()
+		s.Logger.Info().Msg("TCP shutdown complete.")
 	}
 	for _, channel := range s.StateChangeChans {
 		close(channel)
@@ -115,16 +137,16 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 	if _, ok := s.ServiceRecStates[serviceName]; !ok {
 		s.ServiceRecStates[serviceName] = false
 	}
-	if _, ok := s.ServiceBroadStates[serviceName]; !ok {
-		s.ServiceBroadStates[serviceName] = false
-	}
 }
 
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
+	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
+		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+	}
 	switch req.Type {
 	case fmtrpc.RecordService_FLUKE:
-		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil}
+		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.PollingInterval)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
@@ -156,6 +178,9 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
+	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
+		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+	}
 	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
 	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 	if resp.ErrMsg != nil {
@@ -172,55 +197,33 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
-	_ = atomic.AddInt32(&s.Listeners, 1)
-	for name, channel := range s.StateChangeChans {
-		if !s.ServiceBroadStates[name] {
-			channel <- &StateChangeMsg{Type: BROADCASTING, State: true, ErrMsg: nil}
-			resp := <- channel
-			if resp.ErrMsg != nil {
-				s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-				return resp.ErrMsg
-			}
-			s.ServiceBroadStates[name] = true
-		}
+	updateChan := make(chan struct{})
+	lastSentRTDTimestamp := int64(0)
+	idx, unsub := s.stateStore.Subscribe(func() {
+		updateChan<-struct{}{}
+	})
+	cleanUp := func() {
+		unsub(s.stateStore, idx)
+		time.Sleep(9*time.Second)
+		close(updateChan)
 	}
+	defer cleanUp()
 	for {
-		select {
-		case RTD := <-s.DataProviderChan:
-			if err := updateStream.Send(RTD); err != nil {
-				_ = atomic.AddInt32(&s.Listeners, -1)
-				if atomic.LoadInt32(&s.Listeners) == 0 {
-					for name, channel := range s.StateChangeChans {
-						if s.ServiceBroadStates[name] {
-							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-							resp := <- channel
-							if resp.ErrMsg != nil {
-								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-								return resp.ErrMsg
-							}
-						}
-						s.ServiceBroadStates[name] = false
-					}
-				}
+		select {	
+		case <-updateChan:
+			currentState := s.stateStore.GetState()
+			RTD, ok := currentState.(fmtrpc.RealTimeData)
+			if !ok {
+				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
+			}
+			if RTD.Timestamp < lastSentRTDTimestamp {
+				continue
+			} 
+			if err := updateStream.Send(&RTD); err != nil {
 				return err
 			}
+			lastSentRTDTimestamp = RTD.Timestamp
 		case <-updateStream.Context().Done():
-			_ = atomic.AddInt32(&s.Listeners, -1)
-			if atomic.LoadInt32(&s.Listeners) == 0 {
-				if atomic.LoadInt32(&s.Stopping) == 0 {
-					for name, channel := range s.StateChangeChans {
-						if s.ServiceBroadStates[name] {
-							channel <- &StateChangeMsg{Type: BROADCASTING, State: false, ErrMsg: nil}
-							resp := <- channel
-							if resp.ErrMsg != nil {
-								s.Logger.Error().Msg(fmt.Sprintf("Could not change broadcast state: %v", resp.ErrMsg))
-								return resp.ErrMsg
-							}
-						}
-						s.ServiceBroadStates[name] = false
-					}
-				}
-			}
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil
 			}
@@ -243,10 +246,10 @@ func (s *RTDService) startTCPServer() (error) {
 func (s *RTDService) tcpServerListen(file_type fmtrpc.RecordService) {
 	shutdown := func() {
 		s.Logger.Info().Msg("Shutting down tcp server...")
-		s.tcpServer.Close()
 		if ok := atomic.CompareAndSwapInt32(&s.TCPRunning, 1, 0); !ok {
 			s.Logger.Error().Msg("TCP server already stopped")
 		}
+		s.tcpServer.Close()
 		s.Logger.Info().Msg("TCP shutdown complete.")
 	}
 	defer shutdown()

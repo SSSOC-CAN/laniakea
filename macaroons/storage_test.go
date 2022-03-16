@@ -32,6 +32,12 @@ import (
 	"github.com/btcsuite/btcwallet/snacl"
 )
 
+var (
+	defaultRootKeyIDContext = ContextWithRootKeyId(
+		context.Background(), DefaultRootKeyID,
+	)
+)
+
 // createDummyRootKeyStore returns a temporary directory, a cleanup function and an instantiated RootKeyStorage
 func createDummyRootKeyStorage(t *testing.T) (string, func(), *RootKeyStorage) {
 	tempDir, err := ioutil.TempDir("", "macaroonstore-")
@@ -93,11 +99,11 @@ func TestStorage(t *testing.T) {
 	}
 
 	// Now the real deal
-	key, id, err := rks.RootKey(ContextWithRootKeyId(context.Background(), DefaultRootKeyID))
+	key, id, err := rks.RootKey(defaultRootKeyIDContext)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	key2, err := rks.Get(ContextWithRootKeyId(context.Background(), DefaultRootKeyID), id)
+	key2, err := rks.Get(defaultRootKeyIDContext, id)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -139,11 +145,11 @@ func TestStorage(t *testing.T) {
 	if err != ErrPasswordRequired {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	_, _, err = rks.RootKey(ContextWithRootKeyId(context.Background(), DefaultRootKeyID))
+	_, _, err = rks.RootKey(defaultRootKeyIDContext)
 	if err != ErrStoreLocked {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	_, err = rks.Get(ContextWithRootKeyId(context.Background(), DefaultRootKeyID), nil)
+	_, err = rks.Get(defaultRootKeyIDContext, nil)
 	if err != ErrStoreLocked {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -151,14 +157,14 @@ func TestStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not unlock key store: %v", err)
 	}
-	key, err = rks.Get(ContextWithRootKeyId(context.Background(), DefaultRootKeyID), rootId)
+	key, err = rks.Get(defaultRootKeyIDContext, rootId)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	if !reflect.DeepEqual(key2, key) {
 		t.Fatalf("The value of key2 %v should be the same as key %v: %v", key2, key, err)
 	}
-	key, id2, err := rks.RootKey(ContextWithRootKeyId(context.Background(), DefaultRootKeyID))
+	key, id2, err := rks.RootKey(defaultRootKeyIDContext)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -168,4 +174,107 @@ func TestStorage(t *testing.T) {
 	if !reflect.DeepEqual(id2, rootId) {
 		t.Fatalf("The value of id2 %v should be the same as id %v: %v", id2, rootId, err)
 	}	
+}
+
+// TestGenerateNewRootKey tests that a root key can be replaced with a new one in the store
+func TestGenerateNewRootKey(t *testing.T) {
+	tempDir, cleanUp, rks := createDummyRootKeyStorage(t)
+	defer cleanUp()
+	defer os.RemoveAll(tempDir)
+	// test that we can't generate new root keys when the store is locked
+	err := rks.GenerateNewRootKey()
+	if err != ErrStoreLocked {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// unlock store
+	pw := []byte("test")
+	err = rks.CreateUnlock(&pw)
+	if err != nil {
+		t.Errorf("Could not unlock root key store: %v", err)
+	}
+	// get root key
+	oldRootKey, _, err := rks.RootKey(defaultRootKeyIDContext)
+	if err != nil {
+		t.Errorf("Could not get root key: %v", err)
+	}
+	// generate new root key
+	err = rks.GenerateNewRootKey()
+	if err != nil {
+		t.Errorf("Could not generate new root key: %v", err)
+	}
+	// get new root key and compare
+	newRootKey, _, err := rks.RootKey(defaultRootKeyIDContext)
+	if err != nil {
+		t.Errorf("Could not get root key: %v", err)
+	}
+	if reflect.DeepEqual(oldRootKey, newRootKey) {
+		t.Fatalf("Root keys are equal")
+	}
+}
+
+// TestChangePasswird tests that the password for the store can be changed without changing the root key
+func TestChangePassword(t *testing.T) {
+	tempDir, cleanUp, rks := createDummyRootKeyStorage(t)
+	defer cleanUp()
+	defer os.RemoveAll(tempDir)
+
+	// test that the store must first be unlocked
+	err := rks.GenerateNewRootKey()
+	if err != ErrStoreLocked {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// unlock store
+	pw := []byte("test")
+	err = rks.CreateUnlock(&pw)
+	if err != nil {
+		t.Errorf("Could not unlock root key store: %v", err)
+	}
+	// get root key
+	oldRootKey, _, err := rks.RootKey(defaultRootKeyIDContext)
+	if err != nil {
+		t.Errorf("Could not get root key: %v", err)
+	}
+	// test for required password
+	err = rks.ChangePassword(nil, nil)
+	if err != ErrPasswordRequired {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// test for correct old password
+	wrongPw := []byte("wrong")
+	newPw := []byte("newpassword")
+	err = rks.ChangePassword(wrongPw, newPw)
+	if err != snacl.ErrInvalidPassword {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	// change password
+	err = rks.ChangePassword(pw, newPw)
+	if err != nil {
+		t.Errorf("Could not change password: %v", err)
+	}
+	// close store and db
+	cleanUp()
+	// Try reopening
+	db, err := kvdb.NewDB(path.Join(tempDir, "macaroon.db"))
+	if err != nil {
+		t.Fatalf("Could not create/open macaroon.db in temporary directory: %v", err)
+	}
+	rks, err = InitRootKeyStorage(*db)
+	if err != nil {
+		t.Fatalf("Could not instantiate RootKeyStorage: %v", err)
+	}
+	defer func() {
+		db.Close()
+		rks.Close()
+	}()
+	err = rks.CreateUnlock(&newPw)
+	if err != nil {
+		t.Errorf("Error unlocking store with new password: %v", err)
+	}
+	rootKey, _, err := rks.RootKey(defaultRootKeyIDContext)
+	if err != nil {
+		t.Errorf("Error getting root key: %v", err)
+	}
+	if !reflect.DeepEqual(oldRootKey, rootKey) {
+		t.Errorf("Root keys are unequal old rk: %v new rk: %v", oldRootKey, rootKey)
+	}
 }

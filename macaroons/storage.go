@@ -350,11 +350,6 @@ func (r *RootKeyStorage) ListMacaroonIDs(_ context.Context) ([][]byte, error) {
 	// Read all the items in the bucket and append the keys, which are the
 	// root key IDs we want.
 	err := r.DB.View(func(tx *bolt.Tx) error {
-		// As this is meant to be a read-only operation, rollback any unintended changes
-		defer func() {
-			rootKeySlice = nil
-			tx.Rollback()
-		}()
 		// appendRootKey is a function closure that appends root key ID
 		// to rootKeySlice.
 		appendRootKey := func(k, _ []byte) error {
@@ -401,10 +396,6 @@ func (r *RootKeyStorage) DeleteMacaroonID(
 
 	var rootKeyIDDeleted []byte
 	err := r.DB.Update(func(tx *bolt.Tx) error {
-		// As this is meant to be a read-only operation, rollback any unintended changes
-		defer func() {
-			rootKeyIDDeleted = nil
-		}()
 		bucket := tx.Bucket(rootKeyBucketName)
 
 		// Check the key can be found. If not, return nil.
