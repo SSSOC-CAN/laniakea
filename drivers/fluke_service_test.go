@@ -1,3 +1,5 @@
+// +build fluke windows 386
+
 package drivers
 
 import (
