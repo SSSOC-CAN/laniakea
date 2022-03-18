@@ -1,176 +1,44 @@
-// +build fluke windows 386
+// +build !fluke !windows !386
 
 package drivers
 
 import (
 	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"os"
-	"sort"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
-	"github.com/konimarti/opc"
 	"github.com/rs/zerolog"
 )
 
-type Tag struct {
-	name string
-	tag  string
-}
-
 var (
-	customerChannelString = "customer channel "
-	coldfingerSup         = "Coldfinger sup"
-	coldfingerRet         = "Coldfinger ret"
-	coldfingerFin         = "Coldfinger fin"
-	platenIn              = "Platen_TTin"
-	platenOut             = "Platen_TTout"
-	couponString          = "Coupon#"
-	customerSupply        = "CustomerSup"
-	voltageString         = "Voltage"
-	rearShroudSupStr      = "Rear Shroud (R.S. Supply)"
-	rearShroudUpStr       = "Rear Shroud (R.S. Upright)"
-	rearShroudRetStr      = "Rear Shroud (R.S. Return)"
-	coldfingerStr         = "Coldfinger"
-	platenLeftRearStr     = "Platen (L.S. Rear)"
-	platenLeftFrontStr    = "Platen (L.S. Front)"
-	platenRightFrontStr   = "Platen (R.S. Front)"
-	platenRightRearStr    = "Platen (R.S. Rear)"
-	platenRetStr          = "Platen (Return S-bend)"
-	mainSupRearStr        = "Main (Supply man Rear)"
-	mainSupFrontStr       = "Main (Supply man Front)"
-	mainRetFrontStr       = "Main (Return man Front)"
-	mainRetRearStr        = "Main (Return man Rear)"
-	frontDoorSupStr       = "Front Door (D.S. Supply)"
-	frontDoorRetStr       = "Front Door (D.S. Return)"
-	frontDoorSkinStr      = "Front Door Skin"
-	rearSkinStr           = "Rear Skin (bell)"
-	mainShroudRearStr     = "Rear of Main Shroud"
-	mainShroudFrontStr    = "Front of Main Shroud"
-	platenSupStr          = "Platen (Supply S-bend)"
-	computedOne           = "CustSup_Current"
-	pressureStr           = "Pressure_Test"
-	defaultTagMap         = func(tags []string) map[int]Tag {
-		tagMap := make(map[int]Tag)
-		for i, t := range tags {
-			var str string
-			switch {
-			case i == 0:
-				str = "Scan"
-			case i < 41 && i > 0: // first 40 channels are customer channels
-
-				str = customerChannelString + strconv.Itoa(i)
-			case i == 43:
-
-				str = coldfingerSup
-			case i == 44:
-
-				str = coldfingerRet
-			case i == 45:
-
-				str = coldfingerFin
-			case i == 66:
-
-				str = platenIn
-			case i == 67:
-
-				str = platenOut
-			case i == 81:
-
-				str = customerSupply + " - " + voltageString
-			case i < 95 && i > 81:
-
-				str = couponString + strconv.Itoa(i-80) + " - " + voltageString
-			case i == 95:
-
-				str = couponString + strconv.Itoa(1) + " - " + voltageString
-			case i == 101:
-
-				str = rearShroudSupStr
-			case i == 102:
-
-				str = rearShroudUpStr
-			case i == 103:
-
-				str = rearShroudRetStr
-			case i == 104:
-
-				str = coldfingerStr
-			case i == 105:
-
-				str = platenLeftRearStr
-			case i == 106:
-
-				str = platenLeftFrontStr
-			case i == 107:
-
-				str = platenRightFrontStr
-			case i == 108:
-
-				str = platenRightRearStr
-			case i == 109:
-
-				str = platenRetStr
-			case i == 110:
-
-				str = mainSupRearStr
-			case i == 111:
-
-				str = mainSupFrontStr
-			case i == 112:
-
-				str = mainRetFrontStr
-			case i == 113:
-
-				str = mainRetRearStr
-			case i == 114:
-
-				str = frontDoorSupStr
-			case i == 115:
-
-				str = frontDoorRetStr
-			case i == 116:
-
-				str = frontDoorSkinStr
-			case i == 117:
-
-				str = rearSkinStr
-			case i == 118:
-
-				str = mainShroudRearStr
-			case i == 119:
-
-				str = mainShroudFrontStr
-			case i == 120:
-
-				str = platenSupStr
-			case i == 121:
-
-				str = computedOne
-			case i == 122:
-
-				str = pressureStr
-			case i > 122 && i < 136:
-
-				str = couponString + strconv.Itoa(i-121) + " - Current"
-			case i == 136:
-				str = couponString + strconv.Itoa(1) + " - Current"
-			}
-			if str != "" {
-				tagMap[i] = Tag{name: str, tag: t}
-			}
+	FlukeInitialState = fmtrpc.RealTimeData{}
+	FlukeReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		_, ok := s.(fmtrpc.RealTimeData)
+		if !ok {
+			return nil, state.ErrInvalidStateType
 		}
-		return tagMap
+		// switch case action
+		switch a.Type {
+		case "fluke/update":
+			// assert type of payload
+			newState, ok := a.Payload.(fmtrpc.RealTimeData)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			return newState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
 	}
-	flukeOPCServerName           = "Fluke.DAQ.OPC"
-	flukeOPCServerHost           = "localhost"
-	DefaultPollingInterval int64 = 10
+	DefaultPollingInterval int64 = 5
 	minPollingInterval     int64 = 5
 	ErrAlreadyRecording			 = fmt.Errorf("Could not start recording. Data recording already started")
 	ErrAlreadyStoppedRecording   = fmt.Errorf("Could not stop data recording. Data recording already stopped.")
@@ -183,9 +51,6 @@ type FlukeService struct {
 	stateStore				*state.Store
 	Logger     				*zerolog.Logger
 	name					string
-	tags       				[]string
-	tagMap     				map[int]Tag
-	connection 				opc.Connection
 	QuitChan   				chan struct{}
 	CancelChan				chan struct{}
 	outputDir  				string
@@ -199,15 +64,9 @@ var _ data.Service = (*FlukeService) (nil)
 
 // NewFlukeService creates a new Fluke Service object which will use the drivers for the Fluke DAQ software
 func NewFlukeService(logger *zerolog.Logger, outputDir string, store *state.Store) (*FlukeService, error) {
-	tags, err := GetAllTags()
-	if err != nil {
-		return nil, fmt.Errorf("Could not retrieve all tags: %v", err)
-	}
 	return &FlukeService{
 		stateStore:   	  store,
 		Logger:       	  logger,
-		tags:         	  tags,
-		tagMap:       	  defaultTagMap(tags),
 		QuitChan:     	  make(chan struct{}),
 		CancelChan:   	  make(chan struct{}),
 		outputDir:   	  outputDir,
@@ -221,20 +80,7 @@ func (s *FlukeService) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start Fluke service: service already started.")
 	}
-	c, err := opc.NewConnection(
-		flukeOPCServerName,
-		[]string{flukeOPCServerHost},
-		s.tags,
-	)
-	if err != nil {
-		return err
-	}
-	// Start scanning
-	err = c.Write(s.tagMap[0].tag, true)
-	if err != nil {
-		return err
-	}
-	s.connection = c
+	s.Logger.Info().Msg("Connection to Fluke DAQ is not currently active. Please recompile fmtd as follows `$ go install -tags \"fluke windows 386\"`")
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("Fluke Service started.")
 	return nil
@@ -254,12 +100,6 @@ func (s *FlukeService) Stop() error {
 	}
 	close(s.CancelChan)
 	close(s.QuitChan)
-	// Stop scanning
-	err := s.connection.Write(s.tagMap[0].tag, false)
-	if err != nil {
-		return err
-	}
-	s.connection.Close()
 	s.Logger.Info().Msg("Fluke Service stopped.")
 	return nil
 }
@@ -290,15 +130,8 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 	writer := csv.NewWriter(file)
 	// headers
 	headerData := []string{"Timestamp"}
-	idxs := make([]int, 0, len(s.tagMap))
-	for idx := range s.tagMap {
-		idxs = append(idxs, idx)
-	}
-	sort.Ints(idxs)
-	for _, i := range idxs {
-		if i != 0 {
-			headerData = append(headerData, s.tagMap[i].name)
-		}
+	for i := 0; i < 136; i++ {
+		headerData = append(headerData, fmt.Sprintf("Value #%v", i+1))
 	}
 	err = writer.Write(headerData)
 	if err != nil {
@@ -311,7 +144,7 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer, idxs)
+				err = s.record(writer)
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
 				}
@@ -334,28 +167,18 @@ func (s *FlukeService) startRecording(pol_int int64) error {
 }
 
 // record records the live data from Fluke and inserts it into a csv file and passes it to the RTD service
-func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
+func (s *FlukeService) record(writer *csv.Writer) error {
 	current_time := time.Now()
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
-	for _, i := range idxs {
-		reading := s.connection.ReadItem(s.tagMap[i].tag)
-		if i != 0 {
-			switch v := reading.Value.(type) {
-			case float64:
-				dataField[int64(i)]= &fmtrpc.DataField{
-					Name: s.tagMap[i].name,
-					Value: v,
-				}
-			case float32:
-				dataField[int64(i)]= &fmtrpc.DataField{
-					Name: s.tagMap[i].name,
-					Value: float64(v),
-				}
-			}
-			dataString = append(dataString, fmt.Sprintf("%g", reading.Value))
+	for i := 0; i < 136; i++ {
+		v := (rand.Float64()*5)+20
+		dataField[int64(i)]= &fmtrpc.DataField{
+			Name: fmt.Sprintf("Value %v", i+1),
+			Value: v,
 		}
+		dataString = append(dataString, fmt.Sprintf("%g", v))
 	}
 	//Write to csv in go routine
 	errChan := make(chan error)
@@ -372,7 +195,7 @@ func (s *FlukeService) record(writer *csv.Writer, idxs []int) error {
 			Type: 	 "fluke/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,
-				IsScanning: true,
+				IsScanning: false,
 				Timestamp: current_time.UnixMilli(),
 				Data: dataField,
 			},

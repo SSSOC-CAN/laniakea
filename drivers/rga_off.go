@@ -1,25 +1,44 @@
-// +build rga
+// +build !rga
 
 package drivers
 
 import (
 	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"os"
-	"reflect"
 	"strconv"
-	"sync/atomic"
 	"time"
-	"github.com/rs/zerolog"
+
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/rs/zerolog"
 )
 
 var (
-	minimumPressure float64 = 0.00005
-	minRgaPollingInterval int64 = 15 // Arbitrary not sure what this value should be - After manual testing, value will be 15 seconds
+	RGAInitialState = fmtrpc.RealTimeData{}
+	RGAReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		_, ok := s.(fmtrpc.RealTimeData)
+		if !ok {
+			return nil, state.ErrInvalidStateType
+		}
+		// switch case action
+		switch a.Type {
+		case "rga/update":
+			// assert type of payload
+			newState, ok := a.Payload.(fmtrpc.RealTimeData)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			return newState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
+	}
+	minRgaPollingInterval int64 = 15 // After manual testing, value will be 15 seconds
 	pressureRead int64 = 122
 )
 
@@ -33,7 +52,6 @@ type RGAService struct {
 	QuitChan			chan struct{}
 	CancelChan			chan struct{}
 	outputDir  			string
-	connection			*RGAConnection
 	name 				string
 	currentPressure		float64
 	filepath			string
@@ -44,17 +62,12 @@ var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store) (*RGAService, error) {
-	c, err := ConnectToRGA()
-	if err != nil {
-		return nil, fmt.Errorf("Unable to connect to RGA: %v", err)
-	}
 	return &RGAService{
 		stateStore: store,
 		Logger: logger,
 		QuitChan: make(chan struct{}),
 		CancelChan: make(chan struct{}),
 		outputDir: outputDir,
-		connection: &RGAConnection{c},
 		name: data.RgaName,
 	}, nil
 }
@@ -65,6 +78,7 @@ func (s *RGAService) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start RGA service. Service already started.")
 	}
+	s.Logger.Info().Msg("Connection to MKS RGA is not currently active. Please recompile fmtd as follows `$ go install -tags \"rga\"`")
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("RGA Service successfully started.")
 	return nil
@@ -84,7 +98,6 @@ func (s *RGAService) Stop() error {
 	}
 	close(s.CancelChan)
 	close(s.QuitChan)
-	s.connection.Close()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
 	return nil
 }
@@ -109,7 +122,7 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	}
 	// Create or Open csv
 	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%02d-%02d-%d-rga.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
+	file_name := fmt.Sprintf("%s/%d-%02d-%02d-rga.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
 	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
@@ -117,31 +130,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	}
 	s.filepath = file_name
 	writer := csv.NewWriter(file)
-	// InitMsg
-	err = s.connection.InitMsg()
-	if err != nil {
-		return fmt.Errorf("Unable to communicate with RGA: %v", err)
-	}
-	// Setup Data
-	_, err = s.connection.Control(utils.AppName, utils.AppVersion)
-	if err != nil {
-		return err
-	}
-	resp, err := s.connection.SensorState()
-	if err != nil {
-		return err
-	}
-	if resp.Fields["State"].Value.(string) != Rga_SENSOR_STATE_INUSE {
-		return fmt.Errorf("Sensor not ready: %v", resp.Fields["State"])
-	}
-	_, err = s.connection.AddBarchart("Bar1", 1, 200, Rga_PeakCenter, 5, 0, 0, 0)
-	if err != nil {
-		return fmt.Errorf("Could not add Barchart: %v", err)
-	}
-	_, err = s.connection.ScanAdd("Bar1")
-	if err != nil {
-		return fmt.Errorf("Could not add measurement to scan: %v", err)
-	}
 	// Now we begin recording
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
@@ -179,26 +167,8 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if ticks == 0 {
 		// Header data for csv file
 		headerData := []string{"Timestamp"}
-		// Start scan
-		_, err := s.connection.ScanStart(1)
-		if err != nil {
-			return fmt.Errorf("Could not start scan: %v", err)
-		}
-		_, err = s.connection.FilamentControl("On")
-		if err != nil {
-			return fmt.Errorf("Could not turn on filament: %v", err)
-		}
-		for {
-			resp, err := s.connection.ReadResponse()
-			if err != nil {
-				return fmt.Errorf("Could not read response: %v", err)
-			}
-			if resp.ErrMsg.CommandName == massReading {
-				headerData = append(headerData, strconv.FormatInt(resp.Fields["MassPosition"].Value.(int64), 10))
-				if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
-					break
-				}
-			}
+		for i := 0; i < 200; i++ {
+			headerData = append(headerData, fmt.Sprintf("%v AMU", i+1))
 		}
 		err = writer.Write(headerData)
 		if err != nil {
@@ -207,29 +177,16 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		return nil
 	}
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%02d-%02d-%d %02d:%02d:%02d", current_time.Day(), current_time.Month(), current_time.Year(), current_time.Hour(), current_time.Minute(), current_time.Second())
+	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
-	// Start scan
-	_, err := s.connection.ScanResume(1)
-	if err != nil {
-		return fmt.Errorf("Could not resume scan: %v", err)
-	}
-	for {
-		resp, err := s.connection.ReadResponse()
-		if err != nil {
-			return fmt.Errorf("Could not read response: %v", err)
+	for i := 0; i < 200; i++ {
+		v := (rand.Float64()*5)+20
+		dataField[massPos]= &fmtrpc.DataField{
+			Name: fmt.Sprintf("Mass %v", i+1),
+			Value: v,
 		}
-		if resp.ErrMsg.CommandName == massReading {
-			massPos := resp.Fields["MassPosition"].Value.(int64)
-			dataField[massPos]= &fmtrpc.DataField{
-				Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
-				Value: resp.Fields["Value"].Value.(float64),
-			}
-			dataString = append(dataString, fmt.Sprintf("%g", resp.Fields["Value"].Value.(float64)))
-			if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
-				break
-			}
+		dataString = append(dataString, fmt.Sprintf("%g", v))
 		}
 	}
 	//Write to csv in go routine
@@ -247,7 +204,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,
-				IsScanning: true,
+				IsScanning: false,
 				Timestamp: current_time.UnixMilli(),
 				Data: dataField,
 			},
@@ -268,14 +225,6 @@ func (s *RGAService) stopRecording() error {
 		return ErrAlreadyStoppedRecording
 	}
 	s.CancelChan <- struct{}{}
-	_, err := s.connection.FilamentControl("Off")
-	if err != nil {
-		return fmt.Errorf("Could nto safely turn off filament: %v", err)
-	}
-	_, err = s.connection.Release()
-	if err != nil {
-		return fmt.Errorf("Could not safely release control of RGA: %v", err)
-	}
 	return nil
 }
 
