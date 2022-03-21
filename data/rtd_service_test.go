@@ -24,7 +24,7 @@ var (
 		}
 		// switch case action
 		switch a.Type {
-		case "fluke/update":
+		case "telemetry/update":
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
@@ -101,7 +101,7 @@ func TestStartRecordingFluke(t *testing.T) {
 	client := fmtrpc.NewDataCollectorClient(conn)
 	_, err = client.StartRecording(ctx, &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
-		Type: fmtrpc.RecordService_FLUKE,
+		Type: fmtrpc.RecordService_TELEMETRY,
 	})
 	if err == nil {
 		t.Fatalf("Expected error and none were raised")
@@ -119,7 +119,7 @@ func TestStopRecordingFluke(t *testing.T) {
 	}
 	defer conn.Close()
 	client := fmtrpc.NewDataCollectorClient(conn)
-	_, err = client.StopRecording(ctx, &fmtrpc.StopRecRequest{Type: fmtrpc.RecordService_FLUKE})
+	_, err = client.StopRecording(ctx, &fmtrpc.StopRecRequest{Type: fmtrpc.RecordService_TELEMETRY})
 	if err == nil {
 		t.Fatalf("Expected error and none were raised")
 	}
@@ -194,7 +194,7 @@ func TestDownloadHistoricalDataFluke(t *testing.T) {
 	}
 	defer conn.Close()
 	client := fmtrpc.NewDataCollectorClient(conn)
-	resp, err := client.DownloadHistoricalData(ctx, &fmtrpc.HistoricalDataRequest{Source: fmtrpc.RecordService_FLUKE})
+	resp, err := client.DownloadHistoricalData(ctx, &fmtrpc.HistoricalDataRequest{Source: fmtrpc.RecordService_TELEMETRY})
 	if err != nil {
 		t.Fatalf("Unexpected error when requesting historical data: %v", err)
 	}

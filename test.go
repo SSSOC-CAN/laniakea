@@ -20,5 +20,5 @@ func main() {
 		tags,
 	)
 	fmt.Printf("OPC Connection type: %v", reflect.TypeOf(c))
-	var _ drivers.DriverConnection = c
+	var _ drivers.DriverConnection = c // runtime check if *opc.opcConnectionImpl implements the drivers.DriverConnection interface
 }

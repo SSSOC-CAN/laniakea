@@ -23,7 +23,7 @@ service DataCollector {
 }
 
 enum RecordService {
-    FLUKE = 0;
+    TELEMETRY = 0;
     RGA = 1;
 }
 

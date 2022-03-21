@@ -1,12 +1,13 @@
-// +build rga
+// +build demo
 
-package drivers
+package rga
 
 import (
 	"io/ioutil"
 	"os"
 	"testing"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
@@ -20,12 +21,11 @@ func TestNewMessage(t *testing.T) {
 	}
 	defer os.RemoveAll(tmp_dir)
 	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	rga, err := NewRGAService(&log, tmp_dir, stateStore)
+	rga, err := NewRGAService(&log, tmp_dir, stateStore, drivers.BlankConnection{})
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
 	RGAServiceStart(t, rga)
-	RGATestConnection(t, rga)
 	RGAStartRecord(t, rga)
 	RGAStopRecord(t, rga)
 	RGAServiceStop(t, rga)
@@ -46,24 +46,6 @@ func RGAServiceStop(t *testing.T, s *RGAService) {
 	if err != nil {
 		t.Errorf("Could not stop RGA Service: %v", err)
 	}
-}
-
-// RGATestConnection tests a few info commands on the RGA
-func RGATestConnection(t *testing.T, s *RGAService) {
-	err := s.connection.InitMsg()
-	if err != nil {
-		t.Errorf("Unable to communicate with RGA: %v", err)
-	}
-	resp, err := s.connection.SensorState()
-	if err != nil {
-		t.Errorf("Unable to communicate with RGA: %v", err)
-	}
-	t.Logf("SensoreState msg: %v", resp)
-	resp, err = s.connection.FilamentInfo()
-	if err != nil {
-		t.Errorf("Unable to communicate with RGA: %v", err)
-	}
-	t.Logf("FilamentInfo msg: %v", resp)
 }
 
 // RGAStartRecord tests the startRecording method and expects an error
