@@ -1,6 +1,4 @@
-// +build fluke windows 386
-
-package drivers
+package rga
 
 import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -8,8 +6,8 @@ import (
 )
 
 var (
-	FlukeInitialState = fmtrpc.RealTimeData{}
-	FlukeReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	RGAInitialState = fmtrpc.RealTimeData{}
+	RGAReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
 		if !ok {
@@ -17,7 +15,7 @@ var (
 		}
 		// switch case action
 		switch a.Type {
-		case "fluke/update":
+		case "rga/update":
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {

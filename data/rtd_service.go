@@ -20,11 +20,11 @@ import (
 )
 
 var (
-	FlukeName = "FLUKE"
+	TelemetryName = "TEL"
 	RgaName = "RGA"
 	RtdName = "RTD"
 	rpcEnumMap = map[fmtrpc.RecordService]string{
-		fmtrpc.RecordService_FLUKE: FlukeName,
+		fmtrpc.RecordService_TELEMETRY: TelemetryName,
 		fmtrpc.RecordService_RGA: RgaName,
 	}
 	defaultTCPBufferSize int64 = 1024
@@ -139,13 +139,13 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 	}
 }
 
-// StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
+// StartRecording is called by gRPC client and CLI to begin the data recording process with Telemetry or RGA
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
 		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
 	}
 	switch req.Type {
-	case fmtrpc.RecordService_FLUKE:
+	case fmtrpc.RecordService_TELEMETRY:
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.PollingInterval)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
@@ -156,10 +156,10 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 		s.ServiceFilePaths[req.Type] = resp.Msg
 	case fmtrpc.RecordService_RGA:
-		if !s.ServiceRecStates[FlukeName] {
+		if !s.ServiceRecStates[TelemetryName] {
 			return &fmtrpc.RecordResponse{
-				Msg: fmt.Sprintf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type]),
-			}, fmt.Errorf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type])
+				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
+			}, fmt.Errorf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type])
 		}
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]

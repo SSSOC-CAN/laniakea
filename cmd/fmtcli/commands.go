@@ -133,7 +133,7 @@ var startRecording = cli.Command{
 	ArgsUsage: "service-name",
 	Description: `
 	This command starts the process of recording data for the given service into a timestamped csv file. Service-name must be one the following:
-	    - fluke
+	    - telemetry
 		- rga`,
 	Flags: []cli.Flag{
 		cli.Int64Flag{
@@ -159,12 +159,12 @@ func startRecord(ctx *cli.Context) error {
 		polling_interval = ctx.Int64("polling_interval")
 	}
 	switch serviceNameStr {
-	case "fluke":
-		serviceName = fmtrpc.RecordService_FLUKE
+	case "telemetry":
+		serviceName = fmtrpc.RecordService_TELEMETRY
 	case "rga":
 		serviceName = fmtrpc.RecordService_RGA
 	default:
-		return fmt.Errorf("Invalid service name %v, service names must be one of the following: fluke and rga", serviceNameStr)
+		return fmt.Errorf("Invalid service name %v, service names must be one of the following: telemetry and rga", serviceNameStr)
 	}
 	recordRequest := &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
@@ -184,12 +184,12 @@ var stopRecording = cli.Command{
 	ArgsUsage: "service-name",
 	Description: `
 	This command stops the process of recording data from the given service into a timestamped csv file. Service-name must be one the following:
-	- fluke
+	- telemetry
 	- rga`,
 	Action: stopRecord,
 }
 
-// stopRecord is the CLI wrapper around the FlukeService StopRecording method
+// stopRecord is the CLI wrapper around the TelemetryService StopRecording method
 func stopRecord(ctx *cli.Context) error {
 	ctxc := getContext()
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
@@ -200,12 +200,12 @@ func stopRecord(ctx *cli.Context) error {
 	serviceNameStr := ctx.Args().First()
 	var serviceName fmtrpc.RecordService
 	switch serviceNameStr {
-	case "fluke":
-		serviceName = fmtrpc.RecordService_FLUKE
+	case "telemetry":
+		serviceName = fmtrpc.RecordService_TELEMETRY
 	case "rga":
 		serviceName = fmtrpc.RecordService_RGA
 	default:
-		return fmt.Errorf("Invalid service name %v, service names must be one of the following: fluke and rga", serviceNameStr)
+		return fmt.Errorf("Invalid service name %v, service names must be one of the following: telemetry and rga", serviceNameStr)
 	}
 	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{Type: serviceName})
 	if err != nil {
