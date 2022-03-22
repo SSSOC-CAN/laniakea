@@ -6,31 +6,29 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os"
+	"reflect"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 type RGAService struct {
 	BaseRGAService
-	connection			drivers.DriverConnection
+	connection			*drivers.RGAConnection
 }
-
-var (
-	ErrAlreadyRecording			 = fmt.Errorf("Could not start recording. Data recording already started")
-	ErrAlreadyStoppedRecording   = fmt.Errorf("Could not stop data recording. Data recording already stopped.")
-)
 
 // A compile time check to make sure that RGAService fully implements the data.Service interface
 var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
-func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, connection drivers.DriverConnection) *RGAService {
+func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, connection *drivers.RGAConnection) *RGAService {
 	return &RGAService{
 		BaseRGAService: BaseRGAService{
 			stateStore: store,
@@ -40,7 +38,7 @@ func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store,
 			outputDir: outputDir,
 			name: data.RgaName,
 		},
-		connection: &drivers.RGAConnection{connection},
+		connection: connection,
 	}
 }
 
@@ -178,7 +176,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			if err != nil {
 				return fmt.Errorf("Could not read response: %v", err)
 			}
-			if resp.ErrMsg.CommandName == massReading {
+			if resp.ErrMsg.CommandName == drivers.MassReading {
 				headerData = append(headerData, strconv.FormatInt(resp.Fields["MassPosition"].Value.(int64), 10))
 				if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
 					break
@@ -205,7 +203,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		if err != nil {
 			return fmt.Errorf("Could not read response: %v", err)
 		}
-		if resp.ErrMsg.CommandName == massReading {
+		if resp.ErrMsg.CommandName == drivers.MassReading {
 			massPos := resp.Fields["MassPosition"].Value.(int64)
 			dataField[massPos]= &fmtrpc.DataField{
 				Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),

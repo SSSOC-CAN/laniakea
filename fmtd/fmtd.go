@@ -37,6 +37,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
@@ -130,11 +131,16 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to DAQ: %v", err))
 		return err
 	}
+	daqConnAssert, ok := daqConn.(*drivers.DAQConnection)
+	if !ok {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to DAQ: %v", errors.ErrInvalidType))
+		return errors.ErrInvalidType
+	}
 	telemetryService := telemetry.NewTelemetryService(
 		&NewSubLogger(server.logger, "TEL").SubLogger,
 		server.cfg.DataOutputDir,
 		rtdStateStore,
-		daqConn,
+		daqConnAssert,
 	)
 	telemetryService.RegisterWithRTDService(rtdService)
 	services = append(services, telemetryService)
@@ -145,11 +151,16 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to RGA: %v", err))
 		return err
 	}
+	rgaConnAssert, ok := rgaConn.(*drivers.RGAConnection)
+	if !ok {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to RGA: %v", errors.ErrInvalidType))
+		return errors.ErrInvalidType
+	}
 	rgaService := rga.NewRGAService(
 		&NewSubLogger(server.logger, "RGA").SubLogger,
 		server.cfg.DataOutputDir,
 		rtdStateStore,
-		&drivers.RGAConnection{rgaConn},
+		rgaConnAssert,
 	)
 	rgaService.RegisterWithRTDService(rtdService)
 	services = append(services, rgaService)

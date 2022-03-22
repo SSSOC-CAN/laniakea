@@ -3,12 +3,9 @@
 package drivers
 
 import (
-	"io/ioutil"
-	"os"
 	"testing"
-	"github.com/rs/zerolog"
-	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	
+	"github.com/SSSOC-CAN/fmtd/errors"
 )
 
 // TestConnectToRGA tests if we can connect to the RGA
@@ -27,7 +24,10 @@ func TestInitMsg(t *testing.T) {
 		t.Fatalf("Could not connect to MKS RGA: %v", err)
 	}
 	defer c.Close()
-	rgaConn := RGAConnection{c}
+	rgaConn, ok := c.(*RGAConnection)
+	if !ok {
+		t.Fatalf("Could not connect to MKS RGA: %v", errors.ErrInvalidType)
+	}
 	err = rgaConn.InitMsg()
 	if err != nil {
 		t.Errorf("Could not send Init Msg: %v", err)
@@ -41,7 +41,10 @@ func TestSensorState(t *testing.T) {
 		t.Fatalf("Could not connect to MKS RGA: %v", err)
 	}
 	defer c.Close()
-	rgaConn := RGAConnection{c}
+	rgaConn, ok := c.(*RGAConnection)
+	if !ok {
+		t.Fatalf("Could not connect to MKS RGA: %v", errors.ErrInvalidType)
+	}
 	resp, err := rgaConn.SensorState()
 	if err != nil {
 		t.Errorf("Unable to send SensorState command: %v", err)
@@ -56,8 +59,11 @@ func TestFilamentInfo(t *testing.T) {
 		t.Fatalf("Could not connect to MKS RGA: %v", err)
 	}
 	defer c.Close()
-	rgaConn := RGAConnection{c}
-	resp, err = rgaConn.FilamentInfo()
+	rgaConn, ok := c.(*RGAConnection)
+	if !ok {
+		t.Fatalf("Could not connect to MKS RGA: %v", errors.ErrInvalidType)
+	}
+	resp, err := rgaConn.FilamentInfo()
 	if err != nil {
 		t.Errorf("Unable to communicate with RGA: %v", err)
 	}

@@ -4,6 +4,7 @@ package drivers
 
 import (
 	"net"
+	"github.com/SSSOC-CAN/fmtd/errors"
 )
 
 // TODO:SSSOCPaulCote - Add list of RGA commands
@@ -16,12 +17,16 @@ var (
 )
 
 // ConnectToRGA establishes a conncetion with the RGA
-func ConnectToRGA() (*net.TCPConn, error) {
+func ConnectToRGA() (DriverConnectionErr, error) {
 	c, err := net.Dial("tcp", rgaServer)
 	if err != nil {
 		return nil, err
 	}
-	return c.(*net.TCPConn), nil
+	cAssert, ok := c.(*net.TCPConn)
+	if !ok {
+		return nil, errors.ErrInvalidType
+	}
+	return &RGAConnection{cAssert}, nil
 }
 
 // func main() {

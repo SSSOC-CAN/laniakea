@@ -103,7 +103,7 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	writer := csv.NewWriter(file)
 	// headers
 	headerData := []string{"Timestamp"}
-	for i := 0; i < 136; i++ {
+	for i := 0; i < 96; i++ {
 		headerData = append(headerData, fmt.Sprintf("Value #%v", i+1))
 	}
 	err = writer.Write(headerData)
@@ -145,7 +145,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
-	for i := 0; i < 136; i++ {
+	for i := 0; i < 96; i++ {
 		v := (rand.Float64()*5)+20
 		dataField[int64(i)]= &fmtrpc.DataField{
 			Name: fmt.Sprintf("Value %v", i+1),

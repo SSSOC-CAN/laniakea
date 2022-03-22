@@ -677,7 +677,7 @@ var (
 	startingScan = "StartingScan"
 	startingMeasurement = "StartingMeasurement"
 	zeroReading = "ZeroReading"
-	massReading = "MassReading"
+	MassReading = "MassReading"
 	multiplierStatus = "MultiplierStatus"
 	rfTripState = "RFTripState"
 	inletChange = "InletChange"
@@ -704,6 +704,9 @@ type RGAType int32
 type RGAConnection struct {
 	*net.TCPConn
 }
+
+var _ DriverConnectionErr = (*RGAConnection) (nil)
+var _ DriverConnectionErr = RGAConnection{}
 
 type RGARespErr struct {
 	CommandName string
@@ -903,7 +906,7 @@ func (c *RGAConnection) ReadResponse() (*RGAResponse, error) {
 		headers = []string{"MeasurementName"}
 	case zeroReading:
 		headers = []string{"MassPosition", "Value"}
-	case massReading:
+	case MassReading:
 		headers = []string{"MassPosition", "Value"}
 	case filamentTimeRemaining:
 		headers = []string{"Time"}

@@ -29,6 +29,7 @@ package drivers
 
 import (
 	"sort"
+	"strconv"
 
 	"github.com/konimarti/opc"
 )
@@ -41,7 +42,7 @@ type Tag struct {
 var (
 	TelemetryDefaultPollingInterval int64 = 10
 	MinTelemetryPollingInterval     int64 = 5
-	TelemetryPressureChannel        int64 = 122
+	TelemetryPressureChannel        int64 = 81
 	flukeOPCServerName                    = "Fluke.DAQ.OPC"
 	flukeOPCServerHost                    = "localhost"
 	customerChannelString = "customer channel "
@@ -189,15 +190,15 @@ var (
 	}
 )
 
-<<<<<<< HEAD
-=======
 type DAQConnection struct {
 	opc.Connection
 	Tags	[]string
 	TagMap	map[int]Tag
 }
 
->>>>>>> 17ffbbaffd4915506098bf83f3ed5cb942705a48
+var _ DriverConnection = (*DAQConnection) (nil)
+var _ DriverConnection = DAQConnection{}
+
 // GetAllTags returns a slice of all detected tags
 func GetAllTags() ([]string, error) {
 	b, err := opc.CreateBrowser(
@@ -233,7 +234,7 @@ func ConnectToDAQ() (DriverConnection, error) {
 
 // StartScanning starts the scanning process on the DAQ
 func (d *DAQConnection) StartScanning() error {
-	err = d.Write(d.TagMap[0].tag, true)
+	err := d.Write(d.TagMap[0].tag, true)
 	if err != nil {
 		return err
 	}
@@ -242,7 +243,7 @@ func (d *DAQConnection) StartScanning() error {
 
 // StopScanning stops the scanning process on the DAQ
 func (d *DAQConnection) StopScanning() error {
-	err = d.Write(d.TagMap[0].tag, false)
+	err := d.Write(d.TagMap[0].tag, false)
 	if err != nil {
 		return err
 	}
