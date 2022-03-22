@@ -33,7 +33,7 @@ type RGAService struct {
 var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
-func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, _ drivers.DriverConnection) *RGAService {
+func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, _ drivers.DriverConnectionErr) *RGAService {
 	return &RGAService{
 		BaseRGAService{
 			stateStore: store,

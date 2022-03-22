@@ -2,9 +2,13 @@
 
 package drivers
 
+var (
+	TelemetryPressureChannel        int64 = 81
+)
+
 // RGAConnection
 type RGAConnection struct {
-	BlankConnection
+	BlankConnectionErr
 }
 
 type DAQConnection struct {
@@ -12,11 +16,11 @@ type DAQConnection struct {
 }
 
 // ConnectToRGA returns a blank connection. Used for demo version of FMT
-func ConnectToRGA() (BlankConnection, error) {
-	return BlankConnection{}, nil
+func ConnectToRGA() (DriverConnectionErr, error) {
+	return &RGAConnection{BlankConnectionErr{}}, nil
 }
 
 // ConnectToDAQ returns a blank connection. Used for demo version of FMT
-func ConnectToDAQ() (BlankConnection, error) {
-	return BlankConnection{}, nil
+func ConnectToDAQ() (DriverConnection, error) {
+	return &DAQConnection{BlankConnection{}}, nil
 }

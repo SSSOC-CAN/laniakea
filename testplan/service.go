@@ -13,6 +13,7 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
@@ -372,7 +373,7 @@ func (s *TestPlanService) executeTestPlan() {
 			// Next if rga recording hasn't started and pressure is below 0.00005 Torr, then start recording
 			// TODO:SSSOCPaulCote - make this generic. Iteratre through service dependencies and start based on provided conditions
 			if !rgaRecording && rtd != nil {
-				if rtd.Data[122].Value != 0 && rtd.Data[122].Value < minChamberPressure {
+				if rtd.Data[drivers.TelemetryPressureChannel].Value != 0 && rtd.Data[drivers.TelemetryPressureChannel].Value < minChamberPressure {
 					client, clientCleanup, err = s.collectorClient()
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
