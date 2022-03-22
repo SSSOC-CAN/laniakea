@@ -20,7 +20,7 @@ func TestNewMessage(t *testing.T) {
 	}
 	defer os.RemoveAll(tmp_dir)
 	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	rga := NewRGAService(&log, tmp_dir, stateStore, drivers.BlankConnection{})
+	rga := NewRGAService(&log, tmp_dir, stateStore, drivers.BlankConnectionErr{})
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
