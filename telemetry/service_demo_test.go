@@ -10,26 +10,25 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 // initTelemetryService initializes a new telemetry service
-func initTelemetryService(t *testing.T) *TelemetryService {
-	tmp_dir, err := ioutil.TempDir(utils.AppDataDir("fmtd", false), "telemetry_test")
+func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
+	tmp_dir, err := ioutil.TempDir("", "telemetry_test-")
 	if err != nil {
 		t.Fatalf("Could not create a temporary directory: %v", err)
 	}
-	defer os.RemoveAll(tmp_dir)
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	stateStore := state.CreateStore(TelemetryInitialState, TelemetryReducer)
-	return NewTelemetryService(&log, tmp_dir, stateStore, drivers, drivers.BlankConnection{})
+	return NewTelemetryService(&log, tmp_dir, stateStore, drivers.BlankConnection{}), func(){os.RemoveAll(tmp_dir)}
 }
 
 // TestTelemetryService tests if we can initialize the TelemetryService struct and properly connect to the telemetry DAQ
 func TestTelemetryService(t *testing.T) {
-	telemetryService := initTelemetryService(t)
-	TelemetryServiceStart(t, TelemetryService)
-	TelemetryRecording(t, TelemetryService)
+	telemetryService, cleanUp := initTelemetryService(t)
+	defer cleanUp()
+	TelemetryServiceStart(t, telemetryService)
+	TelemetryRecording(t, telemetryService)
 }
 
 // TelemetryServiceStart tests wether we can successfully start the Telemetry service

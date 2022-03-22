@@ -33,7 +33,7 @@ import (
 
 var (
 	defaultRPCAddr               = "localhost"
-	defaultRPCPort               = "3567"
+	defaultRPCPort               = "7777"
 	defaultTLSCertFilename       = "tls.cert"
 	defaultFmtdDir           	 = utils.AppDataDir("fmtd", false)
 	defaultTLSCertPath           = filepath.Join(defaultFmtdDir, defaultTLSCertFilename)

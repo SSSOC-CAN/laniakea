@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -75,9 +76,16 @@ var (
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
 func InitConfig() (Config, error) {
+	// Check if fmtd directory exists, if no then create it
+	if !utils.FileExists(utils.AppDataDir("fmtd", false)) {
+		err := os.Mkdir(utils.AppDataDir("fmtd", false), 0644)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 	var config Config
-	if utils.FileExists(path.Join(default_log_dir(), "config.yaml")) {
-		filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
+	if utils.FileExists(path.Join(default_log_dir(), config_file_name)) {
+		filename, _ := filepath.Abs(path.Join(default_log_dir(), config_file_name))
 		config_file, err := ioutil.ReadFile(filename)
 		if err != nil {
 			log.Println(err)
