@@ -42,7 +42,7 @@ var (
 	}
 	testPlanFileLines = []string{
 		fmt.Sprint("plan_name: \"Test\"\n"),
-		"test_duration: 300\n", // 5 minute test
+		"test_duration: 120\n", // 2 minute test
 		"data_providers:\n",
 		"  - provider_name: \"Fluke\"\n",
 		"    driver: \"Fluke DAQ\"\n",
@@ -54,7 +54,7 @@ var (
 		"  - alert_name: \"Wait 60 seconds\"\n",
 		"    action: \"WaitForTime\"\n",
 		"    action_arg: 60\n",
-		"    action_start_time: 60\n",
+		"    action_start_time: 30\n",
 		//"report_file_path: \"C:\\\\Users\\\\Michael Graham\\\\Downloads\\\\testplan_test.csv\"\n",
 	}
 )
@@ -113,15 +113,12 @@ func TestTestplan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not connect to telemetry DAQ: %v", err)
 	}
-	telemetryService, err := telemetry.NewTelemetryService(
+	telemetryService := telemetry.NewTelemetryService(
 		&telemetryLogger,
 		tempDir,
 		store,
 		daqConn,
 	)
-	if err != nil {
-		t.Fatalf("Could not initialize telemetry Service: %v", err)
-	}
 	// RTD Service
 	rtdLogger := logger.With().Str("subsystem", "RTD").Logger()
 	rtdService := data.NewRTDService(
@@ -204,8 +201,8 @@ func TestTestplan(t *testing.T) {
 		}
 		t.Log(resp)
 	})
-	// wait 2 minutes
-	time.Sleep(122*time.Second)
+	// wait 1 minute and a half
+	time.Sleep(92*time.Second)
 	// Insert ROI
 	t.Run("fmtcli insert-roi", func(t *testing.T) {
 		resp, err := client.InsertROIMarker(ctx, &fmtrpc.InsertROIRequest{
@@ -280,5 +277,5 @@ func TestTestplan(t *testing.T) {
 		}
 		t.Log(resp)
 	})
-	time.Sleep(312*time.Second)
+	time.Sleep(122*time.Second)
 }

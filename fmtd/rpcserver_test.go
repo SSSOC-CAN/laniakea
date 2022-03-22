@@ -44,6 +44,7 @@ func initRpcServer(t *testing.T) (*RpcServer, func()) {
 	if err != nil {
 		t.Fatalf("Could not initialize config: %v", err)
 	}
+	cfg.GrpcPort = 3567 // override config to not interfere with any currently running nodes
 	log, err := InitLogger(&cfg)
 	if err != nil {
 		t.Fatalf("Could not initialize logger: %v", err)

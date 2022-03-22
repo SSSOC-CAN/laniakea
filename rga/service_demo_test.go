@@ -9,19 +9,18 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 // TestNewMessage tests if we can connect to MKSRGA server and create a new instance of the RGA Service struct
 func TestNewMessage(t *testing.T) {
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	tmp_dir, err := ioutil.TempDir(utils.AppDataDir("fmtd", false), "rga_test")
+	tmp_dir, err := ioutil.TempDir("", "rga_test-")
 	if err != nil {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmp_dir)
 	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	rga, err := NewRGAService(&log, tmp_dir, stateStore, drivers.BlankConnection{})
+	rga := NewRGAService(&log, tmp_dir, stateStore, drivers.BlankConnection{})
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
