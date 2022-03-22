@@ -35,10 +35,6 @@ var (
 	FlukePressureChannel int64 = 122
 )
 
-// Compile time check to make sure the opc connection satisfies our DriverConnection interface
-var _ DriverConnection = (*opc.Connection) (nil)
-var _ DriverConnection = opc.Connection{}
-
 // GetAllTags returns a slice of all detected tags
 func GetAllTags() ([]string, error) {
 	b, err := opc.CreateBrowser(
