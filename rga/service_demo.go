@@ -52,7 +52,7 @@ func (s *RGAService) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start RGA service. Service already started.")
 	}
-	s.Logger.Info().Msg("Connection to MKS RGA is not currently active. Please recompile fmtd as follows `$ go install -tags \"rga\"`")
+	s.Logger.Info().Msg("Connection to MKS RGA is not currently active. Please recompile fmtd as follows `$ go install -tags \"mks\"`")
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("RGA Service successfully started.")
 	return nil

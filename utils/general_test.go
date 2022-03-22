@@ -18,7 +18,7 @@ var (
 )
 // TestUniqueFileName tests the function UniqueFileName against a series of cases
 func TestUniqueFileName(t *testing.T) {
-	tmp_dir, err := ioutil.TempDir(AppDataDir("fmtd", false), "fluke_test")
+	tmp_dir, err := ioutil.TempDir(AppDataDir("fmtd", false), "telemetry_test")
 	if err != nil {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
