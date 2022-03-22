@@ -13,9 +13,9 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
-	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"google.golang.org/grpc"
 )
@@ -249,7 +249,7 @@ func (s *TestPlanService) executeTestPlan() {
 		return
 	}
 	ctx := context.Background()
-	// First we need to start recording with the fluke
+	// First we need to start recording with the telemetry
 	client, clientCleanup, err := s.collectorClient()
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
@@ -266,17 +266,17 @@ func (s *TestPlanService) executeTestPlan() {
 		stoppingTest()
 		return
 	}
-	flukeRecordReq := &fmtrpc.RecordRequest{
+	telemetryRecordReq := &fmtrpc.RecordRequest{
 		PollingInterval: int64(5),
-		Type: fmtrpc.RecordService_FLUKE,
+		Type: fmtrpc.RecordService_TELEMETRY,
 	}
-	_, err = client.StartRecording(ctx, flukeRecordReq)
-	if err != nil && err != drivers.ErrAlreadyRecording {
-		s.Logger.Fatal().Msg(fmt.Sprintf("Cannot start fluke data recording: %v", err))
+	_, err = client.StartRecording(ctx, telemetryRecordReq)
+	if err != nil && err != telemetry.ErrAlreadyRecording {
+		s.Logger.Fatal().Msg(fmt.Sprintf("Cannot start telemetry data recording: %v", err))
 		err := writeMsgToReport(
 			s.reportWriter,
 			fmtrpc.ReportLvl_FATAL,
-			fmt.Sprintf("Cannot start fluke data recording: %v", err),
+			fmt.Sprintf("Cannot start telemetry data recording: %v", err),
 			defaultAuthor,
 			time.Now(),
 		)
@@ -290,7 +290,7 @@ func (s *TestPlanService) executeTestPlan() {
 	err = writeMsgToReport(
 		s.reportWriter,
 		fmtrpc.ReportLvl_INFO,
-		"Started Fluke Data Recording",
+		"Started telemetry Data Recording",
 		defaultAuthor,
 		time.Now(),
 	)
@@ -390,7 +390,7 @@ func (s *TestPlanService) executeTestPlan() {
 						Type: fmtrpc.RecordService_RGA,
 					}
 					_, err = client.StartRecording(ctx, rgaRecordReq)
-					if err != nil && err != drivers.ErrAlreadyRecording {
+					if err != nil && err != telemetry.ErrAlreadyRecording {
 						s.Logger.Error().Msg(fmt.Sprintf("Cannot start RGA data recording: %v", err))
 						newLines = append(newLines, NewLine{
 							RptLvl: fmtrpc.ReportLvl_ERROR,
@@ -458,16 +458,16 @@ func (s *TestPlanService) executeTestPlan() {
 					rgaRecording = false
 				}
 			}
-			stopFlukeReq := &fmtrpc.StopRecRequest{
-				Type: fmtrpc.RecordService_FLUKE,
+			stoptelemetryReq := &fmtrpc.StopRecRequest{
+				Type: fmtrpc.RecordService_TELEMETRY,
 			}
-			_, err := client.StopRecording(ctx, stopFlukeReq)
+			_, err := client.StopRecording(ctx, stoptelemetryReq)
 			if err != nil {
-				s.Logger.Error().Msg(fmt.Sprintf("Cannot stop Fluke data recording: %v", err))
+				s.Logger.Error().Msg(fmt.Sprintf("Cannot stop telemetry data recording: %v", err))
 				err = writeMsgToReport(
 					s.reportWriter, 
 					fmtrpc.ReportLvl_ERROR, 
-					fmt.Sprintf("Cannot stop Fluke data recording: %v", err),
+					fmt.Sprintf("Cannot stop telemetry data recording: %v", err),
 					defaultAuthor,
 					time.Now(),
 				)

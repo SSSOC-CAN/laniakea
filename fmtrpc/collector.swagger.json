@@ -41,7 +41,7 @@
             "required": true,
             "type": "string",
             "enum": [
-              "FLUKE",
+              "TELEMETRY",
               "RGA"
             ]
           }
@@ -220,10 +220,10 @@
     "fmtrpcRecordService": {
       "type": "string",
       "enum": [
-        "FLUKE",
+        "TELEMETRY",
         "RGA"
       ],
-      "default": "FLUKE"
+      "default": "TELEMETRY"
     },
     "fmtrpcStopRecRequest": {
       "type": "object",

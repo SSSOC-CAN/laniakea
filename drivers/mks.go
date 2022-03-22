@@ -1,4 +1,4 @@
-// +build mks
+// +build mks,!demo
 
 package drivers
 
@@ -11,8 +11,8 @@ var (
 	rgaIPAddr = "192.168.0.77"
 	rgaPort = "10014"
 	rgaServer = rgaIPAddr+":"+rgaPort
-	MKSMinimumPressure float64 = 0.00005
-	MinMKSPollingInterval int64 = 15
+	RGAMinimumPressure float64 = 0.00005
+	RGAMinPollingInterval int64 = 15
 )
 
 // ConnectToRGA establishes a conncetion with the RGA
