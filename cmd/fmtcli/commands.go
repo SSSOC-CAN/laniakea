@@ -144,7 +144,7 @@ var startRecording = cli.Command{
 	Action: startRecord,
 }
 
-// startRecord is the CLI wrapper around the FlukeService StartRecording method
+// startRecord is the CLI wrapper around the TelemetryService StartRecording method
 func startRecord(ctx *cli.Context) error {
 	ctxc := getContext()
 	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {

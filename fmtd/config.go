@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"path"
 	"path/filepath"
 	"reflect"
 	"time"
@@ -35,16 +36,12 @@ type Config struct {
 // default_log_dir returns the default log directory
 // default_grpc_port is the the default grpc port
 var (
+	config_file_name string = "config.yaml"
 	default_grpc_port int64 = 7777
 	default_rest_port int64 = 8080
 	default_tcp_port  int64 = 10024
 	default_tcp_addr string = "0.0.0.0"
 	default_log_dir = func() string {
-		// home_dir, err := os.UserHomeDir() // this should be OS agnostic
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-		// return home_dir+"/.fmtd"
 		return utils.AppDataDir("fmtd", false)
 	}
 	default_macaroon_db_file string = default_log_dir()+"/macaroon.db"
@@ -59,7 +56,7 @@ var (
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
-			ConsoleOutput: false,
+			ConsoleOutput: true,
 			GrpcPort: default_grpc_port,
 			RestPort: default_rest_port,
 			TCPPort: default_tcp_port,
@@ -78,23 +75,27 @@ var (
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
 func InitConfig() (Config, error) {
-	filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
-	config_file, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Println(err)
-		return default_config(), nil
-	}
 	var config Config
-	err = yaml.Unmarshal(config_file, &config)
-	if err != nil {
-		log.Println(err)
-		config = default_config()
+	if utils.FileExists(path.Join(default_log_dir(), "config.yaml")) {
+		filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
+		config_file, err := ioutil.ReadFile(filename)
+		if err != nil {
+			log.Println(err)
+			return default_config(), nil
+		}
+		err = yaml.Unmarshal(config_file, &config)
+		if err != nil {
+			log.Println(err)
+			config = default_config()
+		} else {
+			// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
+			config = check_yaml_config(config)
+		}
+		config.WSPingInterval = default_ws_ping_interval
+		config.WSPongWait = default_ws_pong_wait
 	} else {
-		// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
-		config = check_yaml_config(config)
+		config = default_config()
 	}
-	config.WSPingInterval = default_ws_ping_interval
-	config.WSPongWait = default_ws_pong_wait
 	return config, nil
 }
 

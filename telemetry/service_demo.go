@@ -49,31 +49,31 @@ func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.
 
 // Start starts the service. Returns an error if any issues occur
 func (s *TelemetryService) Start() error {
-	s.Logger.Info().Msg("Starting Fluke Service...")
+	s.Logger.Info().Msg("Starting telemetry service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start Fluke service: service already started.")
+		return fmt.Errorf("Could not start telemetry service: service already started.")
 	}
-	s.Logger.Info().Msg("Connection to Fluke DAQ is not currently active. Please recompile fmtd as follows `$ go install -tags \"fluke windows 386\"`")
+	s.Logger.Info().Msg("Connection to DAQ is not currently active. Please recompile fmtd as follows `$ go install -tags \"fluke\"`")
 	go s.ListenForRTDSignal()
-	s.Logger.Info().Msg("Fluke Service started.")
+	s.Logger.Info().Msg("Telemetry service started.")
 	return nil
 }
 
 // Stop stops the service. Returns an error if any issues occur
 func (s *TelemetryService) Stop() error {
-	s.Logger.Info().Msg("Stopping Fluke Service...")
+	s.Logger.Info().Msg("Stopping telemetry service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop Fluke service: service already stopped.")
+		return fmt.Errorf("Could not stop telemetry: service already stopped.")
 	}
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
-			return fmt.Errorf("Could not stop Fluke service: %v", err)
+			return fmt.Errorf("Could not stop telemetry service: %v", err)
 		}
 	}
 	close(s.CancelChan)
 	close(s.QuitChan)
-	s.Logger.Info().Msg("Fluke Service stopped.")
+	s.Logger.Info().Msg("Telemetry service stopped.")
 	return nil
 }
 
@@ -93,7 +93,7 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 		return ErrAlreadyRecording
 	}
 	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%d-%02d-%02d-fluke.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
+	file_name := fmt.Sprintf("%s/%d-%02d-%02d-telemetry.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
 	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	return nil
 }
 
-// record records the live data from Fluke and inserts it into a csv file and passes it to the RTD service
+// record records the live data from DAQ and inserts it into a csv file and passes it to the RTD service
 func (s *TelemetryService) record(writer *csv.Writer) error {
 	current_time := time.Now()
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
@@ -165,7 +165,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	
 	err := s.stateStore.Dispatch(
 		state.Action{
-			Type: 	 "fluke/update",
+			Type: 	 "telemetry/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,
 				IsScanning: false,
@@ -231,7 +231,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 	}
 }
 
-// RegisterWithRTDService adds the RTD Service channels to the Fluke Service Struct and incrememnts the number of registered data providers on the RTD
+// RegisterWithRTDService adds the RTD Service channels to the Telemetry Service Struct and incrememnts the number of registered data providers on the RTD
 func (s *TelemetryService) RegisterWithRTDService(rtd *data.RTDService) {
 	rtd.RegisterDataProvider(s.name)
 	s.StateChangeChan = rtd.StateChangeChans[s.name]
