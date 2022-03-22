@@ -21,11 +21,11 @@ var (
 		},
 		[]string{
 			"start-record",
-			"fluke",
+			"telemetry",
 		},
 		[]string{
 			"stop-record",
-			"fluke",
+			"telemetry",
 		},
 	}
 	bakeMacaroonFlags = []string{

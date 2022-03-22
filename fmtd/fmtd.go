@@ -41,7 +41,9 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/rga"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -53,7 +55,7 @@ import (
 
 var (
 	initialState = struct{rtd fmtrpc.RealTimeData}{
-		rtd: drivers.FlukeInitialState,
+		rtd: telemetry.TelemetryInitialState,
 	}
 	tempPwd = []byte("abcdefgh")
 	defaultMacTimeout int64 = 60
@@ -67,7 +69,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer cancel()
 
 	// Create State store
-	rtdStateStore := state.CreateStore(drivers.FlukeInitialState, drivers.FlukeReducer)
+	rtdStateStore := state.CreateStore(telemetry.TelemetryInitialState, telemetry.TelemetryReducer)
 
 	// Starting main server
 	err := server.Start()
@@ -121,26 +123,34 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	services = append(services, rtdService)
 	server.logger.Info().Msg("RTD service instantiated.")
 
-	// Instantiate Fluke service and register with gRPC server but NOT start
+	// Instantiate Telemetry service and register with gRPC server but NOT start
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
-	flukeService, err := drivers.NewFlukeService(&NewSubLogger(server.logger, "FLUKE").SubLogger, server.cfg.DataOutputDir, rtdStateStore)
+	daqConn, err := drivers.ConnectToDAQ()
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Fluke service: %v", err))
+		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to DAQ: %v", err))
 		return err
 	}
-	flukeService.RegisterWithRTDService(rtdService)
-	services = append(services, flukeService)
+	telemetryService := telemetry.NewTelemetryService(
+		&NewSubLogger(server.logger, "TEL").SubLogger,
+		server.cfg.DataOutputDir,
+		rtdStateStore,
+		daqConn,
+	)
+	telemetryService.RegisterWithRTDService(rtdService)
+	services = append(services, telemetryService)
 
-	// Instantiate RGA service and register with gRPC server and Fluke Service but NOT start
-	rgaService, err := drivers.NewRGAService(&NewSubLogger(server.logger, "RGA").SubLogger, server.cfg.DataOutputDir, rtdStateStore)
+	// Instantiate RGA service and register with gRPC server but NOT start
+	rgaConn, err := drivers.ConnectToRGA()
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate RGA service: %v", err))
+		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to RGA: %v", err))
 		return err
 	}
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to register Fluke Service with gRPC server: %v", err))
-		return err
-	}
+	rgaService := rga.NewRGAService(
+		&NewSubLogger(server.logger, "RGA").SubLogger,
+		server.cfg.DataOutputDir,
+		rtdStateStore,
+		&drivers.RGAConnection{rgaConn},
+	)
 	rgaService.RegisterWithRTDService(rtdService)
 	services = append(services, rgaService)
 

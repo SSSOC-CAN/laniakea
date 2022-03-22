@@ -8,9 +8,9 @@ GOINSTALL := GO111MODULE=on go install -v
 # ============
 
 build:
-	$(GOBUILD) -o fmtd-debug $(PKG)/cmd/fmtd
-	$(GOBUILD) -o fmtcli-debug $(PKG)/cmd/fmtcli
+	$(GOBUILD) -tags="${tags}" -o fmtd-debug $(PKG)/cmd/fmtd
+	$(GOBUILD) -tags="${tags}" -o fmtcli-debug $(PKG)/cmd/fmtcli
 
 install:
-	$(GOINSTALL) $(PKG)/cmd/fmtd
-	$(GOINSTALL) $(PKG)/cmd/fmtcli
+	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/fmtd
+	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/fmtcli

@@ -1,12 +1,19 @@
 package rga
 
 import (
+	"fmt"
+
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/state"
 )
 
-type RGAService struct {
+var (
+	ErrAlreadyRecording			 = fmt.Errorf("Could not start recording. Data recording already started")
+	ErrAlreadyStoppedRecording   = fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+)
+
+type BaseRGAService struct {
 	Running				int32 //atomically
 	Recording			int32 //atomically
 	stateStore			*state.Store
@@ -19,4 +26,9 @@ type RGAService struct {
 	name 				string
 	currentPressure		float64
 	filepath			string
+}
+
+// Name satisfies the data.Service interface
+func (s *BaseRGAService) Name() string {
+	return s.name
 }
