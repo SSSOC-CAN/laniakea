@@ -8,6 +8,7 @@ import (
 	"testing"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
@@ -24,15 +25,20 @@ func TestNewMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not connect to RGA: %v", err)
 	}
+	rgaConn, ok := c.(*drivers.RGAConnection)
+	if !ok {
+		t.Fatalf("Could not connect to MKS RGA: %v", errors.ErrInvalidType)
+	}
+	defer rgaConn.Close()
 	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	rga, err := NewRGAService(&log, tmp_dir, stateStore, drivers.RGAConnection{c})
+	rgaService := NewRGAService(&log, tmp_dir, stateStore, rgaConn)
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
-	RGAServiceStart(t, rga)
-	RGAStartRecord(t, rga)
-	RGAStopRecord(t, rga)
-	RGAServiceStop(t, rga)
+	RGAServiceStart(t, rgaService)
+	RGAStartRecord(t, rgaService)
+	RGAStopRecord(t, rgaService)
+	RGAServiceStop(t, rgaService)
 }
 
 // RGAServiceStart tests whether we can successfully start the rga service
@@ -54,7 +60,7 @@ func RGAServiceStop(t *testing.T, s *RGAService) {
 
 // RGAStartRecord tests the startRecording method and expects an error
 func RGAStartRecord(t *testing.T, s *RGAService) {
-	err := s.startRecording(minRgaPollingInterval)
+	err := s.startRecording(drivers.RGAMinPollingInterval)
 	if err == nil {
 		t.Fatalf("Expected an error and none occured")
 	}

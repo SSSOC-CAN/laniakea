@@ -21,7 +21,7 @@ import (
 // TelemetryService is a struct for holding all relevant attributes to interfacing with the DAQ
 type TelemetryService struct {
 	BaseTelemetryService
-	connection drivers.DriverConnection
+	connection *drivers.DAQConnection
 }
 
 // A compile time check to make sure that TelemetryService fully implements the data.Service interface
@@ -29,7 +29,7 @@ var _ data.Service = (*TelemetryService) (nil)
 
 
 // NewTelemetryService creates a new Telemetry Service object which will use the appropriate drivers
-func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.Store, connection drivers.DriverConnection) *TelemetryService {
+func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.Store, connection *drivers.DAQConnection) *TelemetryService {
 	return &TelemetryService{
 		BaseTelemetryService: BaseTelemetryService{
 			stateStore:   	  store,
@@ -143,7 +143,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	readings := s.connection.ReadItems()
-	for _, reading := range readings {
+	for i, reading := range readings {
 		switch v := reading.Item.Value.(type) {
 		case float64:
 			dataField[int64(i)]= &fmtrpc.DataField{
@@ -152,7 +152,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 			}
 		case float32:
 			dataField[int64(i)]= &fmtrpc.DataField{
-				Name: reading.name,
+				Name: reading.Name,
 				Value: float64(v),
 			}
 		}
@@ -170,7 +170,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	
 	err := s.stateStore.Dispatch(
 		state.Action{
-			Type: 	 "Telemetry/update",
+			Type: 	 "telemetry/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,
 				IsScanning: true,

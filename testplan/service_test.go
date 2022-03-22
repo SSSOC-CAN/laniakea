@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
@@ -109,10 +110,15 @@ func TestTestplan(t *testing.T) {
 	// Telemetry Service
 	telemetryLogger := logger.With().Str("subsystem", "TEL").Logger()
 	// Connect to DAQ
-	daqConn, err := drivers.ConnectToDAQ()
+	c, err := drivers.ConnectToDAQ()
 	if err != nil {
 		t.Fatalf("Could not connect to telemetry DAQ: %v", err)
 	}
+	daqConn, ok := c.(*drivers.DAQConnection)
+	if !ok {
+		t.Fatalf("Could not connect to telemetry DAQ OPC: %v", errors.ErrInvalidType)
+	}
+	defer daqConn.Close()
 	telemetryService := telemetry.NewTelemetryService(
 		&telemetryLogger,
 		tempDir,
