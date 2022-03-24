@@ -11,16 +11,14 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 // initTelemetryService initializes a new telemetry service
 func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
-	tmp_dir, err := ioutil.TempDir(utils.AppDataDir("fmtd", false), "telemetry_test")
+	tmp_dir, err := ioutil.TempDir("", "telemetry_test-")
 	if err != nil {
-		t.Fatalf("Could not create a temporary directory: %v", err)
+		t.Errorf("Could not create a temporary directory: %v", err)
 	}
-	defer os.RemoveAll(tmp_dir)
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	stateStore := state.CreateStore(TelemetryInitialState, TelemetryReducer)
 	c, err := drivers.ConnectToDAQ()
@@ -31,7 +29,10 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 	if !ok {
 		t.Fatalf("Could not connect to telemetry DAQ: %v", errors.ErrInvalidType)
 	}
-	return NewTelemetryService(&log, tmp_dir, stateStore, daqConn), func(){daqConn.Close()}
+	return NewTelemetryService(&log, tmp_dir, stateStore, daqConn), func(){
+		daqConn.Close()
+		os.RemoveAll(tmp_dir)
+	}
 }
 
 // TestTelemetryService tests if we can initialize the TelemetryService struct and properly connect to the telemetry DAQ
