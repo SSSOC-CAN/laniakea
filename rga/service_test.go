@@ -10,13 +10,12 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 // TestNewMessage tests if we can connect to MKSRGA server and create a new instance of the RGA Service struct
 func TestNewMessage(t *testing.T) {
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	tmp_dir, err := ioutil.TempDir(utils.AppDataDir("fmtd", false), "rga_test")
+	tmp_dir, err := ioutil.TempDir("", "rga_test-")
 	if err != nil {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}

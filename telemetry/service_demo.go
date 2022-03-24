@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +36,10 @@ var _ data.Service = (*TelemetryService) (nil)
 
 // NewTelemetryService creates a new Telemetry Service object which will use the drivers for the DAQ software
 func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.Store, _ drivers.DriverConnection) *TelemetryService {
+	var (
+		wgL sync.WaitGroup
+		wgR sync.WaitGroup
+	)
 	return &TelemetryService{
 		BaseTelemetryService{
 			stateStore:   	  store,
@@ -43,6 +48,8 @@ func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.
 			CancelChan:   	  make(chan struct{}),
 			outputDir:   	  outputDir,
 			name: 	      	  data.TelemetryName,
+			wgListen:		  wgL,
+			wgRecord:		  wgR,
 		},
 	}
 }
@@ -54,6 +61,7 @@ func (s *TelemetryService) Start() error {
 		return fmt.Errorf("Could not start telemetry service: service already started.")
 	}
 	s.Logger.Info().Msg("Connection to DAQ is not currently active. Please recompile fmtd as follows `$ go install -tags \"fluke\"`")
+	s.wgListen.Add(1)
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("Telemetry service started.")
 	return nil
@@ -72,7 +80,9 @@ func (s *TelemetryService) Stop() error {
 		}
 	}
 	close(s.CancelChan)
+	s.wgRecord.Wait()
 	close(s.QuitChan)
+	s.wgListen.Wait()
 	s.Logger.Info().Msg("Telemetry service stopped.")
 	return nil
 }
@@ -113,7 +123,9 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
+	s.wgRecord.Add(1)
 	go func() {
+		defer s.wgRecord.Done()
 		for {
 			select {
 			case <-ticker.C:
@@ -194,6 +206,7 @@ func (s *TelemetryService) stopRecording() error {
 
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *TelemetryService) ListenForRTDSignal() {
+	defer s.wgListen.Done()
 	for {
 		select {
 		case msg := <-s.StateChangeChan:

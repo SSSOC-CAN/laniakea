@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +30,10 @@ var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, connection *drivers.RGAConnection) *RGAService {
+	var (
+		wgL sync.WaitGroup
+		wgR sync.WaitGroup
+	)
 	return &RGAService{
 		BaseRGAService: BaseRGAService{
 			stateStore: store,
@@ -37,6 +42,8 @@ func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store,
 			CancelChan: make(chan struct{}),
 			outputDir: outputDir,
 			name: data.RgaName,
+			wgListen: wgL,
+			wgRecord: wgR,
 		},
 		connection: connection,
 	}
@@ -48,6 +55,7 @@ func (s *RGAService) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start RGA service. Service already started.")
 	}
+	s.wgListen.Add(1)
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("RGA Service successfully started.")
 	return nil
@@ -66,7 +74,9 @@ func (s *RGAService) Stop() error {
 		}
 	}
 	close(s.CancelChan)
+	s.wgRecord.Wait()
 	close(s.QuitChan)
+	s.wgListen.Wait()
 	s.connection.Close()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
 	return nil
@@ -129,7 +139,9 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
+	s.wgRecord.Add(1)
 	go func() {
+		defer s.wgRecord.Done()
 		ticks := 0
 		for {
 			select {
@@ -264,6 +276,7 @@ func (s *RGAService) stopRecording() error {
 
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
+	defer s.wgListen.Done()
 	signalChan := make(chan struct{})
 	idx, unsub := s.stateStore.Subscribe(func() {
 		signalChan<-struct{}{}
