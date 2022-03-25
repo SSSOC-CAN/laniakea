@@ -13,12 +13,13 @@ service DataCollector {
     StopRecording will end the recording of data from specified service.
     */
     rpc StopRecording (StopRecRequest) returns (StopRecResponse);
-    /* fmtcli: `subscribe-data-stream`
+    /*
     SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
     */
     rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
     /*
-    DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file*/
+    DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file
+    */
     rpc DownloadHistoricalData (HistoricalDataRequest) returns (HistoricalDataResponse);
 }
 
