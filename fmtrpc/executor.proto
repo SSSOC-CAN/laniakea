@@ -5,15 +5,15 @@ package fmtrpc;
 option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 service TestPlanExecutor {
-    /* fmtcli: `load-test`
+    /* fmtcli: `load-testplan`
     LoadTestPlan will load the inputted test plan and ensure the FMT can currently run it.
     */
     rpc LoadTestPlan (LoadTestPlanRequest) returns (LoadTestPlanResponse);
-    /* fmtcli: `start-test`
+    /* fmtcli: `start-testplan`
     StartTestPlan will start the loaded test plan. This will automatically start recording from services as need be.
     */
     rpc StartTestPlan (StartTestPlanRequest) returns (StartTestPlanResponse);
-    /* fmtcli: `stop-test`
+    /* fmtcli: `stop-testplan`
     StopTestPlan will stop the currently running test plan. This will automatically stop all data recording.
     */
     rpc StopTestPlan (StopTestPlanRequest) returns (StopTestPlanResponse);
