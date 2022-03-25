@@ -6,7 +6,7 @@ option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 service DataCollector {
     /* fmtcli: `start-record`
-    StartRecording will begin recording data from specified service and writing it.
+    StartRecording will begin recording data from specified service.
     */
     rpc StartRecording (RecordRequest) returns (RecordResponse);
     /* fmtcli: `stop-record`
@@ -14,11 +14,11 @@ service DataCollector {
     */
     rpc StopRecording (StopRecRequest) returns (StopRecResponse);
     /*
-    SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
+    SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Telemetry and RGA services.
     */
     rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
     /*
-    DownloadHistoricalData opens up a TCP server on the FMTD and returns the TCP port. Once the TCP server accepts a request, it sends the requested file
+    DownloadHistoricalData opens up a TCP server on the FMTD and returns the TCP port. Once the TCP server accepts a request, it sends the requested file.
     */
     rpc DownloadHistoricalData (HistoricalDataRequest) returns (HistoricalDataResponse);
 }

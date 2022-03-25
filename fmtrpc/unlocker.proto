@@ -14,7 +14,7 @@ service Unlocker{
     */
     rpc SetPassword (SetPwdRequest) returns (SetPwdResponse);
     /* fmtcli: `changepassword`
-    ChangePassword prompts the user to enter the current password and enter a new password. If no password has been set, it prompts the user to set one
+    ChangePassword prompts the user to enter the current password and enter a new password.
     */
     rpc ChangePassword (ChangePwdRequest) returns (ChangePwdResponse);
 }
