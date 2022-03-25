@@ -2,6 +2,7 @@ package rga
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
@@ -26,6 +27,8 @@ type BaseRGAService struct {
 	name 				string
 	currentPressure		float64
 	filepath			string
+	wgListen			sync.WaitGroup
+	wgRecord			sync.WaitGroup
 }
 
 // Name satisfies the data.Service interface

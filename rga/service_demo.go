@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 
 var (
 	minRgaPollingInterval int64 = 15 // After manual testing, value will be 15 seconds
-	pressureRead int64 = 122
 	minimumPressure float64 = 0.00005
 )
 
@@ -34,6 +34,10 @@ var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, _ drivers.DriverConnectionErr) *RGAService {
+	var (
+		wgL sync.WaitGroup
+		wgR sync.WaitGroup
+	)
 	return &RGAService{
 		BaseRGAService{
 			stateStore: store,
@@ -42,6 +46,8 @@ func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store,
 			CancelChan: make(chan struct{}),
 			outputDir: outputDir,
 			name: data.RgaName,
+			wgListen: wgL,
+			wgRecord: wgR,
 		},
 	}
 }
@@ -53,6 +59,7 @@ func (s *RGAService) Start() error {
 		return fmt.Errorf("Could not start RGA service. Service already started.")
 	}
 	s.Logger.Info().Msg("Connection to MKS RGA is not currently active. Please recompile fmtd as follows `$ go install -tags \"mks\"`")
+	s.wgListen.Add(1)
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("RGA Service successfully started.")
 	return nil
@@ -71,7 +78,9 @@ func (s *RGAService) Stop() error {
 		}
 	}
 	close(s.CancelChan)
+	s.wgRecord.Wait()
 	close(s.QuitChan)
+	s.wgListen.Wait()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
 	return nil
 }
@@ -108,7 +117,9 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
+	s.wgRecord.Add(1)
 	go func() {
+		defer s.wgRecord.Done()
 		ticks := 0
 		for {
 			select {
@@ -203,6 +214,7 @@ func (s *RGAService) stopRecording() error {
 
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
+	defer s.wgListen.Done()
 	signalChan := make(chan struct{})
 	idx, unsub := s.stateStore.Subscribe(func() {
 		signalChan<-struct{}{}
@@ -248,7 +260,7 @@ func (s *RGAService) ListenForRTDSignal() {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
 			}
-			s.currentPressure = cState.Data[pressureRead].Value
+			s.currentPressure = cState.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {
