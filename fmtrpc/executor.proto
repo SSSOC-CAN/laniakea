@@ -24,21 +24,31 @@ service TestPlanExecutor {
 }
 
 message LoadTestPlanRequest {
+    // The path to the testplan file
     string path_to_file = 1;
 }
+
 message LoadTestPlanResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
+
 message StartTestPlanRequest {
 }
+
 message StartTestPlanResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
+
 message StopTestPlanRequest {
 }
+
 message StopTestPlanResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
+
 enum ReportLvl {
     INFO = 0;
     ERROR = 1;
@@ -46,11 +56,19 @@ enum ReportLvl {
     WARN = 3;
     FATAL = 4;
 }
+
 message InsertROIRequest {
+    // The content of the message of the ROI being inserted into the testplan file
     string text = 1;
+
+    // The log level with the ROI being inserted into the testplan file
     ReportLvl report_lvl = 2;
+
+    // The author of the ROI being inserted into the testplan file
     string author = 3;
 }
+
 message InsertROIResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }

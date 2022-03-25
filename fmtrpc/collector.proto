@@ -18,30 +18,42 @@ service DataCollector {
     */
     rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
     /*
-    DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file
+    DownloadHistoricalData opens up a TCP server on the FMTD and returns the TCP port. Once the TCP server accepts a request, it sends the requested file
     */
     rpc DownloadHistoricalData (HistoricalDataRequest) returns (HistoricalDataResponse);
 }
 
+/*
+`RecordService` has to be one of:
+
+- `telemetry`: Temperature and pressure data recording (`TELEMETRY` = 0)
+- `rga`: Residual gas analyser data recording (`RGA` = 1)
+*/
 enum RecordService {
     TELEMETRY = 0;
     RGA = 1;
 }
 
 message RecordRequest {
+    // The time interval, in seconds, between data readings
     int64 polling_interval = 1;
+
+    // Recording service type. Choose from either `telemetry` or `rga`
     RecordService type = 2;
 }
 
 message RecordResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
 
 message StopRecRequest {
+    // Recording service type. Choose from either `telemetry` or `rga`
     RecordService type = 1;
 }
 
 message StopRecResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
 
@@ -49,22 +61,36 @@ message SubscribeDataRequest {
 }
 
 message DataField {
+    // The given name of the data field
     string name = 1;
+
+    // The floating point value of the data field
     double value = 2;
 }
 
 message RealTimeData {
+    // The name of the FMT service providing this data packet
     string source = 1;
+
+    // A boolean value indicating whether this service is actively scanning for new data points or not
     bool is_scanning = 2;
+
+    // The UNIX millisecond timestamp of when the data was recorded
     int64 timestamp = 3;
+
+    // A map of the data points for this packet
     map<int64, DataField> data = 4;
 }
 
 message HistoricalDataRequest {
+    // Recording service type. Choose from either `telemetry` or `rga`
     RecordService source = 1;
 }
 
 message HistoricalDataResponse {
+    // The TCP server port
     int64 server_port = 1;
+
+    // The size of the buffer to use for the TCP connection
     int64 buffer_size = 2;
 }
