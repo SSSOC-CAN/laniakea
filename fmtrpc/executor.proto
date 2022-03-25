@@ -6,19 +6,19 @@ option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 service TestPlanExecutor {
     /* fmtcli: `load-testplan`
-    LoadTestPlan will load the inputted test plan and ensure the FMT can currently run it.
+    LoadTestPlan will load the inputted testplan and ensure the FMT can currently run it.
     */
     rpc LoadTestPlan (LoadTestPlanRequest) returns (LoadTestPlanResponse);
     /* fmtcli: `start-testplan`
-    StartTestPlan will start the loaded test plan. This will automatically start recording from services as need be.
+    StartTestPlan will start the loaded testplan. This will automatically start recording from services as need be.
     */
     rpc StartTestPlan (StartTestPlanRequest) returns (StartTestPlanResponse);
     /* fmtcli: `stop-testplan`
-    StopTestPlan will stop the currently running test plan. This will automatically stop all data recording.
+    StopTestPlan will stop the currently running testplan. This will automatically stop all data recording.
     */
     rpc StopTestPlan (StopTestPlanRequest) returns (StopTestPlanResponse);
     /* fmtcli: `insert-roi`
-    InsertROIMarker will insert a Region of Interest (ROI) marker within the test report based on given parameters. 
+    InsertROIMarker will insert a Region of Interest (ROI) marker within the testplan report based on given parameters. 
     */
     rpc InsertROIMarker (InsertROIRequest) returns (InsertROIResponse);
 }
