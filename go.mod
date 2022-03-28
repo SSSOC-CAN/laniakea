@@ -33,6 +33,7 @@ require (
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.6.0 // indirect
+	github.com/jessevdk/go-flags v1.5.0 // indirect
 	github.com/klauspost/compress v1.12.3 // indirect
 	github.com/konimarti/opc v0.3.1 // indirect
 	github.com/mattn/go-colorable v0.1.11 // indirect

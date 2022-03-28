@@ -1,6 +1,7 @@
 package fmtd
 
 import (
+
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -9,6 +10,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"time"
+
+	flags "github.com/jessevdk/go-flags"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -23,7 +26,7 @@ type Config struct {
 	TCPPort			int64		`yaml:"TCPPort"`
 	TCPAddr			string		`yaml:"TCPAddr"`
 	DataOutputDir	string		`yaml:"DataOutputDir"`
-	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr"` // optional parameter
+	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
 	MacaroonDBPath	string
 	TLSCertPath		string
 	TLSKeyPath		string
@@ -72,7 +75,9 @@ var (
 			WSPongWait: default_ws_pong_wait,
 		}
 	}
-)
+	extraIPFlag *string = flag.String(
+		"extraipaddr"
+	)
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
 func InitConfig() (Config, error) {
@@ -103,6 +108,10 @@ func InitConfig() (Config, error) {
 		config.WSPongWait = default_ws_pong_wait
 	} else {
 		config = default_config()
+	}
+	// now to parse the flags
+	if _, err := flags.Parse(config); err != nil {
+		return nil, err
 	}
 	return config, nil
 }
