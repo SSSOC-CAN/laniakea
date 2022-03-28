@@ -78,6 +78,7 @@ var (
 	extraIPFlag *string = flag.String(
 		"extraipaddr",
 	)
+)
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
 func InitConfig() (Config, error) {
