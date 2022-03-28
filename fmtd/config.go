@@ -76,7 +76,7 @@ var (
 		}
 	}
 	extraIPFlag *string = flag.String(
-		"extraipaddr"
+		"extraipaddr",
 	)
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
