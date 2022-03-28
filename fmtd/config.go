@@ -108,8 +108,8 @@ func InitConfig() (Config, error) {
 		config = default_config()
 	}
 	// now to parse the flags
-	if _, err := flags.Parse(config); err != nil {
-		return nil, err
+	if _, err := flags.Parse(&config); err != nil {
+		return Config{}, err
 	}
 	return config, nil
 }
