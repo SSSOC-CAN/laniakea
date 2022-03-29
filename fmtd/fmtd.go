@@ -411,7 +411,7 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyS
 			},
 		},
 	)
-	mux := proxy.NewServeMux(customMarshalerOption)
+	mux := proxy.NewServeMux(customMarshalerOption, proxy.WithDisablePathLengthFallback())
 
 	err = fmtrpc.RegisterUnlockerHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
