@@ -215,13 +215,9 @@ func (s *RGAService) stopRecording() error {
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
 	defer s.wgListen.Done()
-	signalChan := make(chan struct{})
-	idx, unsub := s.stateStore.Subscribe(func() {
-		signalChan<-struct{}{}
-	})
+	signalChan, unsub := s.stateStore.Subscribe(s.name)
 	cleanUp := func() {
-		unsub(s.stateStore, idx)
-		close(signalChan)
+		unsub(s.stateStore, s.name)
 	}
 	defer cleanUp()
 	for {
