@@ -1,0 +1,11 @@
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: demorpc.Controller.SetTemperature
+      post: "/v1/set/temperature"
+      body: "*"
+    - selector: demorpc.Controller.SetPressure
+      post: "/v1/set/pressure"
+      body: "*"

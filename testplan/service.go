@@ -13,6 +13,7 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
@@ -412,11 +413,11 @@ func (s *TestPlanService) executeTestPlan() {
 			ticks++
 		case <-stateChangeChan:
 			currentRtd := s.stateStore.GetState()
-			cRtd, ok := currentRtd.(fmtrpc.RealTimeData)
+			cRtd, ok := currentRtd.(controller.ControllerInitialState)
 			if !ok {
 				s.Logger.Error().Msg(fmt.Sprintf("Invalid type, expected fmtrpc.RealtimeData, received %v", reflect.TypeOf(currentRtd)))
 			}
-			rtd = &cRtd
+			rtd = &cRtd.RealTimeData
 		case <- s.CancelChan:
 			stoppingTest()
 			client, clientCleanup, err = s.collectorClient()

@@ -29,3 +29,12 @@ type BlankConnectionErr struct {}
 func (b BlankConnectionErr) Close() error {
 	return nil
 }
+
+type ControllerConnection struct {
+	BlankConnection
+}
+
+// ConnectToController returns a blank connection
+func ConnectToController() (DriverConnection, error) {
+	return &ControllerConnection{BlankConnection{}}, nil
+}

@@ -15,8 +15,10 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"google.golang.org/grpc"
 )
 
@@ -29,7 +31,6 @@ var (
 		fmtrpc.RecordService_RGA: RgaName,
 	}
 	defaultTCPBufferSize int64 = 1024
-	letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 )
 
 type StateType int32
@@ -196,21 +197,12 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 	}, nil
 }
 
-// randSeq generates a random string of length n
-func randSeq(n int) string {
-    b := make([]rune, n)
-    for i := range b {
-        b[i] = letters[rand.Intn(len(letters))]
-    }
-    return string(b)
-}
-
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
 	lastSentRTDTimestamp := int64(0)
 	rand.Seed(time.Now().UnixNano())
-	subscriberName := s.name+randSeq(10)
+	subscriberName := s.name+utils.RandSeq(10)
 	updateChan, unsub := s.stateStore.Subscribe(subscriberName)
 	cleanUp := func() {
 		unsub(s.stateStore, subscriberName)
@@ -220,17 +212,17 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 		select {	
 		case <-updateChan:
 			currentState := s.stateStore.GetState()
-			RTD, ok := currentState.(fmtrpc.RealTimeData)
+			RTD, ok := currentState.(controller.ControllerInitialState)
 			if !ok {
 				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
 			}
-			if RTD.Timestamp < lastSentRTDTimestamp {
+			if RTD.RealTimeData.Timestamp < lastSentRTDTimestamp {
 				continue
 			} 
-			if err := updateStream.Send(&RTD); err != nil {
+			if err := updateStream.Send(&RTD.RealTimeData); err != nil {
 				return err
 			}
-			lastSentRTDTimestamp = RTD.Timestamp
+			lastSentRTDTimestamp = RTD.RealTimeData.Timestamp
 		case <-updateStream.Context().Done():
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil

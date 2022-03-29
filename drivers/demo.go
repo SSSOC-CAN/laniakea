@@ -15,6 +15,10 @@ type DAQConnection struct {
 	BlankConnection
 }
 
+type ControllerConnection struct {
+	BlankConnection
+}
+
 // ConnectToRGA returns a blank connection. Used for demo version of FMT
 func ConnectToRGA() (DriverConnectionErr, error) {
 	return &RGAConnection{BlankConnectionErr{}}, nil

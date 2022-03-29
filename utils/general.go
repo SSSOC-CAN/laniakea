@@ -22,9 +22,14 @@ THE SOFTWARE.
 package utils
 
 import (
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
+)
+
+var (
+	letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 )
 
 // FileExists reports whether the named file or directory exists.
@@ -53,4 +58,13 @@ func UniqueFileName(path string) string {
 		counter++
 	}
 	return path
+}
+
+// RandSeq generates a random string of length n
+func RandSeq(n int) string {
+    b := make([]rune, n)
+    for i := range b {
+        b[i] = letters[rand.Intn(len(letters))]
+    }
+    return string(b)
 }
