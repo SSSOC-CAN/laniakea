@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -310,15 +311,15 @@ func (s *RGAService) ListenForRTDSignal() {
 			}
 		case <- signalChan:
 			currentState := s.stateStore.GetState()
-			cState, ok := currentState.(fmtrpc.RealTimeData)
+			cState, ok := currentState.(controller.ControllerInitialState)
 			if !ok {
-				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(fmtrpc.RealTimeData{})))
+				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(controller.ControllerInitialState{})))
 				err := s.stopRecording()
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
 			}
-			s.currentPressure = cState.Data[drivers.TelemetryPressureChannel].Value
+			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= drivers.RGAMinimumPressure && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {

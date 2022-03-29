@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -83,11 +84,6 @@ func (s *RGAService) Stop() error {
 	s.wgListen.Wait()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
 	return nil
-}
-
-// Name satisfies the fmtd.Service interface
-func (s *RGAService) Name() string {
-	return s.name
 }
 
 // startRecording starts data recording from the RGA device
@@ -165,6 +161,13 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
+	// get current pressure set point
+	currentState := s.stateStore.GetState()
+	cState, ok := currentState.(controller.ControllerInitialState)
+	if !ok {
+		return state.ErrInvalidStateType
+	}
+	// figure out noise amplitude and offset
 	for i := 0; i < 200; i++ {
 		v := (rand.Float64()*5)+20
 		dataField[int64(i)]= &fmtrpc.DataField{
@@ -248,9 +251,9 @@ func (s *RGAService) ListenForRTDSignal() {
 			}
 		case <- signalChan:
 			currentState := s.stateStore.GetState()
-			cState, ok := currentState.(fmtrpc.RealTimeData)
+			cState, ok := currentState.(controller.ControllerInitialState)
 			if !ok {
-				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(fmtrpc.RealTimeData{})))
+				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(controller.ControllerInitialState{})))
 				err := s.stopRecording()
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
