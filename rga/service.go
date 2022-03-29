@@ -188,7 +188,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			if err != nil {
 				return fmt.Errorf("Could not read response: %v", err)
 			}
-			if resp.ErrMsg.CommandName == drivers.MassReading {
+			if resp.ErrMsg.CommandName == massReading {
 				headerData = append(headerData, strconv.FormatInt(resp.Fields["MassPosition"].Value.(int64), 10))
 				if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
 					break
@@ -277,13 +277,9 @@ func (s *RGAService) stopRecording() error {
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
 	defer s.wgListen.Done()
-	signalChan := make(chan struct{})
-	idx, unsub := s.stateStore.Subscribe(func() {
-		signalChan<-struct{}{}
-	})
+	signalChan, unsub := s.stateStore.Subscribe(s.name)
 	cleanUp := func() {
-		unsub(s.stateStore, idx)
-		close(signalChan)
+		unsub(s.stateStore, s.name)
 	}
 	defer cleanUp()
 	for {

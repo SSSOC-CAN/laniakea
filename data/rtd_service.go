@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"os"
 	"reflect"
@@ -28,6 +29,7 @@ var (
 		fmtrpc.RecordService_RGA: RgaName,
 	}
 	defaultTCPBufferSize int64 = 1024
+	letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 )
 
 type StateType int32
@@ -194,18 +196,24 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 	}, nil
 }
 
+// randSeq generates a random string of length n
+func randSeq(n int) string {
+    b := make([]rune, n)
+    for i := range b {
+        b[i] = letters[rand.Intn(len(letters))]
+    }
+    return string(b)
+}
+
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
-	updateChan := make(chan struct{})
 	lastSentRTDTimestamp := int64(0)
-	idx, unsub := s.stateStore.Subscribe(func() {
-		updateChan<-struct{}{}
-	})
+	rand.Seed(time.Now().UnixNano())
+	subscriberName := s.name+randSeq(10)
+	updateChan, unsub := s.stateStore.Subscribe(subscriberName)
 	cleanUp := func() {
-		unsub(s.stateStore, idx)
-		time.Sleep(15*time.Second)
-		close(updateChan)
+		unsub(s.stateStore, subscriberName)
 	}
 	defer cleanUp()
 	for {
