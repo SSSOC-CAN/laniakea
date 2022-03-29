@@ -83,7 +83,7 @@ func (s *Store) Dispatch(action Action) error {
 func (s *Store) Subscribe(name string) (chan struct{}, func(*Store, string)) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.listeners[name] = &Listener{IsConnected: true, Signal: make(chan struct{})}
+	s.listeners[name] = &Listener{IsConnected: true, Signal: make(chan struct{}, 2)} // made channel buffered for edge case where unsub() and l.Signal<-struct{}{} listener disconnects, it won't hang
 	return s.listeners[name].Signal, s.unsub
 }
 
