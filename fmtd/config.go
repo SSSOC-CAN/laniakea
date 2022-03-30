@@ -81,7 +81,7 @@ var (
 func InitConfig() (Config, error) {
 	// Check if fmtd directory exists, if no then create it
 	if !utils.FileExists(utils.AppDataDir("fmtd", false)) {
-		err := os.Mkdir(utils.AppDataDir("fmtd", false), 0644)
+		err := os.Mkdir(utils.AppDataDir("fmtd", false), 0666)
 		if err != nil {
 			log.Println(err)
 		}

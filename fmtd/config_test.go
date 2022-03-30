@@ -22,7 +22,7 @@ func TestInitConfigNoYAML(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error opening config.yaml: %v", err)
 		}
-		err = ioutil.WriteFile(config_copy_path, config_file, 0644)
+		err = ioutil.WriteFile(config_copy_path, config_file, 0666)
 		if err != nil {
 			t.Fatalf("Error copying config.yaml to config.copy.yaml: %v", err)
 		}
@@ -35,7 +35,7 @@ func TestInitConfigNoYAML(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error opening config.copy.yaml: %v", err)
 			}
-			err = ioutil.WriteFile(config_file_path, config_copy_file, 0644)
+			err = ioutil.WriteFile(config_file_path, config_copy_file, 0666)
 			if err != nil {
 				t.Fatalf("Error copying config.copy.yaml to config.yaml: %v", err)
 			}
@@ -74,7 +74,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Error opening config.yaml: %v", err)
 		}
-		err = ioutil.WriteFile(config_copy_path, config_file_bytes, 0644)
+		err = ioutil.WriteFile(config_copy_path, config_file_bytes, 0666)
 		if err != nil {
 			t.Fatalf("Error copying config.yaml to config.copy.yaml: %v", err)
 		}
@@ -93,7 +93,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Error opening config.copy.yaml: %v", err)
 			}
-			err = ioutil.WriteFile(config_file_path, config_copy_file, 0644)
+			err = ioutil.WriteFile(config_file_path, config_copy_file, 0666)
 			if err != nil {
 				t.Fatalf("Error copying config.copy.yaml to config.yaml: %v", err)
 			}
