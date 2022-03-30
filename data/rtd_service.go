@@ -15,7 +15,6 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
-	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -60,6 +59,17 @@ type RTDService struct {
 	name				string
 	tcpServer			net.Listener
 	stateStore			*state.Store
+}
+
+type InitialRtdState struct {
+	AverageTemperature	float64
+	RealTimeData		fmtrpc.RealTimeData
+	TelPollingInterval	int64
+}
+
+type InitialCtrlState struct {
+	PressureSetPoint	float64
+	TemperatureSetPoint	float64
 }
 
 // Compile time check to ensure RTDService implements api.RestProxyService
@@ -212,7 +222,7 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 		select {	
 		case <-updateChan:
 			currentState := s.stateStore.GetState()
-			RTD, ok := currentState.(controller.ControllerInitialState)
+			RTD, ok := currentState.(InitialRtdState)
 			if !ok {
 				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
 			}

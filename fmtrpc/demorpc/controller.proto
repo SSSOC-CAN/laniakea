@@ -17,7 +17,7 @@ service Controller {
     Can also set the pressure change rate (torr/minute). Default is instantaneous change.
     Returns a stream of updates of the setpoint until it reaches the desired pressure.
     */
-    rpc SetPressure (SetPresRequest) returns (SetPresResponse);
+    rpc SetPressure (SetPresRequest) returns (stream SetPresResponse);
 }
 
 message SetTempRequest {

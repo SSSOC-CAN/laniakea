@@ -30,14 +30,20 @@ var _ data.Service = (*TelemetryService) (nil)
 
 
 // NewTelemetryService creates a new Telemetry Service object which will use the appropriate drivers
-func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.Store, connection *drivers.DAQConnection) *TelemetryService {
+func NewTelemetryService(
+	logger *zerolog.Logger,
+	outputDir string,
+	store *state.Store,
+	_ *state.Store,
+	connection *drivers.DAQConnection,
+) *TelemetryService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
 	return &TelemetryService{
 		BaseTelemetryService: BaseTelemetryService{
-			stateStore:   	  store,
+			rtdStateStore:    store,
 			Logger:       	  logger,
 			QuitChan:     	  make(chan struct{}),
 			CancelChan:   	  make(chan struct{}),
@@ -155,6 +161,10 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	readings := s.connection.ReadItems()
+	var (
+		cumSum float64
+		cnt	   int64
+	)
 	for i, reading := range readings {
 		switch v := reading.Item.Value.(type) {
 		case float64:
@@ -162,10 +172,18 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 				Name: reading.Name,
 				Value: v,
 			}
+			if i != int(drivers.TelemetryPressureChannel) {
+				cumSum += v
+				cnt += 1
+			}
 		case float32:
 			dataField[int64(i)]= &fmtrpc.DataField{
 				Name: reading.Name,
 				Value: float64(v),
+			}
+			if i != int(drivers.TelemetryPressureChannel) {
+				cumSum += float64(v),
+				cnt += 1
 			}
 		}
 		dataString = append(dataString, fmt.Sprintf("%g", reading.Item.Value))
@@ -180,14 +198,17 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 		echan<-nil
 	}(errChan)
 	
-	err := s.stateStore.Dispatch(
+	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/update",
-			Payload: fmtrpc.RealTimeData{
-				Source: s.name,
-				IsScanning: true,
-				Timestamp: current_time.UnixMilli(),
-				Data: dataField,
+			Payload: data.InitialRtdState{
+				RealTimeData: fmtrpc.RealTimeData{
+					Source: s.name,
+					IsScanning: true,
+					Timestamp: current_time.UnixMilli(),
+					Data: dataField,
+				},
+				AverageTemperature: cumSum/float64(cnt),
 			},
 		},
 	)

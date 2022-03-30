@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -34,14 +33,21 @@ type RGAService struct {
 var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
-func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store, _ drivers.DriverConnectionErr) *RGAService {
+func NewRGAService(
+	logger *zerolog.Logger, 
+	outputDir string, 
+	rtdStore *state.Store, 
+	ctrlStore *state.Store,
+	_ drivers.DriverConnectionErr,
+) *RGAService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
 	return &RGAService{
 		BaseRGAService{
-			stateStore: store,
+			rtdStateStore: rtdStore,
+			ctrlStateStore: ctrlStore,
 			Logger: logger,
 			QuitChan: make(chan struct{}),
 			CancelChan: make(chan struct{}),
@@ -161,15 +167,15 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
+	// figure out noise amplitude and offset
 	// get current pressure set point
-	currentState := s.stateStore.GetState()
-	cState, ok := currentState.(controller.ControllerInitialState)
+	currentState := s.ctrlStateStore.GetState()
+	cState, ok := currentState.(data.InitialCtrlState)
 	if !ok {
 		return state.ErrInvalidStateType
 	}
-	// figure out noise amplitude and offset
 	for i := 0; i < 200; i++ {
-		v := (rand.Float64()*5)+20
+		v := (rand.Float64()*0.001)+cState.PressureSetPoint
 		dataField[int64(i)]= &fmtrpc.DataField{
 			Name: fmt.Sprintf("Mass %v", i+1),
 			Value: v,
@@ -186,7 +192,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		echan<-nil
 	}(errChan)
 	
-	err := s.stateStore.Dispatch(
+	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
@@ -218,9 +224,9 @@ func (s *RGAService) stopRecording() error {
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
 	defer s.wgListen.Done()
-	signalChan, unsub := s.stateStore.Subscribe(s.name)
+	signalChan, unsub := s.rtdStateStore.Subscribe(s.name)
 	cleanUp := func() {
-		unsub(s.stateStore, s.name)
+		unsub(s.rtdStateStore, s.name)
 	}
 	defer cleanUp()
 	for {
@@ -250,16 +256,19 @@ func (s *RGAService) ListenForRTDSignal() {
 				}
 			}
 		case <- signalChan:
-			currentState := s.stateStore.GetState()
-			cState, ok := currentState.(controller.ControllerInitialState)
+			if atomic.LoadInt32(&s.Recording) != 1 {
+				continue
+			}
+			currentState := s.rtdStateStore.GetState()
+			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(controller.ControllerInitialState{})))
+				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(data.InitialRtdState{})))
 				err := s.stopRecording()
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
 			}
-			s.currentPressure = cState.Data[drivers.TelemetryPressureChannel].Value
+			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {

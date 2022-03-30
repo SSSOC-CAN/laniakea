@@ -12,6 +12,41 @@ import (
 	"github.com/SSSOC-CAN/fmtd/state"
 )
 
+var (
+	ctrlInitialState = data.InitialCtrlState{
+		PressureSetPoint: 760.0,
+		TemperatureSetPoint: 25.0,
+	}
+	ctrlReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		oldState, ok := s.(data.InitialCtrlState)
+		if !ok {
+			return nil, state.ErrInvalidStateType
+		}
+		// switch case action
+		switch a.Type {
+		case "setpoint/temperature/update":
+			// assert type of payload
+			newTemp, ok := a.Payload.(float64)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.TemperatureSetPoint = newTemp
+			return oldState, nil
+		case "setpoint/pressure/update":
+			// assert type of payload
+			newPres, ok := a.Payload.(float64)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.PressureSetPoint = newPres
+			return oldState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
+	}
+)
+
 // initTelemetryService initializes a new telemetry service
 func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 	tmp_dir, err := ioutil.TempDir("", "telemetry_test-")
@@ -20,7 +55,8 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 	}
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	stateStore := state.CreateStore(TelemetryInitialState, TelemetryReducer)
-	return NewTelemetryService(&log, tmp_dir, stateStore, drivers.BlankConnection{}), func(){os.RemoveAll(tmp_dir)}
+	ctrlStore := state.CreateStore(ctrlInitialState, ctrlReducer)
+	return NewTelemetryService(&log, tmp_dir, stateStore, ctrlStore, drivers.BlankConnection{}), func(){os.RemoveAll(tmp_dir)}
 }
 
 // TestTelemetryService tests if we can initialize the TelemetryService struct and properly connect to the telemetry DAQ

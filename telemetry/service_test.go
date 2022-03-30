@@ -29,7 +29,7 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 	if !ok {
 		t.Fatalf("Could not connect to telemetry DAQ: %v", errors.ErrInvalidType)
 	}
-	return NewTelemetryService(&log, tmp_dir, stateStore, daqConn), func(){
+	return NewTelemetryService(&log, tmp_dir, stateStore, _, daqConn), func(){
 		daqConn.Close()
 		os.RemoveAll(tmp_dir)
 	}

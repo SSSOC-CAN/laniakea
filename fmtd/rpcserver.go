@@ -52,6 +52,10 @@ var (
 			Entity: "tpex",
 			Action: "read",
 		},
+		{
+			Entity: "ctrl",
+			Action: "read",
+		},
 	}
 	writePermissions = []bakery.Op{
 		{
@@ -70,9 +74,13 @@ var (
 			Entity: "tpex",
 			Action: "write",
 		},
+		{
+			Entity: "ctrl",
+			Action: "write",
+		},
 	}
 	validActions = []string{"read", "write"}
-	validEntities = []string{"fmtd", "macaroon", "tpex", macaroons.PermissionEntityCustomURI}
+	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", macaroons.PermissionEntityCustomURI}
 )
 
 // MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
@@ -120,6 +128,14 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 		}},
 		"/fmtrpc.Fmt/BakeMacaroon": {{
 			Entity: "macaroon",
+			Action: "write",
+		}},
+		"/demorpc.Controller/SetTemperature": {{
+			Entity: "ctrl",
+			Action: "write",
+		}},
+		"/demorpc.Controller/SetPressure": {{
+			Entity: "ctrl",
 			Action: "write",
 		}},
 	}

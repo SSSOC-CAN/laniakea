@@ -17,7 +17,8 @@ var (
 type BaseTelemetryService struct {
 	Running				int32 //atomically
 	Recording			int32 //atomically
-	stateStore			*state.Store
+	rtdStateStore		*state.Store
+	ctrlStateStore		*state.Store
 	Logger				*zerolog.Logger
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}

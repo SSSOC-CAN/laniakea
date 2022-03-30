@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -11,10 +12,7 @@ var (
 type BaseControllerService struct {
 	Running				int32 // used atomically
 	name 				string
-	stateStore			*state.Store
-}
-
-// Name satisfies the data.Service interface
-func (s *BaseRGAService) Name() string {
-	return s.name
+	rtdStateStore		*state.Store
+	ctrlStateStore	*state.Store
+	Logger				*zerolog.Logger
 }

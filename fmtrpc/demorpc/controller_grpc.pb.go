@@ -27,7 +27,7 @@ type ControllerClient interface {
 	//SetPressure will set the pressure setpoint at a specified pressure (Torr).
 	//Can also set the pressure change rate (torr/minute). Default is instantaneous change.
 	//Returns a stream of updates of the setpoint until it reaches the desired pressure.
-	SetPressure(ctx context.Context, in *SetPresRequest, opts ...grpc.CallOption) (*SetPresResponse, error)
+	SetPressure(ctx context.Context, in *SetPresRequest, opts ...grpc.CallOption) (Controller_SetPressureClient, error)
 }
 
 type controllerClient struct {
@@ -70,13 +70,36 @@ func (x *controllerSetTemperatureClient) Recv() (*SetTempResponse, error) {
 	return m, nil
 }
 
-func (c *controllerClient) SetPressure(ctx context.Context, in *SetPresRequest, opts ...grpc.CallOption) (*SetPresResponse, error) {
-	out := new(SetPresResponse)
-	err := c.cc.Invoke(ctx, "/demorpc.Controller/SetPressure", in, out, opts...)
+func (c *controllerClient) SetPressure(ctx context.Context, in *SetPresRequest, opts ...grpc.CallOption) (Controller_SetPressureClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Controller_ServiceDesc.Streams[1], "/demorpc.Controller/SetPressure", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &controllerSetPressureClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Controller_SetPressureClient interface {
+	Recv() (*SetPresResponse, error)
+	grpc.ClientStream
+}
+
+type controllerSetPressureClient struct {
+	grpc.ClientStream
+}
+
+func (x *controllerSetPressureClient) Recv() (*SetPresResponse, error) {
+	m := new(SetPresResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // ControllerServer is the server API for Controller service.
@@ -92,7 +115,7 @@ type ControllerServer interface {
 	//SetPressure will set the pressure setpoint at a specified pressure (Torr).
 	//Can also set the pressure change rate (torr/minute). Default is instantaneous change.
 	//Returns a stream of updates of the setpoint until it reaches the desired pressure.
-	SetPressure(context.Context, *SetPresRequest) (*SetPresResponse, error)
+	SetPressure(*SetPresRequest, Controller_SetPressureServer) error
 	mustEmbedUnimplementedControllerServer()
 }
 
@@ -103,8 +126,8 @@ type UnimplementedControllerServer struct {
 func (UnimplementedControllerServer) SetTemperature(*SetTempRequest, Controller_SetTemperatureServer) error {
 	return status.Errorf(codes.Unimplemented, "method SetTemperature not implemented")
 }
-func (UnimplementedControllerServer) SetPressure(context.Context, *SetPresRequest) (*SetPresResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SetPressure not implemented")
+func (UnimplementedControllerServer) SetPressure(*SetPresRequest, Controller_SetPressureServer) error {
+	return status.Errorf(codes.Unimplemented, "method SetPressure not implemented")
 }
 func (UnimplementedControllerServer) mustEmbedUnimplementedControllerServer() {}
 
@@ -140,22 +163,25 @@ func (x *controllerSetTemperatureServer) Send(m *SetTempResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Controller_SetPressure_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetPresRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _Controller_SetPressure_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SetPresRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(ControllerServer).SetPressure(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/demorpc.Controller/SetPressure",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ControllerServer).SetPressure(ctx, req.(*SetPresRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(ControllerServer).SetPressure(m, &controllerSetPressureServer{stream})
+}
+
+type Controller_SetPressureServer interface {
+	Send(*SetPresResponse) error
+	grpc.ServerStream
+}
+
+type controllerSetPressureServer struct {
+	grpc.ServerStream
+}
+
+func (x *controllerSetPressureServer) Send(m *SetPresResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 // Controller_ServiceDesc is the grpc.ServiceDesc for Controller service.
@@ -164,18 +190,18 @@ func _Controller_SetPressure_Handler(srv interface{}, ctx context.Context, dec f
 var Controller_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "demorpc.Controller",
 	HandlerType: (*ControllerServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "SetPressure",
-			Handler:    _Controller_SetPressure_Handler,
-		},
-	},
+	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "SetTemperature",
 			Handler:       _Controller_SetTemperature_Handler,
 			ServerStreams: true,
 		},
+		{
+			StreamName:    "SetPressure",
+			Handler:       _Controller_SetPressure_Handler,
+			ServerStreams: true,
+		},
 	},
-	Metadata: "controller.proto",
+	Metadata: "demorpc/controller.proto",
 }
