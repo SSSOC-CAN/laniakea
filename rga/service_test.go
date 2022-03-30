@@ -30,7 +30,7 @@ func TestNewMessage(t *testing.T) {
 	}
 	defer rgaConn.Close()
 	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	rgaService := NewRGAService(&log, tmp_dir, stateStore, rgaConn)
+	rgaService := NewRGAService(&log, tmp_dir, stateStore, _, rgaConn)
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}

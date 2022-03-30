@@ -35,6 +35,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
@@ -55,11 +56,46 @@ import (
 )
 
 var (
-	initialState = struct{rtd fmtrpc.RealTimeData}{
-		rtd: telemetry.TelemetryInitialState,
-	}
 	tempPwd = []byte("abcdefgh")
 	defaultMacTimeout int64 = 60
+	RtdInitialState = data.InitialRtdState{}
+	RtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		oldState, ok := s.(data.InitialRtdState)
+		if !ok {
+			return nil, state.ErrInvalidStateType
+		}
+		// switch case action
+		switch a.Type {
+		case "telemetry/update":
+			// assert type of payload
+			newState, ok := a.Payload.(data.InitialRtdState)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState.RealTimeData
+			oldState.AverageTemperature = newState.AverageTemperature
+			return oldState, nil
+		case "rga/update":
+			// assert type of payload
+			newState, ok := a.Payload.(fmtrpc.RealTimeData)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState
+			return oldState, nil
+		case "telemetry/polling_interval/update":
+			// assert type of payload
+			newPol, ok := a.Payload.(int64)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.TelPollingInterval = newPol
+			return oldState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
+	}
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
@@ -69,8 +105,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Create State store
-	rtdStateStore := state.CreateStore(telemetry.TelemetryInitialState, telemetry.TelemetryReducer)
+	// Create State stores
+	rtdStateStore := state.CreateStore(RtdInitialState, RtdReducer)
+	ctrlStateStore := state.CreateStore(controller.InitialState, controller.ControllerReducer)
 
 	// Starting main server
 	err := server.Start()
@@ -140,6 +177,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		&NewSubLogger(server.logger, "TEL").SubLogger,
 		server.cfg.DataOutputDir,
 		rtdStateStore,
+		ctrlStateStore,
 		daqConnAssert,
 	)
 	telemetryService.RegisterWithRTDService(rtdService)
@@ -160,10 +198,37 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		&NewSubLogger(server.logger, "RGA").SubLogger,
 		server.cfg.DataOutputDir,
 		rtdStateStore,
+		ctrlStateStore,
 		rgaConnAssert,
 	)
 	rgaService.RegisterWithRTDService(rtdService)
 	services = append(services, rgaService)
+
+	// Instantiate Controller Service and register with gRPC server but not start
+	server.logger.Info().Msg("Instantiating controller subservice and registering with gRPC server...")
+	ctrlConn, err := drivers.ConnectToController()
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to controller: %v", err))
+		return err
+	}
+	ctrlConnAssert, ok := ctrlConn.(*drivers.ControllerConnection)
+	if !ok {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to controller: %v", errors.ErrInvalidType))
+		return errors.ErrInvalidType
+	}
+	controllerService := controller.NewControllerService(
+		&NewSubLogger(server.logger, "CTRL").SubLogger,
+		rtdStateStore,
+		ctrlStateStore,
+		ctrlConnAssert,
+	)
+	err = controllerService.RegisterWithGrpcServer(grpc_server)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to register controller Service with gRPC server: %v", err))
+		return err
+	}
+	services = append(services, controllerService)
+	server.logger.Info().Msg("Controller service instantiated")
 
 	// Instantiate Test Plan Executor and register with gRPC server but NOT start
 	getConnectionFunc := func() (fmtrpc.DataCollectorClient, func(), error) {
@@ -238,6 +303,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 			rtdService,
 			testPlanExecutor,
 			unlockerService,
+			controllerService,
 		}, 
 		restDialOpts,
 		restListen,

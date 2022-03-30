@@ -35,14 +35,21 @@ var _ data.Service = (*TelemetryService) (nil)
 
 
 // NewTelemetryService creates a new Telemetry Service object which will use the drivers for the DAQ software
-func NewTelemetryService(logger *zerolog.Logger, outputDir string, store *state.Store, _ drivers.DriverConnection) *TelemetryService {
+func NewTelemetryService(
+	logger *zerolog.Logger,
+	outputDir string,
+	rtdStore *state.Store,
+	ctrlStore *state.Store,
+	_ drivers.DriverConnection,
+) *TelemetryService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
 	return &TelemetryService{
 		BaseTelemetryService{
-			stateStore:   	  store,
+			rtdStateStore:    rtdStore,
+			ctrlStateStore:	  ctrlStore,
 			Logger:       	  logger,
 			QuitChan:     	  make(chan struct{}),
 			CancelChan:   	  make(chan struct{}),
@@ -121,6 +128,16 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 		return err
 	}
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
+	// Write polling interval to state
+	err = s.rtdStateStore.Dispatch(
+		state.Action{
+			Type: 	 "telemetry/polling_interval/update",
+			Payload: pol_int,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("Could not update state: %v", err)
+	}
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -157,10 +174,33 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
+	var (
+		cumSum float64
+		cnt	   int64
+	)
+	// get current pressure set point
+	currentState := s.ctrlStateStore.GetState()
+	cState, ok := currentState.(data.InitialCtrlState)
+	if !ok {
+		return state.ErrInvalidStateType
+	}
 	for i := 0; i < 96; i++ {
-		v := (rand.Float64()*5)+20
+		var (
+			v float64
+			n string
+		)
+		if i != int(drivers.TelemetryPressureChannel) {
+			v = (rand.Float64()*0.1)+cState.TemperatureSetPoint
+			n = fmt.Sprintf("Temperature %v", i+1)
+			cumSum += v
+			cnt += 1
+		} else {
+			v = (rand.Float64()*0.1)+cState.PressureSetPoint
+			n = "Pressure"
+		}
+		
 		dataField[int64(i)]= &fmtrpc.DataField{
-			Name: fmt.Sprintf("Value %v", i+1),
+			Name: n,
 			Value: v,
 		}
 		dataString = append(dataString, fmt.Sprintf("%g", v))
@@ -175,14 +215,17 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 		echan<-nil
 	}(errChan)
 	
-	err := s.stateStore.Dispatch(
+	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/update",
-			Payload: fmtrpc.RealTimeData{
-				Source: s.name,
-				IsScanning: false,
-				Timestamp: current_time.UnixMilli(),
-				Data: dataField,
+			Payload: data.InitialRtdState{
+				RealTimeData: fmtrpc.RealTimeData{
+					Source: s.name,
+					IsScanning: false,
+					Timestamp: current_time.UnixMilli(),
+					Data: dataField,
+				},
+				AverageTemperature: cumSum/float64(cnt),
 			},
 		},
 	)

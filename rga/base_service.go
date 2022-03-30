@@ -17,7 +17,8 @@ var (
 type BaseRGAService struct {
 	Running				int32 //atomically
 	Recording			int32 //atomically
-	stateStore			*state.Store
+	rtdStateStore		*state.Store
+	ctrlStateStore		*state.Store
 	Logger				*zerolog.Logger
 	PressureChan		chan float64 // RGAs can't operate above certain pressures and so must get pressure readings from outside sources to prevent damaging them
 	StateChangeChan		chan *data.StateChangeMsg
