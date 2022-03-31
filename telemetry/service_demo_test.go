@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 )
 
@@ -45,6 +47,44 @@ var (
 			return nil, state.ErrInvalidAction
 		} 
 	}
+	rtdInitialState = data.InitialRtdState{}
+	rtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		oldState, ok := s.(data.InitialRtdState)
+		if !ok {
+			return nil, state.ErrInvalidStateType
+		}
+		// switch case action
+		switch a.Type {
+		case "telemetry/update":
+			// assert type of payload
+			newState, ok := a.Payload.(data.InitialRtdState)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState.RealTimeData
+			oldState.AverageTemperature = newState.AverageTemperature
+			return oldState, nil
+		case "rga/update":
+			// assert type of payload
+			newState, ok := a.Payload.(fmtrpc.RealTimeData)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState
+			return oldState, nil
+		case "telemetry/polling_interval/update":
+			// assert type of payload
+			newPol, ok := a.Payload.(int64)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.TelPollingInterval = newPol
+			return oldState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
+	}
 )
 
 // initTelemetryService initializes a new telemetry service
@@ -54,7 +94,7 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 		t.Fatalf("Could not create a temporary directory: %v", err)
 	}
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	stateStore := state.CreateStore(TelemetryInitialState, TelemetryReducer)
+	stateStore := state.CreateStore(rtdInitialState, rtdReducer)
 	ctrlStore := state.CreateStore(ctrlInitialState, ctrlReducer)
 	return NewTelemetryService(&log, tmp_dir, stateStore, ctrlStore, drivers.BlankConnection{}), func(){os.RemoveAll(tmp_dir)}
 }
