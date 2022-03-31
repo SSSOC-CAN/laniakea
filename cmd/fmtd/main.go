@@ -36,7 +36,7 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	config, err := fmtd.InitConfig()
+	config, err := fmtd.InitConfig(false)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

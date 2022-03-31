@@ -12,7 +12,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
@@ -57,6 +59,44 @@ var (
 		"    action_arg: 60\n",
 		"    action_start_time: 30\n",
 		//"report_file_path: \"C:\\\\Users\\\\Michael Graham\\\\Downloads\\\\testplan_test.csv\"\n",
+	}
+	rtdInitialState = data.InitialRtdState{}
+	rtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		oldState, ok := s.(data.InitialRtdState)
+		if !ok {
+			return nil, state.ErrInvalidStateType
+		}
+		// switch case action
+		switch a.Type {
+		case "telemetry/update":
+			// assert type of payload
+			newState, ok := a.Payload.(data.InitialRtdState)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState.RealTimeData
+			oldState.AverageTemperature = newState.AverageTemperature
+			return oldState, nil
+		case "rga/update":
+			// assert type of payload
+			newState, ok := a.Payload.(fmtrpc.RealTimeData)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState
+			return oldState, nil
+		case "telemetry/polling_interval/update":
+			// assert type of payload
+			newPol, ok := a.Payload.(int64)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.TelPollingInterval = newPol
+			return oldState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
 	}
 )
 
@@ -105,8 +145,9 @@ func TestTestplan(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	// init logger
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	// state store
-	store := state.CreateStore(telemetry.TelemetryInitialState, telemetry.TelemetryReducer)
+	// state stores
+	store := state.CreateStore(rtdInitialState, rtdReducer)
+	ctrlStore := state.CreateStore(controller.InitialState, controller.ControllerReducer)
 	// Telemetry Service
 	telemetryLogger := logger.With().Str("subsystem", "TEL").Logger()
 	// Connect to DAQ
@@ -123,6 +164,7 @@ func TestTestplan(t *testing.T) {
 		&telemetryLogger,
 		tempDir,
 		store,
+		ctrlStore,
 		daqConn,
 	)
 	// RTD Service

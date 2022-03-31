@@ -244,12 +244,11 @@ func (s *TelemetryService) ListenForRTDSignal() {
 			switch msg.Type {
 			case data.RECORDING:
 				if msg.State {
-					var err error
-					if n, err := strconv.ParseInt(msg.Msg, 10, 64); err != nil {
-						err = s.startRecording(drivers.TelemetryDefaultPollingInterval)
-					} else {
-						err = s.startRecording(n)
+					n, err := strconv.ParseInt(msg.Msg, 10, 64)
+					if err != nil {
+						n = drivers.TelemetryDefaultPollingInterval
 					}
+					err = s.startRecording(n)
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}

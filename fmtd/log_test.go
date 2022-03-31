@@ -102,7 +102,7 @@ func TestNewSubLogger(t *testing.T) {
 
 // TestLogWithErrors ensures that if a bad LogLevel is provided to Log, it will log an error
 func TestLogWithErrors(t *testing.T) {
-	config, err := InitConfig()
+	config, err := InitConfig(true)
 	if err != nil {
 		t.Errorf("%s", err)
 	}

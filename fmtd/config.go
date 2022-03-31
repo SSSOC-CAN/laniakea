@@ -78,7 +78,7 @@ var (
 )
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
-func InitConfig() (Config, error) {
+func InitConfig(isTesting bool) (Config, error) {
 	// Check if fmtd directory exists, if no then create it
 	if !utils.FileExists(utils.AppDataDir("fmtd", false)) {
 		err := os.Mkdir(utils.AppDataDir("fmtd", false), 0666)
@@ -108,8 +108,10 @@ func InitConfig() (Config, error) {
 		config = default_config()
 	}
 	// now to parse the flags
-	if _, err := flags.Parse(&config); err != nil {
-		return Config{}, err
+	if !isTesting {
+		if _, err := flags.Parse(&config); err != nil {
+			return Config{}, err
+		}
 	}
 	return config, nil
 }
