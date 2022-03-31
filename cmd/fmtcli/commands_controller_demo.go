@@ -96,7 +96,7 @@ func setPres(ctx *cli.Context) error {
 		return err
 	}
 	if ctx.NumFlags() != 0 {
-		rateChange = ctx.Float64("temp_change_rate")
+		rateChange = ctx.Float64("pres_change_rate")
 	}
 	stream, err := client.SetPressure(ctxc, &demorpc.SetPresRequest{
 		PressureSetPoint: setPt,

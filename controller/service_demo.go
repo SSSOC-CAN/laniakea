@@ -106,6 +106,11 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	if RTD.TelPollingInterval == int64(0) {
 		return ErrTelNotRecoring
 	}
+	currentState = s.ctrlStateStore.GetState()
+	ctrl, ok := currentState.(data.InitialCtrlState)
+	if !ok {
+		return state.ErrInvalidStateType
+	}
 	var (
 		actualTempChangeRate float64
 		intervalCnt			 int
@@ -129,37 +134,45 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 		}
 		lastTempSetPoint = req.TempSetPoint
 	} else {
-		lastTempSetPoint = RTD.AverageTemperature
+		lastTempSetPoint = ctrl.TemperatureSetPoint
+		setPtHelp := float64(1)
 		// convert change rate from degree C/min to C/Polling Interval
 		actualTempChangeRate = req.TempChangeRate * float64(RTD.TelPollingInterval)/float64(60)
 		if req.TempSetPoint < RTD.AverageTemperature {
 			actualTempChangeRate *= float64(-1)
+			setPtHelp *= float64(-1)
 		}
 		lastFiveRates := []struct{
 			Intervals int
 			Rate	  float64
 		}{}
-		var cumSum int
-		for i := 0; i < 4; i ++ {
+		var (
+			cumSum int
+			rate   float64
+			inter  int
+		)
+		for i := 0; i < 4; i++ {
 			if i == 0 {
+				rate = actualTempChangeRate/float64(2)
 				lastFiveRates = append(lastFiveRates, struct{
 					Intervals int
 					Rate	  float64
 				}{
-					Intervals: int(0.25/math.Abs(actualTempChangeRate)/float64(2)),
-					Rate: actualTempChangeRate/float64(2),
+					Intervals: int(0.25/math.Abs(rate)),
+					Rate: rate,
 				})
-				cumSum += int(0.25/math.Abs(actualTempChangeRate)/float64(2))
 			} else {
+				rate = lastFiveRates[i-1].Rate/float64(2)
 				lastFiveRates = append(lastFiveRates, struct{
 					Intervals int
 					Rate	  float64
 				}{
-					Intervals: int(0.25/lastFiveRates[i-1].Rate/float64(2)),
-					Rate: lastFiveRates[i-1].Rate/float64(2),
+					Intervals: int(0.25/math.Abs(rate)),
+					Rate: rate,
 				})
-				cumSum += int(0.25/math.Abs(lastFiveRates[i-1].Rate)/float64(2))
 			}
+			inter = int(0.25/math.Abs(rate))
+			cumSum += inter
 		}
 		for i := 3; i > -1; i-- {
 			for j := 0; j < lastFiveRates[i].Intervals; j++ {
@@ -168,22 +181,22 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 					SetPoint float64
 				}{
 					Rate: lastFiveRates[i].Rate,
-					SetPoint: RTD.AverageTemperature+float64(1),
+					SetPoint: ctrl.TemperatureSetPoint+setPtHelp,
 				})
 			}
-		} 
-		totalIntervals = 2*cumSum+int((math.Abs(req.TempSetPoint-RTD.AverageTemperature)-float64(2))/math.Abs(actualTempChangeRate))
-		s.Logger.Debug().Msg(fmt.Sprintf("intervalCnt: %v\nreq: %v\ntotalIntervals: %v\ncumSum: %v", intervalCnt, req, totalIntervals, cumSum))
+		}
+		placeHolder := math.Abs(req.TempSetPoint-ctrl.TemperatureSetPoint)-float64(2)
+		totalIntervals = int(placeHolder/math.Abs(actualTempChangeRate))
+		totalIntervals = 2*cumSum+totalIntervals
 		for i := 0; i < totalIntervals-(2*cumSum); i++ {
 			changeRateSlice = append(changeRateSlice, struct{
 				Rate float64
 				SetPoint float64
 			}{
 				Rate: actualTempChangeRate,
-				SetPoint: req.TempSetPoint-float64(1),
+				SetPoint: req.TempSetPoint-setPtHelp,
 			})
 		}
-		// s.Logger.Debug().Msg(fmt.Sprintf("intervalCnt: %v\nreq: %v", intervalCnt, req))
 		for _, r := range lastFiveRates {
 			for j := 0; j < r.Intervals; j++ {
 				changeRateSlice = append(changeRateSlice, struct{
@@ -195,7 +208,6 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 				})
 			}
 		}
-		// s.Logger.Debug().Msg(fmt.Sprintf("intervalCnt: %v\nreq: %v", intervalCnt, req))
 	}
 	changeRateSlice = append(changeRateSlice, struct{
 		Rate float64
@@ -221,9 +233,9 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetTempResponse{
-					CurrentTempSetPoint: lastTempSetPoint,
+					CurrentTempSetPoint: changeRateSlice[intervalCnt].SetPoint,
 					CurrentAvgTemp: RTD.AverageTemperature,
-					CurrentTempChangeRate: changeRateSlice[intervalCnt].Rate,
+					CurrentTempChangeRate: changeRateSlice[intervalCnt].Rate*float64(60)/float64(RTD.TelPollingInterval),
 				}); err != nil {
 					return err
 				}
@@ -261,6 +273,11 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 	if RTD.TelPollingInterval == int64(0) {
 		return ErrTelNotRecoring
 	}
+	currentState = s.ctrlStateStore.GetState()
+	ctrl, ok := currentState.(data.InitialCtrlState)
+	if !ok {
+		return state.ErrInvalidStateType
+	}
 	var (
 		actualPresChangeRate float64
 		intervalCnt			 int
@@ -285,36 +302,44 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 		lastPresSetPoint = req.PressureSetPoint
 	} else {
 		lastPresSetPoint = RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
+		setPtHelp := float64(1)
 		// convert change rate from degree Torr/min to Torr/Polling Interval
 		actualPresChangeRate = req.PressureChangeRate * float64(RTD.TelPollingInterval)/float64(60)
 		if req.PressureSetPoint < RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value {
 			actualPresChangeRate *= float64(-1)
+			setPtHelp *= float64(-1)
 		}
 		lastFiveRates := []struct{
 			Intervals int
 			Rate	  float64
 		}{}
-		var cumSum int
+		var (
+			cumSum int
+			rate   float64
+			inter  int
+		)
 		for i := 0; i < 4; i ++ {
 			if i == 0 {
+				rate = actualPresChangeRate/float64(2)
 				lastFiveRates = append(lastFiveRates, struct{
 					Intervals int
 					Rate	  float64
 				}{
-					Intervals: int(0.25/actualPresChangeRate/float64(2)),
-					Rate: actualPresChangeRate/float64(2),
+					Intervals: int(0.25/math.Abs(rate)),
+					Rate: rate,
 				})
-				cumSum += int(0.25/actualPresChangeRate/float64(2))
 			} else {
+				rate = lastFiveRates[i-1].Rate/float64(2)
 				lastFiveRates = append(lastFiveRates, struct{
 					Intervals int
 					Rate	  float64
 				}{
-					Intervals: int(0.25/lastFiveRates[i-1].Rate/float64(2)),
-					Rate: lastFiveRates[i-1].Rate/float64(2),
+					Intervals: int(0.25/math.Abs(rate)),
+					Rate: rate,
 				})
-				cumSum += int(0.25/lastFiveRates[i-1].Rate/float64(2))
 			}
+			inter = int(0.25/math.Abs(rate))
+			cumSum += inter
 		}
 		for i := 3; i > -1; i-- {
 			for j := 0; j < lastFiveRates[i].Intervals; j++ {
@@ -323,18 +348,20 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 					SetPoint float64
 				}{
 					Rate: lastFiveRates[i].Rate,
-					SetPoint: RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value+float64(1),
+					SetPoint: ctrl.PressureSetPoint+setPtHelp,
 				})
 			}
-		} 
-		totalIntervals = 2*cumSum+int((math.Abs(req.PressureSetPoint-RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value)-float64(2))/actualPresChangeRate)
+		}
+		placeHolder := math.Abs(req.PressureSetPoint-ctrl.PressureSetPoint)-float64(2)
+		totalIntervals = int(placeHolder/math.Abs(actualPresChangeRate)) 
+		totalIntervals = 2*cumSum+totalIntervals
 		for i := 0; i < totalIntervals-(2*cumSum); i++ {
 			changeRateSlice = append(changeRateSlice, struct{
 				Rate float64
 				SetPoint float64
 			}{
 				Rate: actualPresChangeRate,
-				SetPoint: req.PressureSetPoint-float64(1),
+				SetPoint: req.PressureSetPoint-setPtHelp,
 			})
 		}
 		for _, r := range lastFiveRates {
@@ -373,9 +400,9 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetPresResponse{
-					CurrentPressureSetPoint: lastPresSetPoint,
+					CurrentPressureSetPoint: changeRateSlice[intervalCnt].SetPoint,
 					CurrentAvgPressure: RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value,
-					CurrentPressureChangeRate: changeRateSlice[intervalCnt].Rate,
+					CurrentPressureChangeRate: changeRateSlice[intervalCnt].Rate*float64(60)/float64(RTD.TelPollingInterval),
 				}); err != nil {
 					return err
 				}
