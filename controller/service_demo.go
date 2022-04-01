@@ -5,7 +5,6 @@ package controller
 import (
 	"context"
 	e "errors"
-	"fmt"
 	"math"
 	"math/rand"
 	"sync/atomic"
@@ -26,6 +25,8 @@ import (
 const (
 	ErrNegativeRate = errors.Error("rates cannot be negative")
 	ErrTelNotRecoring = errors.Error("telemetry service not yet recording")
+	ErrServiceAlreadyStarted = errors.Error("service already started")
+	ErrServiceAlreadyStopped = errors.Error("service already stopped")
 )
 
 type ControllerService struct {
@@ -54,7 +55,7 @@ func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlSto
 func (s *ControllerService) Start() error {
 	s.Logger.Info().Msg("Starting controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start controller service. Service already started.")
+		return ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("No Connection to a controller is currently active.`")
 	s.Logger.Info().Msg("Controller Service successfully started.")
@@ -65,7 +66,7 @@ func (s *ControllerService) Start() error {
 func (s *ControllerService) Stop() error {
 	s.Logger.Info().Msg("Stopping controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop controller service. Service already stopped.")
+		return ErrServiceAlreadyStopped
 	}
 	s.Logger.Info().Msg("Controller service successfully stopped.")
 	return nil

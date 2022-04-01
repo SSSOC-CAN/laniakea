@@ -260,6 +260,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if err = <-errChan; err != nil {
 		return err
 	}
+	close(errChan)
 	return nil
 }
 
