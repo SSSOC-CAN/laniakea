@@ -1,8 +1,14 @@
 package controller
 
 import (
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/rs/zerolog"
+)
+
+const (
+	ErrServiceAlreadyStarted = errors.Error("service already started")
+	ErrServiceAlreadyStopped = errors.Error("service already stopped")
 )
 
 var (
