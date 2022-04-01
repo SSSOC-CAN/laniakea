@@ -235,6 +235,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	if err = <-errChan; err != nil {
 		return err
 	}
+	close(errChan)
 	return nil
 }
 
