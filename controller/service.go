@@ -3,18 +3,19 @@
 package controller
 
 import (
+	"context"
+	"sync/atomic"
+
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 )
 
-type ControllerService {
+type ControllerService struct {
 	BaseControllerService
 }
 
@@ -39,7 +40,7 @@ func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlSto
 func (s *ControllerService) Start() error {
 	s.Logger.Info().Msg("Starting controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start controller service. Service already started.")
+		return ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("No Connection to a controller is currently active.`")
 	s.Logger.Info().Msg("Controller Service successfully started.")
@@ -50,13 +51,7 @@ func (s *ControllerService) Start() error {
 func (s *ControllerService) Stop() error {
 	s.Logger.Info().Msg("Stopping controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop controller service. Service already stopped.")
-	}
-	if atomic.LoadInt32(&s.Recording) == 1 {
-		err := s.stopRecording()
-		if err != nil {
-			return fmt.Errorf("Could not stop controller service: %v", err)
-		}
+		return ErrServiceAlreadyStopped
 	}
 	s.Logger.Info().Msg("Controller service successfully stopped.")
 	return nil
