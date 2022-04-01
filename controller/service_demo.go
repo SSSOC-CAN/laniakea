@@ -25,8 +25,6 @@ import (
 const (
 	ErrNegativeRate = errors.Error("rates cannot be negative")
 	ErrTelNotRecoring = errors.Error("telemetry service not yet recording")
-	ErrServiceAlreadyStarted = errors.Error("service already started")
-	ErrServiceAlreadyStopped = errors.Error("service already stopped")
 )
 
 type ControllerService struct {
