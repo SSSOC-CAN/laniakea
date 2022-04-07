@@ -77,6 +77,13 @@ func NewGrpcInterceptor(log *zerolog.Logger, noMacaroons bool) *GrpcInterceptor 
 	}
 }
 
+// SetWaitingToStart changes the rRPC state to waitingToStart
+func (i *GrpcInterceptor) SetWaitingToStart() {
+	i.Lock()
+	defer i.Unlock()
+	i.state = waitingToStart
+}
+
 // SetDaemonLocked changes the RPC state from waitingToStart to locked
 func (i *GrpcInterceptor) SetDaemonLocked() {
 	i.Lock()
