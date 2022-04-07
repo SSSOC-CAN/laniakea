@@ -44,7 +44,7 @@ var (
 		return fmtrpc.NewDataCollectorClient(conn), cleanUp, nil
 	}
 	testPlanFileLines = []string{
-		fmt.Sprint("plan_name: \"Test\"\n"),
+		"plan_name: \"Test\"\n",
 		"test_duration: 120\n", // 2 minute test
 		"data_providers:\n",
 		"  - provider_name: \"Fluke\"\n",

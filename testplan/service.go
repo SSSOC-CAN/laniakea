@@ -167,9 +167,6 @@ func (s *TestPlanService) startTestPlan() error {
 	if s.testPlan == nil {
 		return ErrNoTestPlanLoaded
 	}
-	if ok := atomic.CompareAndSwapInt32(&s.Executing, 0, 1); !ok {
-		return ErrTestPlanAlreadyStarted
-	}
 	// reset waitgroup
 	var wg sync.WaitGroup
 	s.wg = wg
@@ -201,6 +198,9 @@ func (s *TestPlanService) startTestPlan() error {
 		s.reportWriter.Flush()
 		_ = report_file.Close()
 		s.testPlan = nil
+	}
+	if ok := atomic.CompareAndSwapInt32(&s.Executing, 0, 1); !ok {
+		return ErrTestPlanAlreadyStarted
 	}
 	s.wg.Add(1)
 	go s.executeTestPlan()
@@ -317,7 +317,6 @@ func (s *TestPlanService) executeTestPlan() {
 		rgaRecording bool
 		readyAlerts  []*Alert
 		ticks 		 int
-		wgTwo		 sync.WaitGroup
 	)
 	for {
 		newLines := make([]NewLine, 0)
@@ -474,14 +473,11 @@ func (s *TestPlanService) executeTestPlan() {
 				}
 			}
 			clientCleanup()
-			wgTwo.Wait()
 			return
 		}
 		// write to csv
 		for _, line := range newLines {
-			wgTwo.Add(1)
 			go func() {
-				defer wgTwo.Done()
 				err := writeMsgToReport(
 					s.reportWriter,
 					line.RptLvl,
