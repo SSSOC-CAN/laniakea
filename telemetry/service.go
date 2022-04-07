@@ -182,7 +182,7 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 				Value: float64(v),
 			}
 			if i != int(drivers.TelemetryPressureChannel) {
-				cumSum += float64(v),
+				cumSum += float64(v)
 				cnt += 1
 			}
 		}

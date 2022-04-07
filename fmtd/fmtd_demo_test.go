@@ -7,7 +7,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
@@ -32,7 +34,9 @@ var (
 	defaultTestingPwd = []byte("abcdefgh")
 )
 
-func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, tempDir string, readySigChan chan struct{}) {
+func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySigChan chan struct{}, wg *sync.WaitGroup, tempDir string) {
+	defer wg.Done()
+	// create config and log
 	config, err := InitConfig(true)
 	if err != nil {
 		t.Fatalf("Could not initialize config: %v", err)
@@ -72,7 +76,14 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, tempDir 
 	if err != nil {
 		t.Error("Could not start server")
 	}
-	defer server.Stop()
+	defer func() { 
+		t.Log("Stopping main server...")
+		err := server.Stop()
+		if err != nil {
+			t.Errorf("Could not stop main server: %v", err)
+		}
+		t.Log("Main server stopped.")
+	}()
 
 	// Instantiating RPC server
 	rpcServer, err := NewRpcServer(shutdownInterceptor, server.cfg, server.logger)
@@ -192,7 +203,14 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, tempDir 
 		t.Errorf("Could not initialize Macaroon DB: %v", err)
 	}
 	t.Log("Database successfully opened.")
-	defer db.Close()
+	defer func() {
+		t.Log("Closing database...")
+		err := db.Close()
+		if err != nil {
+			t.Errorf("Could not close database: %v", err)
+		}
+		t.Log("Database closed")
+	}()
 
 	// Instantiate Unlocker Service and register with gRPC server
 	t.Log("Initializing unlocker service...")
@@ -208,7 +226,14 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, tempDir 
 	if err != nil {
 		t.Errorf("Could not start RPC server: %v", err)
 	}
-	defer rpcServer.Stop()
+	defer func() {
+		t.Log("Shutting down RPC server...")
+		err := rpcServer.Stop()
+		if err != nil {
+			t.Errorf("Could not shutdown RPC server: %v", err)
+		}
+		t.Log("RPC server shutdown")
+	}()
 
 	// Start gRPC listening
 	lis = bufconn.Listen(bufSize)
@@ -239,7 +264,14 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, tempDir 
 		t.Errorf("Unable to instantiate Macaroon service: %v", err)
 	}
 	t.Log("Macaroon service initialized.")
-	defer macaroonService.Close()
+	defer func() {
+		t.Log("Shutting down macaroon service...")
+		err := macaroonService.Close()
+		if err != nil {
+			t.Errorf("Could not shutdown macaroon service: %v", err)
+		}
+		t.Log("Macaroon service shutdown")
+	}()
 
 	// Unlock Macaroon Store
 	t.Log("Unlocking macaroon store...")
@@ -273,16 +305,30 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, tempDir 
 
 	// Start all Services
 	for _, s := range services {
+		t.Logf("Starting %s service...", s.Name())
 		err = s.Start()
 		if err != nil {
 			t.Errorf("Unable to start %s service: %v", s.Name(), err)
 		}
-		defer s.Stop()
+		t.Logf("%s service started", s.Name())
 	}
+	// Stop Services CleanUp
+	cleanUp := func() {
+		for i := len(services)-1; i > -1; i-- {
+			t.Logf("Shutting down %s service...", services[i].Name())
+			err := services[i].Stop()
+			if err != nil {
+				t.Errorf("Could not shutdown %s service: %v", services[i].Name(), err)
+			}
+			t.Logf("%s service shutdown", services[i].Name())
+		}
+	}
+	defer cleanUp()
 
 	// Change RPC state to active
 	grpc_interceptor.SetRPCActive()
 	<-shutdownInterceptor.ShutdownChannel()
+	return
 }
 
 // unlockFMTD is a helper function to unlock the FMT Daemon
@@ -308,7 +354,7 @@ var (
 	chngePwdCmd string = "changepassword"
 	loginCmd    string = "login"
 	setPwdCmd   string = "setpassword"
-	unlockerTestCases = []unlockerCases{
+	unlockerTestCasesOne = []unlockerCases{
 		{"change-password-before-setting-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, true},
 		{"change-password-before-setting-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, true},
 		{"login-before-setting", loginCmd, defaultTestingPwd, nil, false, true},
@@ -316,7 +362,7 @@ var (
 		{"set-password-after-setting", setPwdCmd, []byte("bbbbbbbb"), nil, false, true},
 		{"login-after-setting", loginCmd, defaultTestingPwd, nil, false, true},
 		{"change-password-after-setting-invalid-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, true},
-		{"change-password-after-setting-invalid-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, true},
+		{"change-password-after-setting-invalid-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, true},
 	}
 )
 
@@ -328,16 +374,17 @@ func TestUnlockerGrpcApi(t *testing.T) {
 		t.Fatalf("Error creating temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tempDir)
+	var wg sync.WaitGroup
 	// SIGINT interceptor
 	shutdownInterceptor, err := intercept.InitInterceptor()
 	if err != nil {
 		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
 	}
-	defer shutdownInterceptor.RequestShutdown()
 	readySignal := make(chan struct{})
 	defer close(readySignal)
-	go initFmtd(t, shutdownInterceptor, tempDir, readySignal)
-	_ = <-readySignal
+	wg.Add(1)
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	<-readySignal
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
@@ -346,7 +393,7 @@ func TestUnlockerGrpcApi(t *testing.T) {
 	defer conn.Close()
 	client := fmtrpc.NewUnlockerClient(conn)
 	// Test ChangePassword before setting pwd
-	for _, c := range unlockerTestCases {
+	for _, c := range unlockerTestCasesOne {
 		t.Run(c.caseName, func(t *testing.T) {
 			switch c.command {
 			case chngePwdCmd:
@@ -395,5 +442,11 @@ func TestUnlockerGrpcApi(t *testing.T) {
 				}
 			}
 		})
+	}
+	time.Sleep(1*time.Second)
+	shutdownInterceptor.RequestShutdown()
+	wg.Wait()
+	if !utils.FileExists(path.Join(tempDir, "admin.macaroon")) || !utils.FileExists(path.Join(tempDir, "test.macaroon")) {
+		t.Error("Macaroon files don't exist!")
 	}
 }

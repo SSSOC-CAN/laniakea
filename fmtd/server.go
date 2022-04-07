@@ -56,7 +56,7 @@ func (s *Server) Start() error {
 // Stop stops the server. Returns an error if any issues occur
 func (s *Server) Stop() error {
 	s.logger.Info().Msg("Stopping Daemon...")
-	if ok := atomic.CompareAndSwapInt32(&s.Active, 0, 1); !ok {
+	if ok := atomic.CompareAndSwapInt32(&s.Active, 1, 0); !ok {
 		return fmt.Errorf("Cannot stop daemon: already inactive")
 	}
 	s.logger.Info().Msg("Daemon succesfully stopped.")

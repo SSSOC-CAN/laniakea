@@ -34,7 +34,7 @@ func NewRGAService(
 	outputDir string,
 	rtdStore *state.Store, 
 	_ *state.Store,
-	connection *drivers.RGAConnection
+	connection *drivers.RGAConnection,
 ) *RGAService {
 	var (
 		wgL sync.WaitGroup

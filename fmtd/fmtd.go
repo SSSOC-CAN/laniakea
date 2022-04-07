@@ -378,6 +378,16 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		defer s.Stop()
 	}
 
+	cleanUpServices := func() {
+		for i := len(services)-1; i > -1; i-- {
+			err := services[i].Stop()
+			if err != nil {
+				server.logger.Error().Msg(fmt.Sprintf("Unable to stop %s service: %v", services[i].Name(), err))
+			}
+		}
+	}
+	defer cleanUpServices()
+
 	// Change RPC state to active
 	grpc_interceptor.SetRPCActive()
 	
