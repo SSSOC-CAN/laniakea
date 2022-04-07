@@ -4,13 +4,21 @@ package fmtd
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	e "github.com/pkg/errors"
+	"github.com/SSSOC-CAN/fmtd/auth"
+	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
@@ -26,7 +34,10 @@ import (
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	macaroon "gopkg.in/macaroon.v2"
 )
 
 var (
@@ -85,6 +96,15 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 		t.Log("Main server stopped.")
 	}()
 
+	// Get TLS config
+	t.Log("Loading TLS configuration...")
+	serverOpts, _, _, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath, server.cfg.ExtraIPAddr)
+	if err != nil {
+		t.Errorf("Could not load TLS configuration: %v", err)
+	}
+	t.Log("TLS configuration successfully loaded.")
+	defer cleanUp()
+
 	// Instantiating RPC server
 	rpcServer, err := NewRpcServer(shutdownInterceptor, server.cfg, server.logger)
 	if err != nil {
@@ -99,7 +119,8 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 		t.Errorf("Could not add permissions to gRPC middleware: %v", err)
 	}
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
-	grpc_server := grpc.NewServer(rpcServerOpts...)
+	serverOpts = append(serverOpts, rpcServerOpts...)
+	grpc_server := grpc.NewServer(serverOpts...)
 	defer grpc_server.Stop()
 	rpcServer.RegisterWithGrpcServer(grpc_server)
 	rpcServer.AddGrpcInterceptor(grpc_interceptor)
@@ -313,7 +334,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 		t.Logf("%s service started", s.Name())
 	}
 	// Stop Services CleanUp
-	cleanUp := func() {
+	cleanUpServices := func() {
 		for i := len(services)-1; i > -1; i-- {
 			t.Logf("Shutting down %s service...", services[i].Name())
 			err := services[i].Stop()
@@ -323,7 +344,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 			t.Logf("%s service shutdown", services[i].Name())
 		}
 	}
-	defer cleanUp()
+	defer cleanUpServices()
 
 	// Change RPC state to active
 	grpc_interceptor.SetRPCActive()
@@ -332,13 +353,14 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 }
 
 // unlockFMTD is a helper function to unlock the FMT Daemon
-func unlockFMTD(t *testing.T, ctx context.Context, unlockerClient fmtrpc.UnlockerClient) {
-	_, err := unlockerClient.Login(ctx, &fmtrpc.LoginRequest{
+func unlockFMTD(ctx context.Context, unlockerClient fmtrpc.UnlockerClient) error {
+	_, err := unlockerClient.SetPassword(ctx, &fmtrpc.SetPwdRequest{
 		Password: defaultTestingPwd,
 	})
 	if err != nil {
-		t.Errorf("Error unlocking FMTD: %v", err)
+		return err
 	}
+	return nil
 }
 
 type unlockerCases struct {
@@ -386,7 +408,15 @@ func TestUnlockerGrpcApi(t *testing.T) {
 	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
 	<-readySignal
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
+	if err != nil {
+		t.Fatal("Could not get TLS credentials from file")
+	}
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithContextDialer(bufDialer),
+	}
+	conn, err := grpc.DialContext(ctx, "bufnet", opts...)
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
@@ -450,3 +480,404 @@ func TestUnlockerGrpcApi(t *testing.T) {
 		t.Error("Macaroon files don't exist!")
 	}
 }
+
+// getMacaroonGrpcCreds gets the appropriate grpc DialOption for macaroon authentication
+func getMacaroonGrpcCreds(tlsCertPath, adminMacPath string) ([]grpc.DialOption, error) {
+	creds, err := credentials.NewClientTLSFromFile(tlsCertPath, "")
+	if err != nil {
+		return nil, e.Wrap(err, "could not get TLS credentials from file")
+	}
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+	}
+	adminMac, err := os.ReadFile(adminMacPath)
+	if err != nil {
+		return nil, e.Wrapf(err, "Could not read macaroon at %v", adminMacPath)
+	}
+	macHex := hex.EncodeToString(adminMac)
+	mac, err := auth.LoadMacaroon(auth.ReadPassword, macHex)
+	if err != nil {
+		return nil, err
+	}
+	// Add constraints to our macaroon
+	macConstraints := []macaroons.Constraint{
+		macaroons.TimeoutConstraint(int64(60)), // prevent a replay attack
+	}
+	constrainedMac, err := macaroons.AddConstraints(mac, macConstraints...)
+	if err != nil {
+		return nil, err
+	}
+	cred, err := macaroons.NewMacaroonCredential(constrainedMac)
+	if err != nil {
+		return nil, err
+	}
+	opts = append(opts, grpc.WithPerRPCCredentials(cred))
+	return opts, nil
+}
+
+type bakeMacCases struct {
+	caseName	string
+	bakeMacReq	*fmtrpc.BakeMacaroonRequest
+	expectErr   bool
+	callback    func(string, grpc.DialOption) (*grpc.ClientConn, error)
+}
+
+var (
+	bakeMacTestCases = []bakeMacCases{
+		{"bake-mac-empty-permissions", &fmtrpc.BakeMacaroonRequest{}, true, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+			return nil, nil
+		}},
+		{"bake-mac-invalid-permission-entity", &fmtrpc.BakeMacaroonRequest{
+			Timeout: int64(-10),
+			TimeoutType: fmtrpc.TimeoutType_DAY,
+			Permissions: []*fmtrpc.MacaroonPermission{
+				&fmtrpc.MacaroonPermission{
+					Entity: "not a real entity",
+					Action: "invalid action",
+				},
+			},
+		}, true, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+			return nil, nil
+		}},
+		{"bake-mac-invalid-permission-action", &fmtrpc.BakeMacaroonRequest{
+			Timeout: int64(-10),
+			TimeoutType: fmtrpc.TimeoutType_DAY,
+			Permissions: []*fmtrpc.MacaroonPermission{
+				&fmtrpc.MacaroonPermission{
+					Entity: "tpex",
+					Action: "invalid action",
+				},
+			},
+		}, true, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+			return nil, nil
+		}},
+		{"bake-mac-10-sec-timeout", &fmtrpc.BakeMacaroonRequest{
+			Timeout: int64(10),
+			TimeoutType: fmtrpc.TimeoutType_SECOND,
+			Permissions: []*fmtrpc.MacaroonPermission{
+				&fmtrpc.MacaroonPermission{
+					Entity: "uri",
+					Action: "/fmtrpc.Fmt/AdminTest",
+				},
+			},
+		}, false, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+			macBytes, err := hex.DecodeString(macHex)
+			if err != nil {
+				return nil, e.Wrap(err, "unable to hex decode macaroon")
+			}
+			mac := &macaroon.Macaroon{}
+			if err = mac.UnmarshalBinary(macBytes); err != nil {
+				return nil, e.Wrap(err, "unable to decode macaroon")
+			}
+			cred, err := macaroons.NewMacaroonCredential(mac)
+			if err != nil {
+				return nil, e.Wrap(err, "unable to get gRPC macaroon credential")
+			}
+			ctx := context.Background()
+			opts := []grpc.DialOption{
+				tlsDialOpt,
+				grpc.WithPerRPCCredentials(cred),
+				grpc.WithContextDialer(bufDialer),
+			}
+			conn, err := grpc.DialContext(ctx, "bufnet", opts...)
+			if err != nil {
+				return nil, e.Wrap(err, "cannot dial bufnet")
+			}
+			client := fmtrpc.NewFmtClient(conn)
+			_, err = client.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
+			if err != nil {
+				return nil, e.Wrap(err, "unable to invoke admin test command")
+			}
+			_, err = client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{})
+			if err == nil {
+				return nil, errors.Error("Expected an error and got none")
+			}
+			time.Sleep(10*time.Second)
+			_, err = client.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
+			if err != nil {
+				return nil, errors.Error("Macaroon didn't expire")
+			}
+			return conn, nil
+		}},
+	}
+)
+
+// TestFmtGrpcApi tests the Fmt API service
+func TestFmtGrpcApi(t *testing.T) {
+	// temp dir
+	tempDir, err := ioutil.TempDir("", "integration-testing-")
+	if err != nil {
+		t.Fatalf("Error creating temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	var wg sync.WaitGroup
+	// SIGINT interceptor
+	shutdownInterceptor, err := intercept.InitInterceptor()
+	if err != nil {
+		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
+	}
+	readySignal := make(chan struct{})
+	defer close(readySignal)
+	wg.Add(1)
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	<-readySignal
+	ctx := context.Background()
+	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
+	if err != nil {
+		t.Fatal("Could not get TLS credentials from file")
+	}
+	unlockerOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithContextDialer(bufDialer),
+	}
+	conn, err := grpc.DialContext(ctx, "bufnet", unlockerOpts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+	unlockerClient := fmtrpc.NewUnlockerClient(conn)
+	err = unlockFMTD(ctx, unlockerClient)
+	if err != nil {
+		t.Fatalf("Could not set FMTD password: %v", err)
+	}
+	time.Sleep(1*time.Second)
+	// now we get FmtClient
+	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"))
+	opts = append(opts, macDialOpts...)
+	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer authConn.Close()
+	fmtClient := fmtrpc.NewFmtClient(authConn)
+	// test command
+	t.Run("test-command", func(t *testing.T) {
+		resp, err := fmtClient.TestCommand(ctx, &fmtrpc.TestRequest{})
+		if err != nil {
+			t.Errorf("Unable to invoke test command: %v", err)
+		}
+		if resp.Msg != "This is a regular test" {
+			t.Errorf("Unexpected test command response: %v", resp.Msg)
+		}
+	})
+	// admin-test
+	t.Run("admin-test", func(t *testing.T) {
+		resp, err := fmtClient.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
+		if err != nil {
+			t.Errorf("Unable to invoke admin test command: %v", err)
+		}
+		if resp.Msg != "This is an admin test" {
+			t.Errorf("Unexpected admin test response: %v", resp.Msg)
+		}
+	})
+	// bake-macaroon
+	for _, c := range bakeMacTestCases {
+		t.Run(c.caseName, func(t *testing.T) {
+			resp, err := fmtClient.BakeMacaroon(ctx, c.bakeMacReq)
+			if c.expectErr {
+				if err == nil {
+					t.Error("Expected an error and got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unable to bake macaroon: %v", err)
+				}
+				testConn, err := c.callback(resp.Macaroon, grpc.WithTransportCredentials(creds))
+				if err != nil {
+					t.Errorf("Error when testing freshly baked macaroon: %v", err)
+				}
+				defer testConn.Close()
+			}
+		})
+	}
+	// Stop Daemon
+	t.Run("stop-daemon", func(t *testing.T) {
+		_, err := fmtClient.StopDaemon(ctx, &fmtrpc.StopRequest{})
+		if err != nil {
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Error was not a gRPC status error")
+			}
+			if st.Message() != "error reading from server: EOF" {
+				t.Errorf("Unable to stop daemon: %v", st.Message())
+			}	
+		}
+	})
+	wg.Wait()
+}
+
+// TestDataCollectorGrpcApi tests the data collector API service
+func TestDataCollectorGrpcApi(t *testing.T) {
+	// temp dir
+	tempDir, err := ioutil.TempDir("", "integration-testing-")
+	if err != nil {
+		t.Fatalf("Error creating temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	var wg sync.WaitGroup
+	// SIGINT interceptor
+	shutdownInterceptor, err := intercept.InitInterceptor()
+	if err != nil {
+		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
+	}
+	readySignal := make(chan struct{})
+	defer close(readySignal)
+	wg.Add(1)
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	<-readySignal
+	ctx := context.Background()
+	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
+	if err != nil {
+		t.Fatal("Could not get TLS credentials from file")
+	}
+	unlockerOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithContextDialer(bufDialer),
+	}
+	conn, err := grpc.DialContext(ctx, "bufnet", unlockerOpts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+	unlockerClient := fmtrpc.NewUnlockerClient(conn)
+	err = unlockFMTD(ctx, unlockerClient)
+	if err != nil {
+		t.Fatalf("Could not set FMTD password: %v", err)
+	}
+	time.Sleep(1*time.Second)
+	// now we get DataCollectorClient
+	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"))
+	opts = append(opts, macDialOpts...)
+	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer authConn.Close()
+	client := fmtrpc.NewDataCollectorClient(authConn)
+	t.Run("start-record-invalid-polling-interval", func(t *testing.T) {
+		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
+			PollingInterval: int64(1),
+			Type: fmtrpc.RecordService_TELEMETRY,
+		})
+		if err == nil {
+			t.Error("Expected an error but got none")
+		}
+		t.Log(resp)
+	})
+	t.Run("start-record-rga-service-before-telemetry", func(t *testing.T) {
+		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
+			Type: fmtrpc.RecordService_RGA,
+		})
+		if err == nil {
+			t.Error("Expected an error but got none")
+		}
+		t.Log(resp)
+	})
+	t.Run("start-record-telemetry", func(t *testing.T) {
+		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
+			Type: fmtrpc.RecordService_TELEMETRY,
+		})
+		if err != nil {
+			t.Errorf("Could not start telemetry: %v", err)
+		}
+		t.Log(resp)
+	})
+	t.Run("start-record-telemetry-after-starting", func(t *testing.T) {
+		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
+			Type: fmtrpc.RecordService_TELEMETRY,
+		})
+		if err == nil {
+			t.Error("Expected an error but got none")
+		}
+		t.Log(resp)
+	})
+	t.Run("stop-record-rga", func(t *testing.T) {
+		resp, err := client.StopRecording(ctx, &fmtrpc.StopRecRequest{
+			Type: fmtrpc.RecordService_RGA,
+		})
+		if err == nil {
+			t.Error("Expected an error but got none")
+		}
+		t.Log(resp)
+	})
+	t.Run("stop-record-telemetry", func(t *testing.T) {
+		resp, err := client.StopRecording(ctx, &fmtrpc.StopRecRequest{
+			Type: fmtrpc.RecordService_TELEMETRY,
+		})
+		if err != nil {
+			t.Errorf("Could not stop telemetry recording: %v", err)
+		}
+		t.Log(resp)
+	})
+	t.Run("stop-record-telemetry-after-stopping", func(t *testing.T) {
+		resp, err := client.StopRecording(ctx, &fmtrpc.StopRecRequest{
+			Type: fmtrpc.RecordService_TELEMETRY,
+		})
+		if err == nil {
+			t.Error("Expected an error but got none")
+		}
+		t.Log(resp)
+	})
+	t.Run("restart-record-telemetry", func(t *testing.T) {
+		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
+			Type: fmtrpc.RecordService_TELEMETRY,
+		})
+		if err != nil {
+			t.Errorf("Could not start telemetry: %v", err)
+		}
+		t.Log(resp)
+	})
+	t.Run("subscribe-datastream", func(t *testing.T) {
+		stream, err := client.SubscribeDataStream(ctx, &fmtrpc.SubscribeDataRequest{})
+		if err != nil {
+			t.Errorf("Could not start telemetry: %v", err)
+		}
+		ticker := time.NewTicker(time.Duration(int64(10))*time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				break
+			default:
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Error(err)
+					break
+				}
+				t.Log(resp)
+			}
+		}
+		ticker.Stop()
+	})
+	t.Run("subscribe-datastream", func(t *testing.T) {
+		stream, err := client.SubscribeDataStream(ctx, &fmtrpc.SubscribeDataRequest{})
+		if err != nil {
+			t.Errorf("Could not start telemetry: %v", err)
+		}
+		ticker := time.NewTicker(time.Duration(int64(10))*time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				break
+			default:
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Error(err)
+					break
+				}
+				t.Log(resp)
+			}
+		}
+		ticker.Stop()
+	})
+	shutdownInterceptor.RequestShutdown()
+	wg.Wait()
+}
+

@@ -79,7 +79,7 @@ var (
 			Action: "write",
 		},
 	}
-	validActions = []string{"read", "write"}
+	validActions = []string{"read", "write", "generate"}
 	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", macaroons.PermissionEntityCustomURI}
 )
 
@@ -128,7 +128,7 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 		}},
 		"/fmtrpc.Fmt/BakeMacaroon": {{
 			Entity: "macaroon",
-			Action: "write",
+			Action: "generate",
 		}},
 		"/demorpc.Controller/SetTemperature": {{
 			Entity: "ctrl",
@@ -272,7 +272,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}
 	noTimeout := true
 	var timeoutSeconds int64
-	if req.Timeout != 0 {
+	if req.Timeout > 0 {
 		noTimeout = false
 		switch req.TimeoutType {
 		case fmtrpc.TimeoutType_SECOND:

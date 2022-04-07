@@ -84,7 +84,7 @@ func GenCertPair(org, certFile, keyFile string, certValidity time.Duration, extr
 	if host != "localhost" {
 		dnsNames = append(dnsNames, "localhost")
 	}
-	dnsNames = append(dnsNames, "unix", "unixpacket")
+	dnsNames = append(dnsNames, "unix", "unixpacket", "bufnet")
 	ipAddresses := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
 	if len(extraIPAddr) > 0 {
 		for _, ip := range extraIPAddr {
