@@ -25,6 +25,7 @@ import (
 const (
 	ErrNegativeRate = errors.Error("rates cannot be negative")
 	ErrTelNotRecoring = errors.Error("telemetry service not yet recording")
+	ErrCtrllerInUse = errors.Error("controller service currently in use")
 )
 
 type ControllerService struct {
@@ -41,6 +42,7 @@ var _ data.Service = (*ControllerService) (nil)
 func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlStore *state.Store, _ drivers.DriverConnection) *ControllerService {
 	return &ControllerService{
 		BaseControllerService: BaseControllerService{
+			ctrlState: waitingToStart,
 			rtdStateStore: rtdStore,
 			ctrlStateStore: ctrlStore,
 			Logger: logger,
@@ -75,6 +77,20 @@ func (s *ControllerService) Name() string {
 	return s.name
 }
 
+// setWaitingToStart sets the controller state to waitingToStart
+func (s *ControllerService) setWaitingToStart() {
+	s.Lock()
+	defer s.Unlock()
+	s.ctrlState = waitingToStart
+}
+
+// setInUse sets the controller state to inUse
+func (s *ControllerService) setInUse() {
+	s.Lock()
+	defer s.Unlock()
+	s.ctrlState = inUse
+}
+
 // RegisterWithGrpcServer registers the gRPC server to the ControllerService
 func (s *ControllerService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 	demorpc.RegisterControllerServer(grpcServer, s)
@@ -94,9 +110,14 @@ func(s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *proxy
 
 // SetTemperature takes a gRPC request and changes the temperature set point accordingly
 func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateStream demorpc.Controller_SetTemperatureServer) error {
+	if s.ctrlState != waitingToStart {
+		return ErrCtrllerInUse
+	}
 	if req.TempSetPoint < float64(0) {
 		return ErrNegativeRate
 	}
+	s.setInUse()
+	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
@@ -260,10 +281,15 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 
 // SetPressure takes a gRPC request and changes the pressure set point accordingly
 func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStream demorpc.Controller_SetPressureServer) error {
+	if s.ctrlState != waitingToStart {
+		return ErrCtrllerInUse
+	}
 	// check if we have negative rate
 	if req.PressureSetPoint < float64(0) {
 		return ErrNegativeRate
 	}
+	s.setInUse()
+	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {

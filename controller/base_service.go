@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"sync"
+
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/rs/zerolog"
@@ -15,10 +17,19 @@ var (
 	ControllerName = "CTRL"
 )
 
+type controllerState uint8
+
+const (
+	waitingToStart controllerState = iota
+	inUse
+)
+
 type BaseControllerService struct {
 	Running				int32 // used atomically
+	ctrlState			controllerState
 	name 				string
 	rtdStateStore		*state.Store
 	ctrlStateStore	*state.Store
 	Logger				*zerolog.Logger
+	sync.RWMutex
 }

@@ -948,3 +948,53 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	wg.Wait()
 }
 
+// TestControllerGrpcApi tests the Controller API service
+func TestControllerGrpcApi(t *testing.T) {
+	// temp dir
+	tempDir, err := ioutil.TempDir("", "integration-testing-")
+	if err != nil {
+		t.Fatalf("Error creating temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	var wg sync.WaitGroup
+	// SIGINT interceptor
+	shutdownInterceptor, err := intercept.InitInterceptor()
+	if err != nil {
+		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
+	}
+	readySignal := make(chan struct{})
+	defer close(readySignal)
+	wg.Add(1)
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	<-readySignal
+	ctx := context.Background()
+	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
+	if err != nil {
+		t.Fatal("Could not get TLS credentials from file")
+	}
+	unlockerOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithContextDialer(bufDialer),
+	}
+	conn, err := grpc.DialContext(ctx, "bufnet", unlockerOpts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+	unlockerClient := fmtrpc.NewUnlockerClient(conn)
+	err = unlockFMTD(ctx, unlockerClient)
+	if err != nil {
+		t.Fatalf("Could not set FMTD password: %v", err)
+	}
+	time.Sleep(1*time.Second)
+	// now we get ControllerClient
+	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(60))
+	opts = append(opts, macDialOpts...)
+	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer authConn.Close()
+	client := fmtrpc.NewControllerClient(authConn)
+}
