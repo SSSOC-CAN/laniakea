@@ -22,6 +22,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -948,6 +949,32 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	wg.Wait()
 }
 
+type Cases struct {
+	caseName  string
+	cmd		  string
+	expectErr bool
+	setPoint  float64
+	rampRate  float64
+}
+
+var (
+	setTempCmd string = "set-temp"
+	setPresCmd string = "set-pres"
+	testCases = []Cases{
+		{"set-temp-negative-change-rate", setTempCmd, true, 30.0, -4.0},
+		{"set-temp-hot-0-rate", setTempCmd, false, 30.0, 0.0},
+		{"set-temp-cold-0-rate", setTempCmd, false, -20.0, 0.0},
+		{"set-temp-hot-5-rate", setTempCmd, false, -15.0, 5.0},
+		{"set-temp-cold-5-rate", setTempCmd, false, -20.0, 5.0},
+		{"set-pres-negative-change-rate", setPresCmd, true, 30.0, -4.0},
+		{"set-pres-negative-pressure", setPresCmd, true, -10.0, 0.0},
+		{"set-pres-high-0-rate", setPresCmd, false, 800.0, 0.0},
+		{"set-pres-low-0-rate", setPresCmd, false, 20.0, 0.0},
+		{"set-pres-high-5-rate", setPresCmd, false, 25.0, 5.0},
+		{"set-pres-low-5-rate", setPresCmd, false, 20.0, 5.0},
+	}
+)
+
 // TestControllerGrpcApi tests the Controller API service
 func TestControllerGrpcApi(t *testing.T) {
 	// temp dir
@@ -989,12 +1016,167 @@ func TestControllerGrpcApi(t *testing.T) {
 	time.Sleep(1*time.Second)
 	// now we get ControllerClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
-	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(60))
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(900))
 	opts = append(opts, macDialOpts...)
 	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
 	defer authConn.Close()
-	client := fmtrpc.NewControllerClient(authConn)
+	dataClient := fmtrpc.NewDataCollectorClient(authConn)
+	_, err = dataClient.StartRecording(ctx, &fmtrpc.RecordRequest{
+		Type: fmtrpc.RecordService_TELEMETRY,
+	})
+	if err != nil {
+		t.Fatalf("Could not start telemetry data recording: %v", err)
+	}
+	client := demorpc.NewControllerClient(authConn)
+	// Concurrent Set Temp
+	t.Run("concurrent-set-temp", func(t *testing.T) {
+		t.Skip()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func () {
+			defer wg.Done()
+			stream, err := client.SetTemperature(ctx, &demorpc.SetTempRequest{
+				TempSetPoint: 30.0,
+				TempChangeRate: 5.0,
+			})
+			if err != nil {
+				t.Errorf("Could not set temperature: %v", err)
+				return
+			}
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				t.Log(resp)
+			}
+		}()
+		time.Sleep(5*time.Second)
+		tmpClient := demorpc.NewControllerClient(authConn)
+		stream, _ := tmpClient.SetTemperature(ctx, &demorpc.SetTempRequest{
+			TempSetPoint: 35.0,
+			TempChangeRate: 0.0,
+		})
+		_, err := stream.Recv()
+		if err != nil {
+			t.Error("Expected an error and got none when doing concurrent temperature sets")
+		}
+		wg.Wait()
+	})
+	// Concurrent Set Pressure
+	t.Run("concurrent-set-pres", func(t *testing.T) {
+		t.Skip()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func () {
+			defer wg.Done()
+			stream, err := client.SetPressure(ctx, &demorpc.SetPresRequest{
+				PressureSetPoint: 755.0,
+				PressureChangeRate: 5.0,
+			})
+			if err != nil {
+				t.Errorf("Could not set pressure: %v", err)
+				return
+			}
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				t.Log(resp)
+			}
+		}()
+		time.Sleep(5*time.Second)
+		tmpClient := demorpc.NewControllerClient(authConn)
+		stream, _ := tmpClient.SetPressure(ctx, &demorpc.SetPresRequest{
+			PressureSetPoint: 35.0,
+			PressureChangeRate: 0.0,
+		})
+		_, err := stream.Recv()
+		if err != nil {
+			t.Error("Expected an error and got none when doing concurrent pressure sets")
+		}
+		wg.Wait()
+	})
+	for _, c := range testCases {
+		t.Run(c.caseName, func(t *testing.T) {
+			switch c.cmd {
+			case "set-temp":
+				stream, err := client.SetTemperature(ctx, &demorpc.SetTempRequest{
+					TempSetPoint: c.setPoint,
+					TempChangeRate: c.rampRate,
+				})
+				if c.expectErr {
+					if err == nil {
+						t.Error("Expected an error and got none")
+					}
+				} else {
+					if err != nil {
+						t.Errorf("Could not set temperature: %v", err)
+					}
+					for {
+						resp, err := stream.Recv()
+						if err == io.EOF {
+							break
+						}
+						if c.expectErr {
+							if err == nil {
+								t.Error("Expected an error and got none")
+								break
+							}
+						} else {
+							if err != nil {
+								t.Errorf("Could not receive from stream: %v", err)
+								break
+							}
+						}
+						t.Log(resp)
+					}
+				}
+			case "set-pres":
+				stream, err := client.SetPressure(ctx, &demorpc.SetPresRequest{
+					PressureSetPoint: c.setPoint,
+					PressureChangeRate: c.rampRate,
+				})
+				if c.expectErr {
+					if err == nil {
+						t.Error("Expected an error and got none")
+					}
+				} else {
+					if err != nil {
+						t.Errorf("Could not set pressure: %v", err)
+					}
+					for {
+						resp, err := stream.Recv()
+						if err == io.EOF {
+							break
+						}
+						if c.expectErr {
+							if err == nil {
+								t.Error("Expected an error and got none")
+								break
+							}
+						} else {
+							if err != nil {
+								t.Errorf("Could not receive from stream: %v", err)
+								break
+							}
+						}
+						t.Log(resp)
+					}
+				}
+			}
+		})
+	}
 }

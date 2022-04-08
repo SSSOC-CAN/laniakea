@@ -26,6 +26,7 @@ const (
 	ErrNegativeRate = errors.Error("rates cannot be negative")
 	ErrTelNotRecoring = errors.Error("telemetry service not yet recording")
 	ErrCtrllerInUse = errors.Error("controller service currently in use")
+	ErrNegativePressure = errors.Error("pressures cannot be negative")
 )
 
 type ControllerService struct {
@@ -113,7 +114,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	if s.ctrlState != waitingToStart {
 		return ErrCtrllerInUse
 	}
-	if req.TempSetPoint < float64(0) {
+	if req.TempChangeRate < float64(0) {
 		return ErrNegativeRate
 	}
 	s.setInUse()
@@ -285,8 +286,11 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 		return ErrCtrllerInUse
 	}
 	// check if we have negative rate
-	if req.PressureSetPoint < float64(0) {
+	if req.PressureChangeRate < float64(0) {
 		return ErrNegativeRate
+	}
+	if req.PressureSetPoint < float64(0) {
+		return ErrNegativePressure
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
