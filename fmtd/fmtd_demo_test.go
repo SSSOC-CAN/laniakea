@@ -5,13 +5,11 @@ package fmtd
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
-	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -482,7 +480,7 @@ func TestUnlockerGrpcApi(t *testing.T) {
 }
 
 // getMacaroonGrpcCreds gets the appropriate grpc DialOption for macaroon authentication
-func getMacaroonGrpcCreds(tlsCertPath, adminMacPath string) ([]grpc.DialOption, error) {
+func getMacaroonGrpcCreds(tlsCertPath, adminMacPath string, macTimeout int64) ([]grpc.DialOption, error) {
 	creds, err := credentials.NewClientTLSFromFile(tlsCertPath, "")
 	if err != nil {
 		return nil, e.Wrap(err, "could not get TLS credentials from file")
@@ -501,7 +499,7 @@ func getMacaroonGrpcCreds(tlsCertPath, adminMacPath string) ([]grpc.DialOption, 
 	}
 	// Add constraints to our macaroon
 	macConstraints := []macaroons.Constraint{
-		macaroons.TimeoutConstraint(int64(60)), // prevent a replay attack
+		macaroons.TimeoutConstraint(macTimeout), // prevent a replay attack
 	}
 	constrainedMac, err := macaroons.AddConstraints(mac, macConstraints...)
 	if err != nil {
@@ -643,7 +641,7 @@ func TestFmtGrpcApi(t *testing.T) {
 	time.Sleep(1*time.Second)
 	// now we get FmtClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
-	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"))
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(60))
 	opts = append(opts, macDialOpts...)
 	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
 	if err != nil {
@@ -748,7 +746,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	time.Sleep(1*time.Second)
 	// now we get DataCollectorClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
-	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"))
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(600))
 	opts = append(opts, macDialOpts...)
 	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
 	if err != nil {
@@ -835,46 +833,115 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 			t.Errorf("Could not start telemetry: %v", err)
 		}
 		ticker := time.NewTicker(time.Duration(int64(10))*time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				break
+				return
 			default:
 				resp, err := stream.Recv()
 				if err == io.EOF {
-					break
+					return
 				}
 				if err != nil {
 					t.Error(err)
-					break
+					return
 				}
 				t.Log(resp)
 			}
 		}
-		ticker.Stop()
 	})
-	t.Run("subscribe-datastream", func(t *testing.T) {
-		stream, err := client.SubscribeDataStream(ctx, &fmtrpc.SubscribeDataRequest{})
-		if err != nil {
-			t.Errorf("Could not start telemetry: %v", err)
+	t.Run("subscribe-datastream-100-subscribers", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for i := 0; i < 100; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ticker := time.NewTicker(time.Duration(int64(15))*time.Second)
+				defer ticker.Stop()
+				stream, err := client.SubscribeDataStream(ctx, &fmtrpc.SubscribeDataRequest{})
+				if err != nil {
+					t.Errorf("Could not start telemetry: %v", err)
+				}
+				for {
+					select {
+					case <-ticker.C:
+						return
+					default:
+						resp, err := stream.Recv()
+						if err == io.EOF {
+							return
+						}
+						if err != nil {
+							t.Error(err)
+							return
+						}
+						t.Log(resp)
+					}
+				}
+			}()
 		}
+		wg.Wait()
+	})
+	t.Run("subscribe-datastream-stress-test", func(t *testing.T) {
+		var wg sync.WaitGroup
 		ticker := time.NewTicker(time.Duration(int64(10))*time.Second)
-		for {
+		var (
+			shutdownChans []chan struct{}
+			cumGoRoutines int = 0
+		)
+		for i := 0; i < 10; i++ {
 			select {
 			case <-ticker.C:
-				break
-			default:
-				resp, err := stream.Recv()
-				if err == io.EOF {
-					break
+				// if it's not the first round, then close 10 listener go routines at random times
+				if i != 0 {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						for k := 0; k < 10; k++ {
+							time.Sleep(time.Duration(int((rand.Float64() * 1) * 1000))*time.Millisecond)
+							close(shutdownChans[cumGoRoutines])
+							cumGoRoutines += 1
+						}
+					}()
 				}
-				if err != nil {
-					t.Error(err)
-					break
+				// spawn 10 subscribers
+				for j := 0; j < 10; j++ {
+					shutdownChan := make(chan struct{})
+					shutdownChans = append(shutdownChans, shutdownChan)
+					wg.Add(1)
+					go func(quitChan chan struct{}) {
+						defer wg.Done()
+						stream, err := client.SubscribeDataStream(ctx, &fmtrpc.SubscribeDataRequest{})
+						if err != nil {
+							t.Errorf("Could not start telemetry: %v", err)
+						}
+						for {
+							select {
+							case <-quitChan:
+								return
+							default:
+								resp, err := stream.Recv()
+								if err == io.EOF {
+									return
+								}
+								if err != nil {
+									t.Error(err)
+									return
+								}
+								t.Log(resp)
+							}
+						}
+					}(shutdownChan)
 				}
-				t.Log(resp)
 			}
 		}
+		for k := 0; k < 10; k++ {
+			time.Sleep(time.Duration(int((rand.Float64() * 1) * 1000))*time.Millisecond)
+			close(shutdownChans[cumGoRoutines])
+			cumGoRoutines += 1
+		}
+		wg.Wait()
 		ticker.Stop()
 	})
 	shutdownInterceptor.RequestShutdown()
