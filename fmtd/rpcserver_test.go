@@ -41,6 +41,7 @@ func initRpcServer(t *testing.T) (*RpcServer, func()) {
 	if err != nil {
 		t.Fatalf("Could not initialize interceptor: %v", err)
 	}
+	defer shutdownInterceptor.Close()
 	cfg, err := InitConfig(true)
 	if err != nil {
 		t.Fatalf("Could not initialize config: %v", err)

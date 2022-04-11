@@ -401,6 +401,7 @@ func TestUnlockerGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
 	}
+	defer shutdownInterceptor.Close()
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
@@ -615,6 +616,7 @@ func TestFmtGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
 	}
+	defer shutdownInterceptor.Close()
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
@@ -720,6 +722,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
 	}
+	defer shutdownInterceptor.Close()
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
@@ -989,6 +992,7 @@ func TestControllerGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
 	}
+	defer shutdownInterceptor.Close()
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
