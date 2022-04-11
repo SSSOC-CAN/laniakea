@@ -1020,7 +1020,7 @@ func TestControllerGrpcApi(t *testing.T) {
 	time.Sleep(1*time.Second)
 	// now we get ControllerClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
-	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(900))
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(1000))
 	opts = append(opts, macDialOpts...)
 	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
 	if err != nil {
