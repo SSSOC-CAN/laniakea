@@ -59,7 +59,7 @@ func TestInitConfigFromYAML(t *testing.T) {
 	homeDir := utils.AppDataDir("fmtd", false)
 	// first check if home dir exists
 	if !utils.FileExists(homeDir) {
-		err := os.Mkdir(homeDir, 0775)
+		err := os.Mkdir(homeDir, 0700)
 		if err != nil {
 			t.Fatalf("Error creating fmtd directory: %v", err)
 		}

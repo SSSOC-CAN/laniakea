@@ -1033,7 +1033,6 @@ func TestControllerGrpcApi(t *testing.T) {
 	client := demorpc.NewControllerClient(authConn)
 	// Concurrent Set Temp
 	t.Run("concurrent-set-temp", func(t *testing.T) {
-		t.Skip()
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func () {
@@ -1072,7 +1071,6 @@ func TestControllerGrpcApi(t *testing.T) {
 	})
 	// Concurrent Set Pressure
 	t.Run("concurrent-set-pres", func(t *testing.T) {
-		t.Skip()
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func () {
