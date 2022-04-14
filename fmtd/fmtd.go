@@ -396,11 +396,11 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 }
 
 // bakeMacaroons is a wrapper function around the NewMacaroon method of the macaroons.Service struct
-func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, noTimeOutCaveat bool, seconds int64) ([]byte, error) {
+func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, timeOutCaveat bool, seconds int64) ([]byte, error) {
 	mac, err := svc.NewMacaroon(
 		ctx,
 		macaroons.DefaultRootKeyID,
-		noTimeOutCaveat,
+		timeOutCaveat,
 		[]checkers.Caveat{macaroons.TimeoutCaveat(seconds)},
 		perms...,
 	)
@@ -411,8 +411,8 @@ func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.O
 }
 
 // genMacaroons will create the macaroon files specified if not already created
-func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, noTimeOutCaveat bool, seconds int64) error {
-	macBytes, err := bakeMacaroons(ctx, svc, perms, noTimeOutCaveat, seconds)
+func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, timeOutCaveat bool, seconds int64) error {
+	macBytes, err := bakeMacaroons(ctx, svc, perms, timeOutCaveat, seconds)
 	if err != nil {
 		return err
 	}

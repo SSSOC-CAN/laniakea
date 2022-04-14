@@ -393,10 +393,7 @@ func bakeMac(ctx *cli.Context) error {
 	defer cleanUp()
 	permissions := ctx.Args()
 	timeoutType := fmtrpc.TimeoutType_SECOND
-	timeout := int64(60*60*24)
-	if ctx.Int64("timeout") != 0 {
-		timeout = ctx.Int64("author")
-	}
+	timeout := ctx.Int64("timeout")
 	if ttype := ctx.String("timeout_type"); ttype != "" {
 		switch ttype {
 		case "day":
