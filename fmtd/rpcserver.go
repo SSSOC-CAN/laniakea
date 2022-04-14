@@ -270,10 +270,12 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			Action: op.Action,
 		}
 	}
-	noTimeout := true
-	var timeoutSeconds int64
+	var (
+		timeoutSeconds int64
+		timeout		   bool
+	)
 	if req.Timeout > 0 {
-		noTimeout = false
+		timeout = true
 		switch req.TimeoutType {
 		case fmtrpc.TimeoutType_SECOND:
 			timeoutSeconds = req.Timeout
@@ -285,7 +287,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			timeoutSeconds = req.Timeout * int64(60) * int64(60) * int64(24)
 		}
 	}
-	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, noTimeout, timeoutSeconds)
+	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeout, timeoutSeconds)
 	if err != nil {
 		return nil, fmt.Errorf("Could not bake macaroon: %v", err)
 	}

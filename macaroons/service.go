@@ -169,12 +169,12 @@ func ContextWithRootKeyId(ctx context.Context, value interface{}) context.Contex
 }
 
 // NewMacaroon is a wrapper around the Oven.NewMacaroon method and returns a freshly baked macaroon
-func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, noCaveats bool, cav []checkers.Caveat, ops ...bakery.Op) (*bakery.Macaroon, error) {
+func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, caveats bool, cav []checkers.Caveat, ops ...bakery.Op) (*bakery.Macaroon, error) {
 	if len(rootKeyId) == 0 {
 		return nil, ErrMissingRootKeyID
 	}
 	ctx = ContextWithRootKeyId(ctx, rootKeyId)
-	if !noCaveats {
+	if !caveats {
 		return s.Oven.NewMacaroon(ctx, bakery.LatestVersion, nil, ops...)
 	}
 	return s.Oven.NewMacaroon(ctx, bakery.LatestVersion, cav, ops...)
