@@ -321,7 +321,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	pwd, err := waitForPassword(unlockerService, interceptor.ShutdownChannel())
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
-		// TODO:SSSOCPaulCote - Why don't we return an error here?
+		return err
 	}
 	grpc_interceptor.SetDaemonUnlocked()
 	server.logger.Info().Msg("Login successful")
