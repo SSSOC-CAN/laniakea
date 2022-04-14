@@ -19,13 +19,13 @@ import (
 // Config is the object which will hold all of the config parameters
 type Config struct {
 	DefaultLogDir	bool 		`yaml:"DefaultLogDir"`
-	LogFileDir 		string		`yaml:"LogFileDir"`
-	ConsoleOutput	bool		`yaml:"ConsoleOutput"`
-	GrpcPort		int64		`yaml:"GrpcPort"`
-	RestPort		int64		`yaml:"RestPort"`
-	TCPPort			int64		`yaml:"TCPPort"`
-	TCPAddr			string		`yaml:"TCPAddr"`
-	DataOutputDir	string		`yaml:"DataOutputDir"`
+	LogFileDir 		string		`yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	ConsoleOutput	bool		`yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
+	GrpcPort		int64		`yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
+	RestPort		int64		`yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
+	TCPPort			int64		`yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
+	TCPAddr			string		`yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
+	DataOutputDir	string		`yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
 	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
 	MacaroonDBPath	string
 	TLSCertPath		string
