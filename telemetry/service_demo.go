@@ -3,31 +3,33 @@
 package telemetry
 
 import (
-	"encoding/csv"
 	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
 )
 
 var (
 	DefaultPollingInterval int64 = 5
 	minPollingInterval     int64 = 5
+	orgName 			   string = "sssoc"
+	bucketName			   string = "ottawa"
 )
 
 // TelemetryService is a struct for holding all relevant attributes to interfacing with the DAQ
 type TelemetryService struct {
 	BaseTelemetryService
+	idb influx.Client
 }
 
 // A compile time check to make sure that TelemetryService fully implements the data.Service interface
@@ -46,8 +48,9 @@ func NewTelemetryService(
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
+	client := influx.NewClientWithOptions("http://192.168.0.87:8086", "nQN6nFdpaXIG8EkgXq-BTP8E5uApWb0WawQaUUVZg2oiWIWBaP8C4-1bNZhjataYDmif_iLD4_rD07UhdpmEtw==", influx.DefaultOptions().SetBatchSize(12))
 	return &TelemetryService{
-		BaseTelemetryService{
+		BaseTelemetryService: BaseTelemetryService{
 			rtdStateStore:    rtdStore,
 			ctrlStateStore:	  ctrlStore,
 			Logger:       	  logger,
@@ -58,6 +61,7 @@ func NewTelemetryService(
 			wgListen:		  wgL,
 			wgRecord:		  wgR,
 		},
+		idb: client,
 	}
 }
 
@@ -109,27 +113,10 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
 		return ErrAlreadyRecording
 	}
-	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%d-%02d-%02d-telemetry.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
-	file_name = utils.UniqueFileName(file_name)
-	file, err := os.Create(file_name)
-	if err != nil {
-		return fmt.Errorf("Could not create file %v: %v", file, err)
-	}
-	s.filepath = file_name
-	writer := csv.NewWriter(file)
-	// headers
-	headerData := []string{"Timestamp"}
-	for i := 0; i < 96; i++ {
-		headerData = append(headerData, fmt.Sprintf("Value #%v", i+1))
-	}
-	err = writer.Write(headerData)
-	if err != nil {
-		return err
-	}
+	writeAPI := s.idb.WriteAPI(orgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// Write polling interval to state
-	err = s.rtdStateStore.Dispatch(
+	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/polling_interval/update",
 			Payload: pol_int,
@@ -146,20 +133,20 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer)
+				err = s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
+					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
 				}
 			case <-s.CancelChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			case <-s.QuitChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			}
@@ -169,7 +156,7 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 }
 
 // record records the live data from DAQ and inserts it into a csv file and passes it to the RTD service
-func (s *TelemetryService) record(writer *csv.Writer) error {
+func (s *TelemetryService) record(writer api.WriteAPI) error {
 	current_time := time.Now()
 	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
@@ -194,9 +181,33 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 			n = fmt.Sprintf("Temperature %v", i+1)
 			cumSum += v
 			cnt += 1
+			p := influx.NewPoint(
+				"temperature",
+				map[string]string{
+					"id":       fmt.Sprintf("%v", i+1),
+				},
+				map[string]interface{}{
+					"temperature": v,
+				},
+				current_time,
+			)
+			// write asynchronously
+			writer.WritePoint(p)
 		} else {
 			v = (rand.Float64()*0.1)+cState.PressureSetPoint
 			n = "Pressure"
+			p := influx.NewPoint(
+				"pressure",
+				map[string]string{
+					"id":       fmt.Sprintf("%v", i+1),
+				},
+				map[string]interface{}{
+					"pressure": v,
+				},
+				current_time,
+			)
+			// write asynchronously
+			writer.WritePoint(p)
 		}
 		
 		dataField[int64(i)]= &fmtrpc.DataField{
@@ -205,15 +216,6 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 		}
 		dataString = append(dataString, fmt.Sprintf("%g", v))
 	}
-	//Write to csv in go routine
-	errChan := make(chan error)
-	go func(echan chan error) {
-		err := writer.Write(dataString)
-		if err != nil {
-			echan<-err
-		}
-		echan<-nil
-	}(errChan)
 	
 	err := s.rtdStateStore.Dispatch(
 		state.Action{
@@ -232,10 +234,6 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	if err != nil {
 		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err = <-errChan; err != nil {
-		return err
-	}
-	close(errChan)
 	return nil
 }
 
