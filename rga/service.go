@@ -3,21 +3,26 @@
 package rga
 
 import (
-	"encoding/csv"
+	"crypto/tls"
 	"fmt"
-	"os"
 	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+)
+
+var (
+	bucketName string = "test"
 )
 
 type RGAService struct {
@@ -31,25 +36,29 @@ var _ data.Service = (*RGAService) (nil)
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(
 	logger *zerolog.Logger,
-	outputDir string,
 	rtdStore *state.Store, 
 	_ *state.Store,
 	connection *drivers.RGAConnection,
+	influxUrl string,
+	influxToken string,
+	influxOrg string,
 ) *RGAService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
 	return &RGAService{
 		BaseRGAService: BaseRGAService{
-			rtdStateStore: rtdStore,
-			Logger: logger,
-			QuitChan: make(chan struct{}),
-			CancelChan: make(chan struct{}),
-			outputDir: outputDir,
-			name: data.RgaName,
-			wgListen: wgL,
-			wgRecord: wgR,
+			rtdStateStore: 	  rtdStore,
+			Logger: 		  logger,
+			QuitChan: 		  make(chan struct{}),
+			CancelChan: 	  make(chan struct{}),
+			name: 			  data.RgaName,
+			wgListen: 		  wgL,
+			wgRecord: 		  wgR,
+			influxOrgName:    influxOrg,
+			idb:        	  client,
 		},
 		connection: connection,
 	}
@@ -106,16 +115,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
 		return ErrAlreadyRecording
 	}
-	// Create or Open csv
-	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%02d-%02d-%d-rga.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
-	file_name = utils.UniqueFileName(file_name)
-	file, err := os.Create(file_name)
-	if err != nil {
-		return fmt.Errorf("Could not create file %v: %v", file, err)
-	}
-	s.filepath = file_name
-	writer := csv.NewWriter(file)
 	// InitMsg
 	err = s.connection.InitMsg()
 	if err != nil {
@@ -141,32 +140,40 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
 	}
-	// Now we begin recording
+	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
+	// Write polling interval to state
+	err := s.rtdStateStore.Dispatch(
+		state.Action{
+			Type: 	 "rga/polling_interval/update",
+			Payload: pol_int,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("Could not update state: %v", err)
+	}
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
 		defer s.wgRecord.Done()
-		ticks := 0
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer, ticks)
+				err = s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
+					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
 				}
-				ticks++
 			case <-s.CancelChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			case <-s.QuitChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			}
@@ -176,40 +183,8 @@ func (s *RGAService) startRecording(pol_int int64) error {
 }
 
 //record writes data from the RGA to a csv file and will pass it along it's Output channel
-func (s *RGAService) record(writer *csv.Writer, ticks int) error {
-	if ticks == 0 {
-		// Header data for csv file
-		headerData := []string{"Timestamp"}
-		// Start scan
-		_, err := s.connection.ScanStart(1)
-		if err != nil {
-			return fmt.Errorf("Could not start scan: %v", err)
-		}
-		_, err = s.connection.FilamentControl("On")
-		if err != nil {
-			return fmt.Errorf("Could not turn on filament: %v", err)
-		}
-		for {
-			resp, err := s.connection.ReadResponse()
-			if err != nil {
-				return fmt.Errorf("Could not read response: %v", err)
-			}
-			if resp.ErrMsg.CommandName == massReading {
-				headerData = append(headerData, strconv.FormatInt(resp.Fields["MassPosition"].Value.(int64), 10))
-				if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
-					break
-				}
-			}
-		}
-		err = writer.Write(headerData)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
+func (s *RGAService) record(writer api.WriteAPI) error {
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%02d-%02d-%d %02d:%02d:%02d", current_time.Day(), current_time.Month(), current_time.Year(), current_time.Hour(), current_time.Minute(), current_time.Second())
-	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	// Start scan
 	_, err := s.connection.ScanResume(1)
@@ -227,22 +202,23 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 				Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
 				Value: resp.Fields["Value"].Value.(float64),
 			}
-			dataString = append(dataString, fmt.Sprintf("%g", resp.Fields["Value"].Value.(float64)))
+			p := influx.NewPoint(
+				"pressure",
+				map[string]string{
+					"id": fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
+				},
+				map[string]interface{}{
+					"pressure": resp.Fields["Value"].Value.(float64),
+				},
+				current_time,
+			)
+			// write asynchronously
+			writer.WritePoint(p)
 			if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
 				break
 			}
 		}
 	}
-	//Write to csv in go routine
-	errChan := make(chan error)
-	go func(echan chan error) {
-		err := writer.Write(dataString)
-		if err != nil {
-			echan<-err
-		}
-		echan<-nil
-	}(errChan)
-	
 	err = s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "rga/update",
@@ -257,10 +233,6 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if err != nil {
 		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err = <-errChan; err != nil {
-		return err
-	}
-	close(errChan)
 	return nil
 }
 

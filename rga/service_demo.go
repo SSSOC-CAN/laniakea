@@ -3,26 +3,27 @@
 package rga
 
 import (
-	"encoding/csv"
+	"crypto/tls"
 	"fmt"
 	"math/rand"
-	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
 )
 
 var (
 	minRgaPollingInterval int64 = 15 // After manual testing, value will be 15 seconds
 	minimumPressure float64 = 0.00005
+	bucketName string = "test"
 )
 
 type RGAService struct {
@@ -35,26 +36,30 @@ var _ data.Service = (*RGAService) (nil)
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(
 	logger *zerolog.Logger, 
-	outputDir string, 
 	rtdStore *state.Store, 
 	ctrlStore *state.Store,
 	_ drivers.DriverConnectionErr,
+	influxUrl string,
+	influxToken string,
+	influxOrg string,
 ) *RGAService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
 	return &RGAService{
 		BaseRGAService{
-			rtdStateStore: rtdStore,
-			ctrlStateStore: ctrlStore,
-			Logger: logger,
-			QuitChan: make(chan struct{}),
-			CancelChan: make(chan struct{}),
-			outputDir: outputDir,
-			name: data.RgaName,
-			wgListen: wgL,
-			wgRecord: wgR,
+			rtdStateStore: 	  rtdStore,
+			ctrlStateStore:   ctrlStore,
+			Logger: 		  logger,
+			QuitChan:		  make(chan struct{}),
+			CancelChan: 	  make(chan struct{}),
+			name: 			  data.RgaName,
+			wgListen: 		  wgL,
+			wgRecord: 		  wgR,
+			influxOrgName:    influxOrg,
+			idb:      		  client,
 		},
 	}
 }
@@ -105,42 +110,40 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
 		return ErrAlreadyRecording
 	}
-	// Create or Open csv
-	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%d-%02d-%02d-rga.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
-	file_name = utils.UniqueFileName(file_name)
-	file, err := os.Create(file_name)
-	if err != nil {
-		return fmt.Errorf("Could not create file %v: %v", file, err)
-	}
-	s.filepath = file_name
-	writer := csv.NewWriter(file)
-	// Now we begin recording
+	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
+	// Write polling interval to state
+	err := s.rtdStateStore.Dispatch(
+		state.Action{
+			Type: 	 "rga/polling_interval/update",
+			Payload: pol_int,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("Could not update state: %v", err)
+	}
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
 		defer s.wgRecord.Done()
-		ticks := 0
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer, ticks)
+				err = s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
+					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
 				}
-				ticks++
 			case <-s.CancelChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			case <-s.QuitChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			}
@@ -150,22 +153,8 @@ func (s *RGAService) startRecording(pol_int int64) error {
 }
 
 //record writes data from the RGA to a csv file and will pass it along it's Output channel
-func (s *RGAService) record(writer *csv.Writer, ticks int) error {
-	if ticks == 0 {
-		// Header data for csv file
-		headerData := []string{"Timestamp"}
-		for i := 0; i < 200; i++ {
-			headerData = append(headerData, fmt.Sprintf("%v AMU", i+1))
-		}
-		err := writer.Write(headerData)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
+func (s *RGAService) record(writer api.WriteAPI) error {
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
-	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	// figure out noise amplitude and offset
 	// get current pressure set point
@@ -180,18 +169,19 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 			Name: fmt.Sprintf("Mass %v", i+1),
 			Value: v,
 		}
-		dataString = append(dataString, fmt.Sprintf("%g", v))
+		p := influx.NewPoint(
+			"pressure",
+			map[string]string{
+				"id":       fmt.Sprintf("%v", i+1),
+			},
+			map[string]interface{}{
+				"pressure": v,
+			},
+			current_time,
+		)
+		// write asynchronously
+		writer.WritePoint(p)
 	}
-	//Write to csv in go routine
-	errChan := make(chan error)
-	go func(echan chan error) {
-		err := writer.Write(dataString)
-		if err != nil {
-			echan<-err
-		}
-		echan<-nil
-	}(errChan)
-	
 	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "rga/update",
@@ -206,10 +196,6 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if err != nil {
 		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err = <-errChan; err != nil {
-		return err
-	}
-	close(errChan)
 	return nil
 }
 
@@ -242,7 +228,7 @@ func (s *RGAService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")

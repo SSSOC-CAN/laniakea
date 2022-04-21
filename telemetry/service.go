@@ -3,20 +3,24 @@
 package telemetry
 
 import (
-	"encoding/csv"
+	"crypto/tls"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
+)
+
+var (
+	bucketName string = "test"
 )
 
 // TelemetryService is a struct for holding all relevant attributes to interfacing with the DAQ
@@ -32,25 +36,29 @@ var _ data.Service = (*TelemetryService) (nil)
 // NewTelemetryService creates a new Telemetry Service object which will use the appropriate drivers
 func NewTelemetryService(
 	logger *zerolog.Logger,
-	outputDir string,
 	store *state.Store,
 	_ *state.Store,
 	connection *drivers.DAQConnection,
+	influxUrl string,
+	influxToken string,
+	influxOrg string,
 ) *TelemetryService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
 	return &TelemetryService{
 		BaseTelemetryService: BaseTelemetryService{
 			rtdStateStore:    store,
 			Logger:       	  logger,
 			QuitChan:     	  make(chan struct{}),
 			CancelChan:   	  make(chan struct{}),
-			outputDir:   	  outputDir,
 			name: 	      	  data.TelemetryName,
 			wgListen:		  wgL,
 			wgRecord:		  wgR,
+			influxOrgName:    influxOrg,
+			idb: 			  client,
 		},
 		connection:		  connection,
 	}
@@ -99,31 +107,23 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
 		return ErrAlreadyRecording
 	}
-	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%d-%02d-%02d-Telemetry.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
-	file_name = utils.UniqueFileName(file_name)
-	file, err := os.Create(file_name)
-	if err != nil {
-		return fmt.Errorf("Could not create file %v: %v", file, err)
-	}
-	s.filepath = file_name
-	writer := csv.NewWriter(file)
 	// start connection
 	err = s.connection.StartScanning()
 	if err != nil {
 		return err
 	}
-	// headers
-	headerData := []string{"Timestamp"}
-	names := s.connection.GetTagMapNames()
-	for _, n := range names {
-		headerData = append(headerData, n)
-	}
-	err = writer.Write(headerData)
-	if err != nil {
-		return err
-	}
+	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
+	// Write polling interval to state
+	err := s.rtdStateStore.Dispatch(
+		state.Action{
+			Type: 	 "telemetry/polling_interval/update",
+			Payload: pol_int,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("Could not update state: %v", err)
+	}
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -132,20 +132,20 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer)
+				err = s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
+					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
 				}
 			case <-s.CancelChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			case <-s.QuitChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			}
@@ -155,10 +155,8 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 }
 
 // record records the live data from Telemetry and inserts it into a csv file and passes it to the RTD service
-func (s *TelemetryService) record(writer *csv.Writer) error {
+func (s *TelemetryService) record(writer api.WriteAPI) error {
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
-	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	readings := s.connection.ReadItems()
 	var (
@@ -175,6 +173,31 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 			if i != int(drivers.TelemetryPressureChannel) {
 				cumSum += v
 				cnt += 1
+				p := influx.NewPoint(
+					"temperature",
+					map[string]string{
+						"id": reading.Name,
+					},
+					map[string]interface{}{
+						"temperature": v,
+					},
+					current_time,
+				)
+				// write asynchronously
+				writer.WritePoint(p)
+			} else {
+				p := influx.NewPoint(
+					"pressure",
+					map[string]string{
+						"id": reading.Name,
+					},
+					map[string]interface{}{
+						"pressure": v,
+					},
+					current_time,
+				)
+				// write asynchronously
+				writer.WritePoint(p)
 			}
 		case float32:
 			dataField[int64(i)]= &fmtrpc.DataField{
@@ -184,20 +207,35 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 			if i != int(drivers.TelemetryPressureChannel) {
 				cumSum += float64(v)
 				cnt += 1
+				p := influx.NewPoint(
+					"temperature",
+					map[string]string{
+						"id": reading.Name,
+					},
+					map[string]interface{}{
+						"temperature": float64(v),
+					},
+					current_time,
+				)
+				// write asynchronously
+				writer.WritePoint(p)
+			} else {
+				p := influx.NewPoint(
+					"pressure",
+					map[string]string{
+						"id": reading.Name,
+					},
+					map[string]interface{}{
+						"pressure": float64(v),
+					},
+					current_time,
+				)
+				// write asynchronously
+				writer.WritePoint(p)
 			}
 		}
-		dataString = append(dataString, fmt.Sprintf("%g", reading.Item.Value))
+
 	}
-	//Write to csv in go routine
-	errChan := make(chan error)
-	go func(echan chan error) {
-		err := writer.Write(dataString)
-		if err != nil {
-			echan<-err
-		}
-		echan<-nil
-	}(errChan)
-	
 	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/update",
@@ -215,10 +253,6 @@ func (s *TelemetryService) record(writer *csv.Writer) error {
 	if err != nil {
 		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err = <-errChan; err != nil {
-		return err
-	}
-	close(errChan)
 	return nil
 }
 

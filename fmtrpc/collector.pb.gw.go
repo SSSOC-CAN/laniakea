@@ -116,64 +116,6 @@ func request_DataCollector_SubscribeDataStream_0(ctx context.Context, marshaler 
 
 }
 
-func request_DataCollector_DownloadHistoricalData_0(ctx context.Context, marshaler runtime.Marshaler, client DataCollectorClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq HistoricalDataRequest
-	var metadata runtime.ServerMetadata
-
-	var (
-		val string
-		e   int32
-		ok  bool
-		err error
-		_   = err
-	)
-
-	val, ok = pathParams["source"]
-	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "source")
-	}
-
-	e, err = runtime.Enum(val, RecordService_value)
-	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "source", err)
-	}
-
-	protoReq.Source = RecordService(e)
-
-	msg, err := client.DownloadHistoricalData(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
-	return msg, metadata, err
-
-}
-
-func local_request_DataCollector_DownloadHistoricalData_0(ctx context.Context, marshaler runtime.Marshaler, server DataCollectorServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq HistoricalDataRequest
-	var metadata runtime.ServerMetadata
-
-	var (
-		val string
-		e   int32
-		ok  bool
-		err error
-		_   = err
-	)
-
-	val, ok = pathParams["source"]
-	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "source")
-	}
-
-	e, err = runtime.Enum(val, RecordService_value)
-	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "source", err)
-	}
-
-	protoReq.Source = RecordService(e)
-
-	msg, err := server.DownloadHistoricalData(ctx, &protoReq)
-	return msg, metadata, err
-
-}
-
 // RegisterDataCollectorHandlerServer registers the http handlers for service DataCollector to "mux".
 // UnaryRPC     :call DataCollectorServer directly.
 // StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
@@ -231,29 +173,6 @@ func RegisterDataCollectorHandlerServer(ctx context.Context, mux *runtime.ServeM
 		_, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
 		runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
 		return
-	})
-
-	mux.Handle("GET", pattern_DataCollector_DownloadHistoricalData_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		var stream runtime.ServerTransportStream
-		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateIncomingContext(ctx, mux, req, "/fmtrpc.DataCollector/DownloadHistoricalData", runtime.WithHTTPPathPattern("/v1/download/{source}"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := local_request_DataCollector_DownloadHistoricalData_0(rctx, inboundMarshaler, server, req, pathParams)
-		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
-		ctx = runtime.NewServerMetadataContext(ctx, md)
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-
-		forward_DataCollector_DownloadHistoricalData_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
-
 	})
 
 	return nil
@@ -357,26 +276,6 @@ func RegisterDataCollectorHandlerClient(ctx context.Context, mux *runtime.ServeM
 
 	})
 
-	mux.Handle("GET", pattern_DataCollector_DownloadHistoricalData_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
-		ctx, cancel := context.WithCancel(req.Context())
-		defer cancel()
-		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
-		rctx, err := runtime.AnnotateContext(ctx, mux, req, "/fmtrpc.DataCollector/DownloadHistoricalData", runtime.WithHTTPPathPattern("/v1/download/{source}"))
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-		resp, md, err := request_DataCollector_DownloadHistoricalData_0(rctx, inboundMarshaler, client, req, pathParams)
-		ctx = runtime.NewServerMetadataContext(ctx, md)
-		if err != nil {
-			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
-			return
-		}
-
-		forward_DataCollector_DownloadHistoricalData_0(ctx, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
-
-	})
-
 	return nil
 }
 
@@ -386,8 +285,6 @@ var (
 	pattern_DataCollector_StopRecording_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "stop", "recording"}, ""))
 
 	pattern_DataCollector_SubscribeDataStream_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"v1", "subscribe", "datastream"}, ""))
-
-	pattern_DataCollector_DownloadHistoricalData_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 1, 0, 4, 1, 5, 2}, []string{"v1", "download", "source"}, ""))
 )
 
 var (
@@ -396,6 +293,4 @@ var (
 	forward_DataCollector_StopRecording_0 = runtime.ForwardResponseMessage
 
 	forward_DataCollector_SubscribeDataStream_0 = runtime.ForwardResponseStream
-
-	forward_DataCollector_DownloadHistoricalData_0 = runtime.ForwardResponseMessage
 )

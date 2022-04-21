@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	
+	influx "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/state"
@@ -23,12 +24,12 @@ type BaseTelemetryService struct {
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}
 	CancelChan			chan struct{}
-	outputDir  			string
 	name 				string
 	currentPressure		float64
-	filepath			string
 	wgListen			sync.WaitGroup
 	wgRecord			sync.WaitGroup
+	influxOrgName		string
+	idb 				influx.Client
 }	
 
 // Name satisfies the data.Service interface
