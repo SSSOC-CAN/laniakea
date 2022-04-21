@@ -152,7 +152,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
-	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, server.cfg.TCPAddr, server.cfg.TCPPort, rtdStateStore)
+	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, rtdStateStore)
 	err = rtdService.RegisterWithGrpcServer(grpc_server)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
@@ -175,10 +175,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	telemetryService := telemetry.NewTelemetryService(
 		&NewSubLogger(server.logger, "TEL").SubLogger,
-		server.cfg.DataOutputDir,
 		rtdStateStore,
 		ctrlStateStore,
 		daqConnAssert,
+		server.cfg.InfluxURL,
+		server.cfg.InfluxAPIToken,
+		server.cfg.InfluxOrg,
 	)
 	telemetryService.RegisterWithRTDService(rtdService)
 	services = append(services, telemetryService)
@@ -196,10 +198,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	rgaService := rga.NewRGAService(
 		&NewSubLogger(server.logger, "RGA").SubLogger,
-		server.cfg.DataOutputDir,
 		rtdStateStore,
 		ctrlStateStore,
 		rgaConnAssert,
+		server.cfg.InfluxURL,
+		server.cfg.InfluxAPIToken,
+		server.cfg.InfluxOrg,
 	)
 	rgaService.RegisterWithRTDService(rtdService)
 	services = append(services, rgaService)

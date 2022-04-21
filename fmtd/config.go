@@ -34,6 +34,9 @@ type Config struct {
 	TestMacPath		string
 	WSPingInterval	time.Duration
 	WSPongWait		time.Duration
+	InfluxURL		string
+	InfluxAPIToken  string
+	InfluxOrg		string
 }
 
 // default_config returns the default configuration
@@ -56,6 +59,9 @@ var (
 	default_data_output_dir string = default_log_dir()
 	default_ws_ping_interval = time.Second * 30
 	default_ws_pong_wait = time.Second * 5
+	default_influx_url string = "https://174.113.21.199:8088"
+	default_influx_api_token string = "FaAL9KM_bWGrFNLyqzvl6iu0YKGg1W97fvOijqfOzsedjQCULCuwWI8nUb5ZB81ZrevAmk5CD2t_mGpUVnHjeA==" // write to any bucket
+	default_influx_org string = "sssoc"
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
@@ -73,6 +79,9 @@ var (
 			TestMacPath: test_macaroon_path,
 			WSPingInterval: default_ws_ping_interval,
 			WSPongWait: default_ws_pong_wait,
+			InfluxURL: default_influx_url,
+			InfluxAPIToken: default_influx_api_token,
+			InfluxOrg: default_influx_org,
 		}
 	}
 )

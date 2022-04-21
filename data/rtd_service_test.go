@@ -14,8 +14,6 @@ import (
 )
 
 var (
-	defaultTestingTCPAddr = "localhost"
-	defaultTestingTCPPort int64 = 10024
 	testReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
@@ -44,9 +42,8 @@ var (
 func TestRTDServiceStartStop(t *testing.T) {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	stateStore := state.CreateStore(fmtrpc.RealTimeData{}, testReducer)
-	rtdService := NewRTDService(&logger,
-		defaultTestingTCPAddr,
-		defaultTestingTCPPort,
+	rtdService := NewRTDService(
+		&logger,
 		stateStore,
 	)
 	err := rtdService.Start()
@@ -65,7 +62,7 @@ func Init(t *testing.T) func() {
 	grpcServer := grpc.NewServer()
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 	stateStore := state.CreateStore(fmtrpc.RealTimeData{}, testReducer)
-	rtdService := NewRTDService(&logger, defaultTestingTCPAddr, defaultTestingTCPPort, stateStore)
+	rtdService := NewRTDService(&logger, stateStore)
 	err := rtdService.Start()
 	if err != nil {
 		t.Fatalf("Could not start RTD Service: %v", err)
@@ -180,81 +177,5 @@ func TestSubscribeDataStream(t *testing.T) {
 	err = stream.CloseSend()
 	if err != nil {
 		t.Fatalf("Unexpected error when closing stream: %v", err)
-	}
-}
-
-// TestDownloadHistoricalDataFluke will successfully request TCP connection info from the server but fail when receiving from TCP server
-func TestDownloadHistoricalDataFluke(t *testing.T) {
-	cleanUp := Init(t)
-	defer cleanUp()
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
-	client := fmtrpc.NewDataCollectorClient(conn)
-	resp, err := client.DownloadHistoricalData(ctx, &fmtrpc.HistoricalDataRequest{Source: fmtrpc.RecordService_TELEMETRY})
-	if err != nil {
-		t.Fatalf("Unexpected error when requesting historical data: %v", err)
-	}
-	if resp.ServerPort != defaultTestingTCPPort {
-		t.Fatalf("Unexpected TCP Port: expected %v actual %v", defaultTestingTCPPort, resp.ServerPort)
-	}
-	serverTCPAddr := fmt.Sprintf("localhost:%d", resp.ServerPort)
-	tcpAddr, err := net.ResolveTCPAddr("tcp", serverTCPAddr)
-	if err != nil {
-		t.Fatalf("ResolveTCPAddr failed: %v", err)
-	}
-	tcpconn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		t.Fatalf("Unexpected error when conntecting to TCP server: %v", err)
-	}
-	defer tcpconn.Close()
-	_, err = tcpconn.Write([]byte("Hello"))
-    if err != nil {
-        t.Fatalf("Unexpected error when writing to TCP server: %v", err)
-    }
-	_, err = tcpconn.Read(make([]byte, resp.BufferSize))
-    if err == nil {
-		t.Fatalf("Expected error when reading from TCP server")
-	}
-}
-
-// TestDownloadHistoricalDataRga will successfully request TCP connection info from the server but fail when receiving from TCP server
-func TestDownloadHistoricalDataRga(t *testing.T) {
-	cleanUp := Init(t)
-	defer cleanUp()
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
-	client := fmtrpc.NewDataCollectorClient(conn)
-	resp, err := client.DownloadHistoricalData(ctx, &fmtrpc.HistoricalDataRequest{Source: fmtrpc.RecordService_RGA})
-	if err != nil {
-		t.Fatalf("Unexpected error when requesting historical data: %v", err)
-	}
-	if resp.ServerPort != defaultTestingTCPPort {
-		t.Fatalf("Unexpected TCP Port: expected %v actual %v", defaultTestingTCPPort, resp.ServerPort)
-	}
-	serverTCPAddr := fmt.Sprintf("localhost:%d", resp.ServerPort)
-	tcpAddr, err := net.ResolveTCPAddr("tcp", serverTCPAddr)
-	if err != nil {
-		t.Fatalf("ResolveTCPAddr failed: %v", err)
-	}
-	tcpconn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		t.Fatalf("Unexpected error when conntecting to TCP server: %v", err)
-	}
-	defer tcpconn.Close()
-	_, err = tcpconn.Write([]byte("Hello"))
-    if err != nil {
-        t.Fatalf("Unexpected error when writing to TCP server: %v", err)
-    }
-	_, err = tcpconn.Read(make([]byte, resp.BufferSize))
-    if err == nil {
-		t.Fatalf("Expected error when reading from TCP server")
 	}
 }

@@ -3,6 +3,7 @@
 package telemetry
 
 import (
+	"crypto/tls"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -22,14 +23,12 @@ import (
 var (
 	DefaultPollingInterval int64 = 5
 	minPollingInterval     int64 = 5
-	orgName 			   string = "sssoc"
-	bucketName			   string = "ottawa"
+	bucketName			   string = "test"
 )
 
 // TelemetryService is a struct for holding all relevant attributes to interfacing with the DAQ
 type TelemetryService struct {
 	BaseTelemetryService
-	idb influx.Client
 }
 
 // A compile time check to make sure that TelemetryService fully implements the data.Service interface
@@ -39,16 +38,18 @@ var _ data.Service = (*TelemetryService) (nil)
 // NewTelemetryService creates a new Telemetry Service object which will use the drivers for the DAQ software
 func NewTelemetryService(
 	logger *zerolog.Logger,
-	outputDir string,
 	rtdStore *state.Store,
 	ctrlStore *state.Store,
 	_ drivers.DriverConnection,
+	influxUrl string,
+	influxToken string,
+	influxOrg string,
 ) *TelemetryService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
-	client := influx.NewClientWithOptions("http://192.168.0.87:8086", "nQN6nFdpaXIG8EkgXq-BTP8E5uApWb0WawQaUUVZg2oiWIWBaP8C4-1bNZhjataYDmif_iLD4_rD07UhdpmEtw==", influx.DefaultOptions().SetBatchSize(12))
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
 	return &TelemetryService{
 		BaseTelemetryService: BaseTelemetryService{
 			rtdStateStore:    rtdStore,
@@ -56,12 +57,12 @@ func NewTelemetryService(
 			Logger:       	  logger,
 			QuitChan:     	  make(chan struct{}),
 			CancelChan:   	  make(chan struct{}),
-			outputDir:   	  outputDir,
 			name: 	      	  data.TelemetryName,
 			wgListen:		  wgL,
 			wgRecord:		  wgR,
+			influxOrgName:    influxOrg,
+			idb:              client,
 		},
-		idb: client,
 	}
 }
 
@@ -113,7 +114,7 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
 		return ErrAlreadyRecording
 	}
-	writeAPI := s.idb.WriteAPI(orgName, bucketName)
+	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// Write polling interval to state
 	err := s.rtdStateStore.Dispatch(
@@ -158,8 +159,6 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 // record records the live data from DAQ and inserts it into a csv file and passes it to the RTD service
 func (s *TelemetryService) record(writer api.WriteAPI) error {
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
-	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	var (
 		cumSum float64
@@ -214,9 +213,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 			Name: n,
 			Value: v,
 		}
-		dataString = append(dataString, fmt.Sprintf("%g", v))
 	}
-	
 	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/update",
@@ -265,7 +262,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")

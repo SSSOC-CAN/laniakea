@@ -19,17 +19,14 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type DataCollectorClient interface {
 	// fmtcli: `start-record`
-	//StartRecording will begin recording data from specified service and writing it.
+	//StartRecording will begin recording data from specified service.
 	StartRecording(ctx context.Context, in *RecordRequest, opts ...grpc.CallOption) (*RecordResponse, error)
 	// fmtcli: `stop-record`
 	//StopRecording will end the recording of data from specified service.
 	StopRecording(ctx context.Context, in *StopRecRequest, opts ...grpc.CallOption) (*StopRecResponse, error)
-	// fmtcli: `subscribe-data-stream`
-	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
-	SubscribeDataStream(ctx context.Context, in *SubscribeDataRequest, opts ...grpc.CallOption) (DataCollector_SubscribeDataStreamClient, error)
 	//
-	//DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file
-	DownloadHistoricalData(ctx context.Context, in *HistoricalDataRequest, opts ...grpc.CallOption) (*HistoricalDataResponse, error)
+	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Telemetry and RGA services.
+	SubscribeDataStream(ctx context.Context, in *SubscribeDataRequest, opts ...grpc.CallOption) (DataCollector_SubscribeDataStreamClient, error)
 }
 
 type dataCollectorClient struct {
@@ -90,31 +87,19 @@ func (x *dataCollectorSubscribeDataStreamClient) Recv() (*RealTimeData, error) {
 	return m, nil
 }
 
-func (c *dataCollectorClient) DownloadHistoricalData(ctx context.Context, in *HistoricalDataRequest, opts ...grpc.CallOption) (*HistoricalDataResponse, error) {
-	out := new(HistoricalDataResponse)
-	err := c.cc.Invoke(ctx, "/fmtrpc.DataCollector/DownloadHistoricalData", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // DataCollectorServer is the server API for DataCollector service.
 // All implementations must embed UnimplementedDataCollectorServer
 // for forward compatibility
 type DataCollectorServer interface {
 	// fmtcli: `start-record`
-	//StartRecording will begin recording data from specified service and writing it.
+	//StartRecording will begin recording data from specified service.
 	StartRecording(context.Context, *RecordRequest) (*RecordResponse, error)
 	// fmtcli: `stop-record`
 	//StopRecording will end the recording of data from specified service.
 	StopRecording(context.Context, *StopRecRequest) (*StopRecResponse, error)
-	// fmtcli: `subscribe-data-stream`
-	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Fluke DAQ.
-	SubscribeDataStream(*SubscribeDataRequest, DataCollector_SubscribeDataStreamServer) error
 	//
-	//DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file
-	DownloadHistoricalData(context.Context, *HistoricalDataRequest) (*HistoricalDataResponse, error)
+	//SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Telemetry and RGA services.
+	SubscribeDataStream(*SubscribeDataRequest, DataCollector_SubscribeDataStreamServer) error
 	mustEmbedUnimplementedDataCollectorServer()
 }
 
@@ -130,9 +115,6 @@ func (UnimplementedDataCollectorServer) StopRecording(context.Context, *StopRecR
 }
 func (UnimplementedDataCollectorServer) SubscribeDataStream(*SubscribeDataRequest, DataCollector_SubscribeDataStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method SubscribeDataStream not implemented")
-}
-func (UnimplementedDataCollectorServer) DownloadHistoricalData(context.Context, *HistoricalDataRequest) (*HistoricalDataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DownloadHistoricalData not implemented")
 }
 func (UnimplementedDataCollectorServer) mustEmbedUnimplementedDataCollectorServer() {}
 
@@ -204,24 +186,6 @@ func (x *dataCollectorSubscribeDataStreamServer) Send(m *RealTimeData) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _DataCollector_DownloadHistoricalData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(HistoricalDataRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DataCollectorServer).DownloadHistoricalData(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/fmtrpc.DataCollector/DownloadHistoricalData",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DataCollectorServer).DownloadHistoricalData(ctx, req.(*HistoricalDataRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // DataCollector_ServiceDesc is the grpc.ServiceDesc for DataCollector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -236,10 +200,6 @@ var DataCollector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopRecording",
 			Handler:    _DataCollector_StopRecording_Handler,
-		},
-		{
-			MethodName: "DownloadHistoricalData",
-			Handler:    _DataCollector_DownloadHistoricalData_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
