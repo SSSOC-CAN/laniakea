@@ -5,6 +5,7 @@ package rga
 import (
 	"crypto/tls"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -83,14 +85,18 @@ func (s *RGAService) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
 	}
+	var stoppedRec bool
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
 			return fmt.Errorf("Could not stop RGA service: %v", err)
 		}
+		stoppedRec = true
 	}
 	close(s.CancelChan)
-	s.wgRecord.Wait()
+	if stoppedRec {
+		s.wgRecord.Wait()
+	}
 	close(s.QuitChan)
 	s.wgListen.Wait()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
@@ -112,16 +118,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	}
 	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
-	// Write polling interval to state
-	err := s.rtdStateStore.Dispatch(
-		state.Action{
-			Type: 	 "rga/polling_interval/update",
-			Payload: pol_int,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("Could not update state: %v", err)
-	}
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -130,7 +126,7 @@ func (s *RGAService) startRecording(pol_int int64) error {
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writeAPI)
+				err := s.record(writeAPI)
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
 				}
@@ -163,8 +159,22 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 	if !ok {
 		return state.ErrInvalidStateType
 	}
+	var (
+		factor float64
+		err error
+	)
+	if cState.PressureSetPoint >= 1 {
+		factor = math.Pow(10, float64(-1*utils.NumDecPlaces(cState.PressureSetPoint)))
+	} else {
+		factor, err = utils.NormalizeToNDecimalPlace(cState.PressureSetPoint)
+		if err != nil {
+			return err
+		}
+		factor = factor/10
+	}
 	for i := 0; i < 200; i++ {
-		v := (rand.Float64()*0.001)+cState.PressureSetPoint
+		var v float64
+		v = (rand.Float64()*factor)+cState.PressureSetPoint
 		dataField[int64(i)]= &fmtrpc.DataField{
 			Name: fmt.Sprintf("Mass %v", i+1),
 			Value: v,
@@ -172,7 +182,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 		p := influx.NewPoint(
 			"pressure",
 			map[string]string{
-				"id":       fmt.Sprintf("%v", i+1),
+				"mass":       fmt.Sprintf("%v", i+1),
 			},
 			map[string]interface{}{
 				"pressure": v,
@@ -182,7 +192,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 		// write asynchronously
 		writer.WritePoint(p)
 	}
-	err := s.rtdStateStore.Dispatch(
+	err = s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
@@ -243,9 +253,6 @@ func (s *RGAService) ListenForRTDSignal() {
 				}
 			}
 		case <- signalChan:
-			if atomic.LoadInt32(&s.Recording) != 1 {
-				continue
-			}
 			currentState := s.rtdStateStore.GetState()
 			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {
@@ -254,6 +261,9 @@ func (s *RGAService) ListenForRTDSignal() {
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
+			}
+			if cState.RealTimeData.Data == nil {
+				continue
 			}
 			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
