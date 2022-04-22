@@ -3,6 +3,7 @@
 package rga
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"reflect"
@@ -13,6 +14,7 @@ import (
 
 	influx "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
@@ -42,6 +44,7 @@ func NewRGAService(
 	influxUrl string,
 	influxToken string,
 	influxOrg string,
+	influxOrgId string,
 ) *RGAService {
 	var (
 		wgL sync.WaitGroup
@@ -58,6 +61,7 @@ func NewRGAService(
 			wgListen: 		  wgL,
 			wgRecord: 		  wgR,
 			influxOrgName:    influxOrg,
+			influxOrgId:      influxOrgId,
 			idb:        	  client,
 		},
 		connection: connection,
@@ -107,7 +111,10 @@ func (s *RGAService) Name() string {
 }
 
 // startRecording starts data recording from the RGA device
-func (s *RGAService) startRecording(pol_int int64) error {
+func (s *RGAService) startRecording(pol_int int64, bucketName string) error {
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		return ErrAlreadyRecording
+	}
 	if s.currentPressure == 0 || s.currentPressure > drivers.RGAMinimumPressure {
 		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, drivers.RGAMinimumPressure)
 	}
@@ -115,9 +122,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", drivers.RGAMinPollingInterval)
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = drivers.RGAMinPollingInterval
-	}
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
 	}
 	// InitMsg
 	err = s.connection.InitMsg()
@@ -144,9 +148,21 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	if err != nil {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
 	}
+	// Get bucket, create it if it doesn't exist
+	bucketAPI := s.idb.BucketsAPI()
+	bucket, _ := bucketAPI.FindBucketByName(context.Background(), bucketName)
+	if bucket == nil {
+		_, err := bucketAPI.CreateBucketWithName(context.Background(), &domain.Organization{Name: s.influxOrgName, Id: &s.influxOrgId}, bucketName, domain.RetentionRule{EverySeconds: 0})
+		if err != nil {
+			return err
+		}
+	}
 	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+		return ErrAlreadyRecording
+	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
@@ -261,7 +277,7 @@ func (s *RGAService) ListenForRTDSignal() {
 			switch msg.Type {
 			case data.RECORDING:
 				if msg.State {
-					err := s.startRecording(0)
+					err := s.startRecording(0, msg.Msg)
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}

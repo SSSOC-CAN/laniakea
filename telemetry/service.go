@@ -3,24 +3,23 @@
 package telemetry
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	influx "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/rs/zerolog"
-)
-
-var (
-	bucketName string = "test"
 )
 
 // TelemetryService is a struct for holding all relevant attributes to interfacing with the DAQ
@@ -42,6 +41,7 @@ func NewTelemetryService(
 	influxUrl string,
 	influxToken string,
 	influxOrg string,
+	influxOrgId string,
 ) *TelemetryService {
 	var (
 		wgL sync.WaitGroup
@@ -58,6 +58,7 @@ func NewTelemetryService(
 			wgListen:		  wgL,
 			wgRecord:		  wgR,
 			influxOrgName:    influxOrg,
+			influxOrgId:      influxOrgId,
 			idb: 			  client,
 		},
 		connection:		  connection,
@@ -98,19 +99,28 @@ func (s *TelemetryService) Stop() error {
 }
 
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
-func (s *TelemetryService) startRecording(pol_int int64) error {
+func (s *TelemetryService) startRecording(pol_int int64, bucketName string) error {
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		return ErrAlreadyRecording
+	}
 	if pol_int < drivers.MinTelemetryPollingInterval && pol_int != 0 {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", drivers.MinTelemetryPollingInterval)
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = drivers.TelemetryDefaultPollingInterval
 	}
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
-	}
 	// start connection
 	err = s.connection.StartScanning()
 	if err != nil {
 		return err
+	}
+	// Get bucket, create it if it doesn't exist
+	bucketAPI := s.idb.BucketsAPI()
+	bucket, _ := bucketAPI.FindBucketByName(context.Background(), bucketName)
+	if bucket == nil {
+		_, err := bucketAPI.CreateBucketWithName(context.Background(), &domain.Organization{Name: s.influxOrgName, Id: &s.influxOrgId}, bucketName, domain.RetentionRule{EverySeconds: 0})
+		if err != nil {
+			return err
+		}
 	}
 	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
@@ -125,6 +135,9 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 		return fmt.Errorf("Could not update state: %v", err)
 	}
 	// the actual data
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+		return ErrAlreadyRecording
+	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
@@ -279,17 +292,18 @@ func (s *TelemetryService) ListenForRTDSignal() {
 			switch msg.Type {
 			case data.RECORDING:
 				if msg.State {
-					n, err := strconv.ParseInt(msg.Msg, 10, 64)
+					split := strings.Split(msg.Msg, ":")
+					n, err := strconv.ParseInt(split[0], 10, 64)
 					if err != nil {
 						n = drivers.TelemetryDefaultPollingInterval
 					}
-					err = s.startRecording(n)
+					err = s.startRecording(n, split[1])
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")

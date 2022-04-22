@@ -36,6 +36,9 @@ message RecordRequest {
 
     // Recording service type. Choose from either `telemetry` or `rga`
     RecordService type = 2;
+
+    // Name of the recording. 
+    string record_name = 3;
 }
 
 message RecordResponse {
