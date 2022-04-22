@@ -7,7 +7,7 @@ import (
 
 var (
 	InitialState = data.InitialCtrlState{
-		PressureSetPoint: float64(760.2095),
+		PressureSetPoint: float64(760.0),
 		TemperatureSetPoint: float64(25.0),
 	}
 	ControllerReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {

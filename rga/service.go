@@ -82,14 +82,18 @@ func (s *RGAService) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
 	}
+	var stoppedRec bool
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
 			return fmt.Errorf("Could not stop RGA service: %v", err)
 		}
+		stoppedRec = true
 	}
 	close(s.CancelChan)
-	s.wgRecord.Wait()
+	if stoppedRec {
+		s.wgRecord.Wait()
+	}
 	close(s.QuitChan)
 	s.wgListen.Wait()
 	s.connection.Close()
@@ -142,16 +146,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	}
 	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
-	// Write polling interval to state
-	err := s.rtdStateStore.Dispatch(
-		state.Action{
-			Type: 	 "rga/polling_interval/update",
-			Payload: pol_int,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("Could not update state: %v", err)
-	}
 	// the actual data
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -205,7 +199,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 			p := influx.NewPoint(
 				"pressure",
 				map[string]string{
-					"id": fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
+					"mass": fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
 				},
 				map[string]interface{}{
 					"pressure": resp.Fields["Value"].Value.(float64),

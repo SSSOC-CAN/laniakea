@@ -5,6 +5,7 @@ package telemetry
 import (
 	"crypto/tls"
 	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -170,13 +172,35 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 	if !ok {
 		return state.ErrInvalidStateType
 	}
+	var (
+		factorT float64
+		factorP float64
+		err error
+	)
+	if cState.TemperatureSetPoint >= 1 {
+		factorT = math.Pow(10, float64(-1*utils.NumDecPlaces(cState.TemperatureSetPoint)))
+	} else {
+		factorT, err = utils.NormalizeToNDecimalPlace(cState.TemperatureSetPoint)
+		if err != nil {
+			return err
+		}
+	}
+	if cState.PressureSetPoint >= 1 {
+		factorP = math.Pow(10, float64(-1*utils.NumDecPlaces(cState.PressureSetPoint)))
+	} else {
+		factorP, err = utils.NormalizeToNDecimalPlace(cState.PressureSetPoint)
+		if err != nil {
+			return err
+		}
+		factorP = factorP/10
+	}
 	for i := 0; i < 96; i++ {
 		var (
 			v float64
 			n string
 		)
 		if i != int(drivers.TelemetryPressureChannel) {
-			v = (rand.Float64()*0.1)+cState.TemperatureSetPoint
+			v = (rand.Float64()*factorT)+cState.TemperatureSetPoint
 			n = fmt.Sprintf("Temperature %v", i+1)
 			cumSum += v
 			cnt += 1
@@ -193,7 +217,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 			// write asynchronously
 			writer.WritePoint(p)
 		} else {
-			v = (rand.Float64()*0.1)+cState.PressureSetPoint
+			v = (rand.Float64()*factorP)+cState.PressureSetPoint
 			n = "Pressure"
 			p := influx.NewPoint(
 				"pressure",
@@ -208,13 +232,12 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 			// write asynchronously
 			writer.WritePoint(p)
 		}
-		
 		dataField[int64(i)]= &fmtrpc.DataField{
 			Name: n,
 			Value: v,
 		}
 	}
-	err := s.rtdStateStore.Dispatch(
+	err = s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/update",
 			Payload: data.InitialRtdState{
