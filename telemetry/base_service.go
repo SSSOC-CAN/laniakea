@@ -29,6 +29,7 @@ type BaseTelemetryService struct {
 	wgListen			sync.WaitGroup
 	wgRecord			sync.WaitGroup
 	influxOrgName		string
+	influxOrgId			string
 	idb 				influx.Client
 }	
 
