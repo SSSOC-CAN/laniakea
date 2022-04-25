@@ -298,13 +298,9 @@ func (s *TestPlanService) executeTestPlan() {
 		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
 	}
 	// subscribe to state change updates
-	stateChangeChan := make(chan struct{})
-	unsubIdx, unsub := s.stateStore.Subscribe(func() {
-		stateChangeChan<-struct{}{}
-	})
+	stateChangeChan, unsub := s.stateStore.Subscribe(s.name)
 	defer func() {
-		unsub(s.stateStore, unsubIdx)
-		close(stateChangeChan)
+		unsub(s.stateStore, s.name)
 	}()
 	ticker := time.NewTicker(time.Second) // going to check things every second
 	defer ticker.Stop()

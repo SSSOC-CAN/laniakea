@@ -19,12 +19,17 @@ type (
 		Payload interface{}
 	}
 
+	Listener struct {
+		IsConnected bool
+		Signal		chan struct{}
+	}
+
 	Store struct {
 		mutex     sync.RWMutex
 		state     interface{}
 		reducer   Reducer
-		listeners []func()
-		unsub     func(*Store, int)
+		listeners map[string]*Listener
+		unsub     func(*Store, string)
 	}
 )
 
@@ -33,16 +38,11 @@ func CreateStore(initialState interface{}, rootReducer Reducer) *Store {
 	return &Store{
 		state:   initialState,
 		reducer: rootReducer,
-		unsub: func(store *Store, i int) {
+		listeners: make(map[string]*Listener),
+		unsub: func(store *Store, lName string) {
 			store.mutex.Lock()
 			defer store.mutex.Unlock()
-			var ls []func()
-			for j, s := range store.listeners {
-				if j != i {
-					ls = append(ls, s)
-				}
-			}
-			store.listeners = ls[:]
+			store.listeners[lName].IsConnected = false
 		},
 	}
 }
@@ -63,20 +63,28 @@ func (s *Store) Dispatch(action Action) error {
 		return err
 	}
 	s.state = newState
+	// Remove disconnected listeners
 	// Update subscribers on state change
-	for _, l := range s.listeners {
-		l()
+	newListenerMap := make(map[string]*Listener)
+	for n, l := range s.listeners {
+		if !l.IsConnected {
+			close(l.Signal)
+			continue
+		}
+		l.Signal<-struct{}{}
+		newListenerMap[n] = l
 	}
+	s.listeners = newListenerMap
 	return nil
 }
 
 // Subscribe adds a callback function to the list of listeners which will be executed upon each Dispatch call.
 // Returns the index in the listener slice belonging to callback and unsubscribe function
-func (s *Store) Subscribe(f func()) (int, func(*Store, int)) {
+func (s *Store) Subscribe(name string) (chan struct{}, func(*Store, string)) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.listeners = append(s.listeners, f)
-	return len(s.listeners) - 1, s.unsub
+	s.listeners[name] = &Listener{IsConnected: true, Signal: make(chan struct{}, 2)} // made channel buffered for edge case where unsub() and l.Signal<-struct{}{} listener disconnects, it won't hang
+	return s.listeners[name].Signal, s.unsub
 }
 
 // CombineReducers combines any number of reducers and returns one combined reducer

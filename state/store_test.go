@@ -36,6 +36,7 @@ var (
 		Type: "decrement",
 		Payload: 1,
 	}
+	listenerName string = "test"
 )
 
 // TestStore will test the state store against many different scenarios
@@ -88,13 +89,9 @@ func TestStore(t *testing.T) {
 	// testing subscribe and unsubscribe
 	t.Run("subscribe unsubscribe", func(t *testing.T) {
 		var wg sync.WaitGroup
-		stateChangeChan := make(chan struct{})
-		unsubIdx, unsub := store.Subscribe(func() {
-			stateChangeChan<-struct{}{}
-		})
+		stateChangeChan, unsub := store.Subscribe(listenerName)
 		ticker := time.NewTicker(time.Duration(int64(2)) * time.Second)
 		defer ticker.Stop()
-		defer close(stateChangeChan)
 		// We should get a state change update before the first tick
 		wg.Add(1)
 		go func() {
@@ -112,7 +109,7 @@ func TestStore(t *testing.T) {
 		}
 		wg.Wait()
 		// now we shouldn't get any state change updates and instead get a tick signal
-		unsub(store, unsubIdx)
+		unsub(store, listenerName)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
