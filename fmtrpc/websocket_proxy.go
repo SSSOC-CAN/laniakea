@@ -40,6 +40,7 @@ const (
 	MethodOverrideParam = "method"
 	HeaderWebSocketProtocol = "Sec-Websocket-Protocol"
 	WebSocketProtocolDelimiter = "+"
+	PingContent = "are you there?"
 )
 
 var (
@@ -147,12 +148,12 @@ func (p *WebsocketProxy) upgradeToWebSocketProxy(w http.ResponseWriter,
 		}
 	}()
 
-	ctx, cancelFn := context.WithCancel(context.Background())
+	ctx, cancelFn := context.WithCancel(r.Context())
 	defer cancelFn()
 
 	requestForwarder := newRequestForwardingReader()
 	request, err := http.NewRequestWithContext(
-		r.Context(), r.Method, r.URL.String(), requestForwarder,
+		ctx, r.Method, r.URL.String(), requestForwarder,
 	)
 	if err != nil {
 		p.logger.Error().Msg(fmt.Sprintf("WS: error preparing request: %v", err))
@@ -181,6 +182,7 @@ func (p *WebsocketProxy) upgradeToWebSocketProxy(w http.ResponseWriter,
 	go func() {
 		<-ctx.Done()
 		responseForwarder.Close()
+		requestForwarder.CloseWriter()
 	}()
 
 	go func() {
@@ -189,8 +191,10 @@ func (p *WebsocketProxy) upgradeToWebSocketProxy(w http.ResponseWriter,
 	}()
 
 	// Read loop: Take messages from websocket and write to http request.
+	payloadChannel := make(chan []byte, 1)
 	go func() {
 		defer cancelFn()
+		defer close(payloadChannel)
 		for {
 			select {
 			case <-ctx.Done():
@@ -208,6 +212,32 @@ func (p *WebsocketProxy) upgradeToWebSocketProxy(w http.ResponseWriter,
 				p.logger.Error().Msg(fmt.Sprintf("error reading message: %v", err))
 				return
 			}
+			select {
+			case payloadChannel <- payload:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	// Forward loop: Take messages from the incoming payload channel and
+	// write them to the http request.
+	go func() {
+		defer cancelFn()
+		for {
+			var payload []byte
+			select {
+			case <-ctx.Done():
+				return
+			case newPayload, more := <-payloadChannel:
+				if !more {
+					p.logger.Info().Msg("WS: incoming payload chan closed")
+					return
+				}
+
+				payload = newPayload
+			}
+
 			_, err = requestForwarder.Write(payload)
 			if err != nil {
 				p.logger.Error().Msg(fmt.Sprintf("WS: error writing message to upstream http server: %v", err))
@@ -242,6 +272,7 @@ func (p *WebsocketProxy) upgradeToWebSocketProxy(w http.ResponseWriter,
 				p.pingInterval + p.pongWait,
 			)
 			_ = conn.SetReadDeadline(nextDeadline)
+			_ = conn.SetWriteDeadline(nextDeadline)
 			return nil
 		})
 		go func() {
@@ -263,8 +294,10 @@ func (p *WebsocketProxy) upgradeToWebSocketProxy(w http.ResponseWriter,
 					)
 					_ = conn.SetWriteDeadline(writeDeadline)
 
-					err := conn.WriteMessage(
-						websocket.PingMessage, nil,
+					err := conn.WriteControl(
+						websocket.PingMessage,
+						[]byte(PingContent),
+						writeDeadline,
 					)
 					if err != nil {
 						p.logger.Warn().Msg(fmt.Sprintf("WS: could not "+

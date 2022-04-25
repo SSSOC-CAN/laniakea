@@ -390,7 +390,7 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyS
 			},
 		},
 	)
-	mux := proxy.NewServeMux(customMarshalerOption)
+	mux := proxy.NewServeMux(customMarshalerOption, proxy.WithDisablePathLengthFallback())
 
 	err = fmtrpc.RegisterUnlockerHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
@@ -411,9 +411,9 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyS
 		mux, rpcServer.SubLogger, cfg.WSPingInterval, cfg.WSPongWait,
 	)
 	var wg sync.WaitGroup
-	restEndpoints, err := utils.NormalizeAddresses([]string{fmt.Sprintf("localhost:%d", cfg.RestPort)}, strconv.FormatInt(cfg.RestPort, 10), net.ResolveTCPAddr)
+	restEndpoints, err := utils.NormalizeAddresses([]string{fmt.Sprintf("0.0.0.0:%d", cfg.RestPort)}, strconv.FormatInt(cfg.RestPort, 10), net.ResolveTCPAddr)
 	if err != nil {
-		rpcServer.SubLogger.Error().Msg(fmt.Sprintf("Unable to normalize address %s: %v", fmt.Sprintf("localhost:%d", cfg.RestPort), err))
+		rpcServer.SubLogger.Error().Msg(fmt.Sprintf("Unable to normalize address %s: %v", fmt.Sprintf("0.0.0.0:%d", cfg.RestPort), err))
 	}
 	restEndpoint := restEndpoints[0]
 	lis, err := restListen(restEndpoint)
