@@ -209,7 +209,7 @@ server {
 To setup an NGINX reverse proxy for the REST API, create a file in `/etc/nginx/sites-enabled/fmtd-rest-proxy.conf`:
 ```nginx
 upstream fmtd_rest {
-    server 192.168.0.202:8080;
+    server localhost:8080;
 }
 
 server {
