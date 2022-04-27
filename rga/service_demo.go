@@ -94,6 +94,9 @@ func (s *RGAService) Stop() error {
 
 // startRecording starts data recording from the RGA device
 func (s *RGAService) startRecording(pol_int int64) error {
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		return ErrAlreadyRecording
+	}
 	if s.currentPressure == 0 || s.currentPressure > minimumPressure {
 		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure)
 	}
@@ -101,9 +104,6 @@ func (s *RGAService) startRecording(pol_int int64) error {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", minRgaPollingInterval)
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = minRgaPollingInterval
-	}
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
 	}
 	// Create or Open csv
 	current_time := time.Now()
@@ -118,6 +118,9 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	// Now we begin recording
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+		return ErrAlreadyRecording
+	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
