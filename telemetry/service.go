@@ -91,13 +91,13 @@ func (s *TelemetryService) Stop() error {
 
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
 func (s *TelemetryService) startRecording(pol_int int64) error {
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		return ErrAlreadyRecording
+	}
 	if pol_int < drivers.MinTelemetryPollingInterval && pol_int != 0 {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", drivers.MinTelemetryPollingInterval)
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = drivers.TelemetryDefaultPollingInterval
-	}
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
 	}
 	current_time := time.Now()
 	file_name := fmt.Sprintf("%s/%d-%02d-%02d-Telemetry.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
@@ -125,6 +125,9 @@ func (s *TelemetryService) startRecording(pol_int int64) error {
 	}
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+		return ErrAlreadyRecording
+	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
