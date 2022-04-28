@@ -1,3 +1,5 @@
+// +build mks,!demo
+
 package drivers
 
 import (
@@ -15,16 +17,16 @@ For more information of the commands for the RGA, please visit https://mmrc.calt
 */
 
 const (
-	Rga_ERROR RGAErrStr = "ERROR"
-	Rga_OK RGAErrStr = "OK"
-	Rga_INT RGAType = 0
-	Rga_FLOAT RGAType = 1
-	Rga_BOOL RGAType = 2
-	Rga_STR RGAType = 3
-	Rga_SENSOR_STATE_READY  = "Ready"
-	Rga_SENSOR_STATE_INUSE  = "InUse"
-	Rga_SENSOR_STATE_CONFIG = "Config"
-	Rga_SENSOR_STATE_NA = "N/A"
+	RGA_ERROR RGAErrStr = "ERROR"
+	RGA_OK RGAErrStr = "OK"
+	RGA_INT RGAType = 0
+	RGA_FLOAT RGAType = 1
+	RGA_BOOL RGAType = 2
+	RGA_STR RGAType = 3
+	RGA_SENSOR_STATE_READY  = "Ready"
+	RGA_SENSOR_STATE_INUSE  = "InUse"
+	RGA_SENSOR_STATE_CONFIG = "Config"
+	RGA_SENSOR_STATE_NA = "N/A"
 )
 
 var (
@@ -666,16 +668,16 @@ var (
 	stopDegas = "StopDegas"
 	BUFFER = 4096
 	ACKMsg = "MKSRGA"
-	Rga_ERR_ERROR = func(code, msg string) error {
-		return fmt.Errorf("%s\nCODE: %s\nDESCRIPTION: %s", Rga_ERROR, code, msg)
+	RGA_ERR_ERROR = func(code, msg string) error {
+		return fmt.Errorf("%s\nCODE: %s\nDESCRIPTION: %s", RGA_ERROR, code, msg)
 	}
-	Rga_ERR_OK = fmt.Errorf("%s", Rga_OK)
+	RGA_ERR_OK = fmt.Errorf("%s", RGA_OK)
 	filamentStatus = "FilamentStatus"
 	filamentTimeRemaining = "FilamentTimeRemaining"
 	startingScan = "StartingScan"
 	startingMeasurement = "StartingMeasurement"
 	zeroReading = "ZeroReading"
-	massReading = "MassReading"
+	MassReading = "MassReading"
 	multiplierStatus = "MultiplierStatus"
 	rfTripState = "RFTripState"
 	inletChange = "InletChange"
@@ -696,11 +698,16 @@ var (
 )
 
 type RGAErrStr string
+
 type RGAType int32
-//type RGASensorState string
+
 type RGAConnection struct {
 	*net.TCPConn
 }
+
+var _ DriverConnectionErr = (*RGAConnection) (nil)
+var _ DriverConnectionErr = RGAConnection{}
+
 type RGARespErr struct {
 	CommandName string
 	Err			RGAErrStr
@@ -743,15 +750,15 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 	errorStatusField := re.FindAllString(string(split[0]), 2)
 	errorStatus := RGAErrStr(errorStatusField[1])
 	var errMsg error
-	if errorStatus != Rga_ERROR && errorStatus != Rga_OK {
+	if errorStatus != RGA_ERROR && errorStatus != RGA_OK {
 		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus)
-	} else if  errorStatus == Rga_ERROR {
+	} else if  errorStatus == RGA_ERROR {
 		var errDescription string
 		splitAgain := re.FindAllString(string(split[2]), -1)
 		for i := 1; i < len(splitAgain); i++ {
 			errDescription += splitAgain[i]+" "
 		}
-		return nil, Rga_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], errDescription)
+		return nil, RGA_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], errDescription)
 	}
 	// We know that the second row will be headers
 	headers := re.FindAllString(string(split[1]), -1)
@@ -766,16 +773,16 @@ func parseHorizontalResp(resp []byte) (*RGAResponse, error) {
 			if _, ok := fields[header]; !ok {
 				// if int64
 				if v, err := strconv.ParseInt(values[i], 10, 64); err == nil {
-					fields[header] = RGAValue{Type: Rga_INT, Value: v}
+					fields[header] = RGAValue{Type: RGA_INT, Value: v}
 				// if float64
 				} else if v, err := strconv.ParseFloat(values[i], 64); err == nil {
-					fields[header] = RGAValue{Type: Rga_FLOAT, Value: v}
+					fields[header] = RGAValue{Type: RGA_FLOAT, Value: v}
 				// if bool
 				} else if v, err := strconv.ParseBool(values[i]); err == nil {
-					fields[header] = RGAValue{Type: Rga_BOOL, Value: v}
+					fields[header] = RGAValue{Type: RGA_BOOL, Value: v}
 				// if string
 				} else {
-					fields[header] = RGAValue{Type: Rga_STR, Value: values[i]}
+					fields[header] = RGAValue{Type: RGA_STR, Value: values[i]}
 				}
 			}
 		}
@@ -800,15 +807,15 @@ func parseVerticalResp(resp []byte, oneValuePerLine bool) (*RGAResponse, error) 
 	//We know the first row is always the name of the command it's error status
 	errorStatusField := re.FindAllString(string(split[0]), 2)
 	errorStatus := RGAErrStr(errorStatusField[1])
-	if errorStatus != Rga_ERROR && errorStatus != Rga_OK {
+	if errorStatus != RGA_ERROR && errorStatus != RGA_OK {
 		return nil, fmt.Errorf("Unkown RGA error code: %s", errorStatus)
-	} else if  errorStatus == Rga_ERROR {
+	} else if  errorStatus == RGA_ERROR {
 		var errDescription string
 		splitAgain := re.FindAllString(string(split[2]), -1)
 		for i := 1; i < len(splitAgain); i++ {
 			errDescription += splitAgain[i]+" "
 		}
-		return nil, Rga_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], errDescription)
+		return nil, RGA_ERR_ERROR(re.FindAllString(string(split[1]), 2)[1], errDescription)
 	}
 	// We know that the second to the before last will be our header value combos
 	fields := make(map[string]RGAValue)
@@ -830,16 +837,16 @@ func parseVerticalResp(resp []byte, oneValuePerLine bool) (*RGAResponse, error) 
 		if _, ok := fields[field[0]]; !ok {
 			// if int64
 			if v, err := strconv.ParseInt(value, 10, 64); err == nil {
-				fields[name] = RGAValue{Type: Rga_INT, Value: v}
+				fields[name] = RGAValue{Type: RGA_INT, Value: v}
 			// if float64
 			} else if v, err := strconv.ParseFloat(value, 64); err == nil {
-				fields[name] = RGAValue{Type: Rga_FLOAT, Value: v}
+				fields[name] = RGAValue{Type: RGA_FLOAT, Value: v}
 			// if bool
 			} else if v, err := strconv.ParseBool(value); err == nil {
-				fields[name] = RGAValue{Type: Rga_BOOL, Value: v}
+				fields[name] = RGAValue{Type: RGA_BOOL, Value: v}
 			// if string
 			} else {
-				fields[name] = RGAValue{Type: Rga_STR, Value: value}
+				fields[name] = RGAValue{Type: RGA_STR, Value: value}
 			}
 		}
 	}
@@ -899,7 +906,7 @@ func (c *RGAConnection) ReadResponse() (*RGAResponse, error) {
 		headers = []string{"MeasurementName"}
 	case zeroReading:
 		headers = []string{"MassPosition", "Value"}
-	case massReading:
+	case MassReading:
 		headers = []string{"MassPosition", "Value"}
 	case filamentTimeRemaining:
 		headers = []string{"Time"}
@@ -938,16 +945,16 @@ func (c *RGAConnection) ReadResponse() (*RGAResponse, error) {
 		if _, ok := fields[name]; !ok {
 			// if int64
 			if v, err := strconv.ParseInt(firstRow[i], 10, 64); err == nil {
-				fields[name] = RGAValue{Type: Rga_INT, Value: v}
+				fields[name] = RGAValue{Type: RGA_INT, Value: v}
 			// if float64
 			} else if v, err := strconv.ParseFloat(firstRow[i], 64); err == nil {
-				fields[name] = RGAValue{Type: Rga_FLOAT, Value: v}
+				fields[name] = RGAValue{Type: RGA_FLOAT, Value: v}
 			// if bool
 			} else if v, err := strconv.ParseBool(firstRow[i]); err == nil {
-				fields[name] = RGAValue{Type: Rga_BOOL, Value: v}
+				fields[name] = RGAValue{Type: RGA_BOOL, Value: v}
 			// if string
 			} else {
-				fields[name] = RGAValue{Type: Rga_STR, Value: firstRow[i]}
+				fields[name] = RGAValue{Type: RGA_STR, Value: firstRow[i]}
 			}
 		}
 		i++
@@ -955,7 +962,7 @@ func (c *RGAConnection) ReadResponse() (*RGAResponse, error) {
 	return &RGAResponse{
 		ErrMsg: RGARespErr{
 			CommandName: firstRow[0],
-			Err: Rga_OK,
+			Err: RGA_OK,
 		},
 		Fields: fields,
 	}, nil
@@ -1241,8 +1248,8 @@ func (c *RGAConnection) Release() (*RGAResponse, error) {
 type RGAOnOff string
 
 const (
-	Rga_ON RGAOnOff = "On"
-	Rga_OFF RGAOnOff = "Off"
+	RGA_ON RGAOnOff = "On"
+	RGA_OFF RGAOnOff = "Off"
 )
 
 // FilamentControl turns the currently selected filament On or Off
@@ -1296,9 +1303,9 @@ func (c *RGAConnection) AddAnalog(Name string, StartMass, EndMass, PointerPerPea
 type RGAFilterMode string
 
 const (
-	Rga_PeakCenter RGAFilterMode = "PeakCenter"
-	Rga_PeakMax RGAFilterMode = "PeakMax"
-	Rga_PeakAverage RGAFilterMode = "PeakAverage"
+	RGA_PeakCenter RGAFilterMode = "PeakCenter"
+	RGA_PeakMax RGAFilterMode = "PeakMax"
+	RGA_PeakAverage RGAFilterMode = "PeakAverage"
 )
 
 // AddBarchart adds a new barchart measurement to the sensor
@@ -1496,10 +1503,10 @@ func (c *RGAConnection) MeasurementZeroBufferDepth(ZeroBufferDepth int) (*RGARes
 type RGAZeroBufferMode string
 
 const (
-	Rga_SingleScanAverage RGAZeroBufferMode = "SingleScanAverage"
-	Rga_MultiScanAverage RGAZeroBufferMode = "MultiScanAverage"
-	Rga_MultiScanAverageQuickStart RGAZeroBufferMode = "MultiScanAverageQuickStart"
-	Rga_SingleShot RGAZeroBufferMode = "SingleShot"
+	RGA_SingleScanAverage RGAZeroBufferMode = "SingleScanAverage"
+	RGA_MultiScanAverage RGAZeroBufferMode = "MultiScanAverage"
+	RGA_MultiScanAverageQuickStart RGAZeroBufferMode = "MultiScanAverageQuickStart"
+	RGA_SingleShot RGAZeroBufferMode = "SingleShot"
 )
 
 // MeasurementZeroBufferMode sets the selected measurements zero buffer mode
@@ -1601,9 +1608,9 @@ func (c *RGAConnection) TotalPressureCalDate(DateTime time.Time) (*RGAResponse, 
 type RGAOption string
 
 const (
-	Rga_OPTION_OFF RGAOption = "Off"
-	Rga_OPTION_DEFAULT RGAOption = "Default"
-	Rga_OPTION_CURRENT RGAOption = "Current"
+	RGA_OPTION_OFF RGAOption = "Off"
+	RGA_OPTION_DEFAULT RGAOption = "Default"
+	RGA_OPTION_CURRENT RGAOption = "Current"
 )
 
 // CalibrationOptions sets how to apply calibration factors to acquired measurement data
@@ -1959,9 +1966,9 @@ func (c *RGAConnection) AudioFrequency(Frequency int) (*RGAResponse, error) {
 type RGAAudioMode string
 
 const (
-	Rga_AUDIO_OFF RGAAudioMode = "Off"
-	Rga_AUDIO_AUTOMATIC RGAAudioMode = "Automatic"
-	Rga_AUDIO_MANUAL RGAAudioMode = "Manual"
+	RGA_AUDIO_OFF RGAAudioMode = "Off"
+	RGA_AUDIO_AUTOMATIC RGAAudioMode = "Automatic"
+	RGA_AUDIO_MANUAL RGAAudioMode = "Manual"
 )
 
 // AudioMode changes the mode if the sensor supports audio output
@@ -1991,9 +1998,9 @@ func (c *RGAConnection) CirrusCapillaryHeater(HeatOn bool) (*RGAResponse, error)
 type RGACirrusHeaterMode string 
 
 const (
-	Rga_CIRRUS_HEATER_OFF RGACirrusHeaterMode = "Off"
-	Rga_CIRRUS_HEATER_WARM RGACirrusHeaterMode = "Warm"
-	Rga_CIRRUS_HEATER_BAKE RGACirrusHeaterMode = "Bake"
+	RGA_CIRRUS_HEATER_OFF RGACirrusHeaterMode = "Off"
+	RGA_CIRRUS_HEATER_WARM RGACirrusHeaterMode = "Warm"
+	RGA_CIRRUS_HEATER_BAKE RGACirrusHeaterMode = "Bake"
 )
 
 // CirrusHeater sets the cirrus heater into the mode requested
@@ -2216,8 +2223,8 @@ func (c *RGAConnection) RVCValveControl(Valve int, Open bool) (*RGAResponse, err
 type RGARVCValveMode string
 
 const (
-	Rga_RVC_VALVE_MANUAL RGARVCValveMode = "Manual"
-	Rga_RVC_VALVE_AUTOMATIC RGARVCValveMode = "Automatic"
+	RGA_RVC_VALVE_MANUAL RGARVCValveMode = "Manual"
+	RGA_RVC_VALVE_AUTOMATIC RGARVCValveMode = "Automatic"
 )
 
 // RVCValveMode switches valve mode between manual and automatic mode

@@ -1,12 +1,17 @@
 package fmtd
 
 import (
+
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"time"
+
+	flags "github.com/jessevdk/go-flags"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -14,14 +19,14 @@ import (
 // Config is the object which will hold all of the config parameters
 type Config struct {
 	DefaultLogDir	bool 		`yaml:"DefaultLogDir"`
-	LogFileDir 		string		`yaml:"LogFileDir"`
-	ConsoleOutput	bool		`yaml:"ConsoleOutput"`
-	GrpcPort		int64		`yaml:"GrpcPort"`
-	RestPort		int64		`yaml:"RestPort"`
-	TCPPort			int64		`yaml:"TCPPort"`
-	TCPAddr			string		`yaml:"TCPAddr"`
-	DataOutputDir	string		`yaml:"DataOutputDir"`
-	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr"` // optional parameter
+	LogFileDir 		string		`yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	ConsoleOutput	bool		`yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
+	GrpcPort		int64		`yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
+	RestPort		int64		`yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
+	TCPPort			int64		`yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
+	TCPAddr			string		`yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
+	DataOutputDir	string		`yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
+	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
 	MacaroonDBPath	string
 	TLSCertPath		string
 	TLSKeyPath		string
@@ -35,16 +40,12 @@ type Config struct {
 // default_log_dir returns the default log directory
 // default_grpc_port is the the default grpc port
 var (
+	config_file_name string = "config.yaml"
 	default_grpc_port int64 = 7777
 	default_rest_port int64 = 8080
 	default_tcp_port  int64 = 10024
 	default_tcp_addr string = "0.0.0.0"
 	default_log_dir = func() string {
-		// home_dir, err := os.UserHomeDir() // this should be OS agnostic
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-		// return home_dir+"/.fmtd"
 		return utils.AppDataDir("fmtd", false)
 	}
 	default_macaroon_db_file string = default_log_dir()+"/macaroon.db"
@@ -59,7 +60,7 @@ var (
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
-			ConsoleOutput: false,
+			ConsoleOutput: true,
 			GrpcPort: default_grpc_port,
 			RestPort: default_rest_port,
 			TCPPort: default_tcp_port,
@@ -77,24 +78,41 @@ var (
 )
 
 // InitConfig returns the `Config` struct with either default values or values specified in `config.yaml`
-func InitConfig() (Config, error) {
-	filename, _ := filepath.Abs(default_log_dir()+"/config.yaml")
-	config_file, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Println(err)
-		return default_config(), nil
+func InitConfig(isTesting bool) (Config, error) {
+	// Check if fmtd directory exists, if no then create it
+	if !utils.FileExists(utils.AppDataDir("fmtd", false)) {
+		err := os.Mkdir(utils.AppDataDir("fmtd", false), 0700)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 	var config Config
-	err = yaml.Unmarshal(config_file, &config)
-	if err != nil {
-		log.Println(err)
-		config = default_config()
+	if utils.FileExists(path.Join(default_log_dir(), config_file_name)) {
+		filename, _ := filepath.Abs(path.Join(default_log_dir(), config_file_name))
+		config_file, err := ioutil.ReadFile(filename)
+		if err != nil {
+			log.Println(err)
+			return default_config(), nil
+		}
+		err = yaml.Unmarshal(config_file, &config)
+		if err != nil {
+			log.Println(err)
+			config = default_config()
+		} else {
+			// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
+			config = check_yaml_config(config)
+		}
+		config.WSPingInterval = default_ws_ping_interval
+		config.WSPongWait = default_ws_pong_wait
 	} else {
-		// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
-		config = check_yaml_config(config)
+		config = default_config()
 	}
-	config.WSPingInterval = default_ws_ping_interval
-	config.WSPongWait = default_ws_pong_wait
+	// now to parse the flags
+	if !isTesting {
+		if _, err := flags.Parse(&config); err != nil {
+			return Config{}, err
+		}
+	}
 	return config, nil
 }
 

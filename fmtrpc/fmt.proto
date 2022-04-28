@@ -48,33 +48,53 @@ service Fmt {
 
 message StopRequest {
 }
+
 message StopResponse {
 }
+
 message AdminTestRequest {
 }
+
 message AdminTestResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
+
 message TestRequest {
 }
+
 message TestResponse {
+    // A short message indicating success or failure
     string msg = 1;
 }
+
 message MacaroonPermission {
+    // The entity a permission grants access to
     string entity = 1;
+
+    // The action that is granted
     string action = 2;
 }
+
 enum TimeoutType {
     SECOND = 0;
     MINUTE = 1;
     HOUR = 2;
     DAY = 3;
 }
+
 message BakeMacaroonRequest {
+    // The length of time for which this macaroon is valid
     int64 timeout = 1;
+
+    // The unit for the macaroon timeout. Choose from `SECOND`, `MINUTE`, `HOUR` or `DAY`
     TimeoutType timeout_type = 2;
+
+    // The list of permissions the new macaroon should grant
     repeated MacaroonPermission permissions = 3;
 }
+
 message BakeMacaroonResponse {
+    // The hex-encoded macaroon, serialized in binary format
     string macaroon = 1;
 }

@@ -67,8 +67,8 @@ func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 	return macBytes, nil
 }
 
-// loadMacaroon takes a password prompting function and hex encoded macaroon and returns an instantiated macaroon object
-func loadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon, error) {
+// LoadMacaroon takes a password prompting function and hex encoded macaroon and returns an instantiated macaroon object
+func LoadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon, error) {
 	if len(strings.TrimSpace(macHex)) == 0 {
 		return nil, ErrEmptyMac
 	}

@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package demorpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc";
+
+// Controller is a service for setting the demo temperature and pressure setpoints 
+service Controller {
+    /* fmtcli: `set-temperature`
+    SetTemperature will set the temperature setpoint at a specified temperature (degrees celsius).
+    Can also set the temperature change rate (degree celsius/minute). Default is instantaneous change.
+    Returns a stream of updates of the setpoint until it reaches the desired temperature.
+    */
+    rpc SetTemperature (SetTempRequest) returns (stream SetTempResponse);
+    /* fmtcli: `set-pressure`
+    SetPressure will set the pressure setpoint at a specified pressure (Torr).
+    Can also set the pressure change rate (torr/minute). Default is instantaneous change.
+    Returns a stream of updates of the setpoint until it reaches the desired pressure.
+    */
+    rpc SetPressure (SetPresRequest) returns (stream SetPresResponse);
+}
+
+message SetTempRequest {
+    // The desired temperature set point in degrees Celsius
+    double temp_set_point = 1;
+
+    // The desired temperature change rate in degrees Celsius per minute
+    double temp_change_rate = 2;
+}
+
+message SetTempResponse {
+    // The current temperature set point in degrees Celsius
+    double current_temp_set_point = 1;
+
+    // The current temperature change rate in degrees Celsius per minute
+    double current_temp_change_rate = 2;
+
+    // The current average temperature of all temperature readings in degrees Celsius
+    double current_avg_temp = 3;
+}
+
+message SetPresRequest {
+    // The desired pressure set point in Torr
+    double pressure_set_point = 1;
+
+    // The desired pressure change rate in Torr per minute
+    double pressure_change_rate = 2;
+}
+
+message SetPresResponse {
+    // The current pressure set point in Torr
+    double current_pressure_set_point = 1;
+
+    // The current pressure change rate in Torr per minute
+    double current_pressure_change_rate = 2;
+
+    // The current average pressure of all pressure readings in Torr
+    double current_avg_pressure = 3;
+}
