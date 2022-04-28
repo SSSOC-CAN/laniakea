@@ -132,3 +132,11 @@ func InitInterceptor() (*Interceptor, error) {
 	go interceptor.mainInterruptHandler()
 	return &interceptor, nil
 }
+
+// Close changes the atomic state variable for started
+func (i *Interceptor) Close() error {
+	if !atomic.CompareAndSwapInt32(&started, 1, 0) {
+		return errors.New("Interceptor already stopped")
+	}
+	return nil
+}

@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 	"time"
+	
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -40,10 +41,12 @@ func initRpcServer(t *testing.T) (*RpcServer, func()) {
 	if err != nil {
 		t.Fatalf("Could not initialize interceptor: %v", err)
 	}
-	cfg, err := InitConfig()
+	defer shutdownInterceptor.Close()
+	cfg, err := InitConfig(true)
 	if err != nil {
 		t.Fatalf("Could not initialize config: %v", err)
 	}
+	cfg.GrpcPort = 3567 // override config to not interfere with any currently running nodes
 	log, err := InitLogger(&cfg)
 	if err != nil {
 		t.Fatalf("Could not initialize logger: %v", err)

@@ -52,6 +52,10 @@ var (
 			Entity: "tpex",
 			Action: "read",
 		},
+		{
+			Entity: "ctrl",
+			Action: "read",
+		},
 	}
 	writePermissions = []bakery.Op{
 		{
@@ -70,9 +74,13 @@ var (
 			Entity: "tpex",
 			Action: "write",
 		},
+		{
+			Entity: "ctrl",
+			Action: "write",
+		},
 	}
-	validActions = []string{"read", "write"}
-	validEntities = []string{"fmtd", "macaroon", "tpex", macaroons.PermissionEntityCustomURI}
+	validActions = []string{"read", "write", "generate"}
+	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", macaroons.PermissionEntityCustomURI}
 )
 
 // MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
@@ -120,6 +128,14 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 		}},
 		"/fmtrpc.Fmt/BakeMacaroon": {{
 			Entity: "macaroon",
+			Action: "generate",
+		}},
+		"/demorpc.Controller/SetTemperature": {{
+			Entity: "ctrl",
+			Action: "write",
+		}},
+		"/demorpc.Controller/SetPressure": {{
+			Entity: "ctrl",
 			Action: "write",
 		}},
 	}
@@ -254,10 +270,12 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			Action: op.Action,
 		}
 	}
-	noTimeout := true
-	var timeoutSeconds int64
-	if req.Timeout != 0 {
-		noTimeout = false
+	var (
+		timeoutSeconds int64
+		timeout		   bool
+	)
+	if req.Timeout > 0 {
+		timeout = true
 		switch req.TimeoutType {
 		case fmtrpc.TimeoutType_SECOND:
 			timeoutSeconds = req.Timeout
@@ -269,7 +287,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			timeoutSeconds = req.Timeout * int64(60) * int64(60) * int64(24)
 		}
 	}
-	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, noTimeout, timeoutSeconds)
+	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeout, timeoutSeconds)
 	if err != nil {
 		return nil, fmt.Errorf("Could not bake macaroon: %v", err)
 	}

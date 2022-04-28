@@ -28,12 +28,13 @@ import (
 	"github.com/urfave/cli"
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
 var (
 	defaultRPCAddr               = "localhost"
-	defaultRPCPort               = "3567"
+	defaultRPCPort               = "7777"
 	defaultTLSCertFilename       = "tls.cert"
 	defaultFmtdDir           	 = utils.AppDataDir("fmtd", false)
 	defaultTLSCertPath           = filepath.Join(defaultFmtdDir, defaultTLSCertFilename)
@@ -92,6 +93,19 @@ func getTestPlanExecutorClient(ctx *cli.Context) (fmtrpc.TestPlanExecutorClient,
 		conn.Close()
 	}
 	return fmtrpc.NewTestPlanExecutorClient(conn), cleanUp
+}
+
+// getControllerClient returns the ControllerClient instance from the demorpc package
+func getControllerClient(ctx *cli.Context) (demorpc.ControllerClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
+	if err != nil {
+		fatal(err)
+	}
+	cleanUp := func() {
+		conn.Close()
+	}
+	return demorpc.NewControllerClient(conn), cleanUp
 }
 
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
@@ -160,6 +174,8 @@ func main() {
 		stopTestPlan,
 		insertROIMarker,
 		bakeMacaroon,
+		setTempCommand,
+		setPresCommand,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

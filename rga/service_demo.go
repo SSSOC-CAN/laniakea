@@ -1,60 +1,62 @@
-package drivers
+// +build demo
+
+package rga
 
 import (
 	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"os"
 	"reflect"
-	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
-	"github.com/rs/zerolog"
+
 	"github.com/SSSOC-CAN/fmtd/data"
+	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/rs/zerolog"
 )
 
 var (
+	minRgaPollingInterval int64 = 15 // After manual testing, value will be 15 seconds
 	minimumPressure float64 = 0.00005
-	minRgaPollingInterval int64 = 15 // Arbitrary not sure what this value should be - After manual testing, value will be 15 seconds
-	pressureRead int64 = 122
 )
 
 type RGAService struct {
-	Running				int32 //atomically
-	Recording			int32 //atomically
-	stateStore			*state.Store
-	Logger				*zerolog.Logger
-	PressureChan		chan float64
-	StateChangeChan		chan *data.StateChangeMsg
-	QuitChan			chan struct{}
-	CancelChan			chan struct{}
-	outputDir  			string
-	connection			*RGAConnection
-	name 				string
-	currentPressure		float64
-	filepath			string
+	BaseRGAService
 }
 
 // A compile time check to make sure that RGAService fully implements the data.Service interface
 var _ data.Service = (*RGAService) (nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
-func NewRGAService(logger *zerolog.Logger, outputDir string, store *state.Store) (*RGAService, error) {
-	c, err := ConnectToRGA()
-	if err != nil {
-		return nil, fmt.Errorf("Unable to connect to RGA: %v", err)
-	}
+func NewRGAService(
+	logger *zerolog.Logger, 
+	outputDir string, 
+	rtdStore *state.Store, 
+	ctrlStore *state.Store,
+	_ drivers.DriverConnectionErr,
+) *RGAService {
+	var (
+		wgL sync.WaitGroup
+		wgR sync.WaitGroup
+	)
 	return &RGAService{
-		stateStore: store,
-		Logger: logger,
-		QuitChan: make(chan struct{}),
-		CancelChan: make(chan struct{}),
-		outputDir: outputDir,
-		connection: &RGAConnection{c},
-		name: data.RgaName,
-	}, nil
+		BaseRGAService{
+			rtdStateStore: rtdStore,
+			ctrlStateStore: ctrlStore,
+			Logger: logger,
+			QuitChan: make(chan struct{}),
+			CancelChan: make(chan struct{}),
+			outputDir: outputDir,
+			name: data.RgaName,
+			wgListen: wgL,
+			wgRecord: wgR,
+		},
+	}
 }
 
 // Start starts the RGA service. It does NOT start the data recording process
@@ -63,6 +65,8 @@ func (s *RGAService) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
 		return fmt.Errorf("Could not start RGA service. Service already started.")
 	}
+	s.Logger.Info().Msg("Connection to MKS RGA is not currently active. Please recompile fmtd as follows `$ go install -tags \"mks\"`")
+	s.wgListen.Add(1)
 	go s.ListenForRTDSignal()
 	s.Logger.Info().Msg("RGA Service successfully started.")
 	return nil
@@ -81,19 +85,18 @@ func (s *RGAService) Stop() error {
 		}
 	}
 	close(s.CancelChan)
+	s.wgRecord.Wait()
 	close(s.QuitChan)
-	s.connection.Close()
+	s.wgListen.Wait()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
 	return nil
 }
 
-// Name satisfies the fmtd.Service interface
-func (s *RGAService) Name() string {
-	return s.name
-}
-
 // startRecording starts data recording from the RGA device
 func (s *RGAService) startRecording(pol_int int64) error {
+	if atomic.LoadInt32(&s.Recording) == 1 {
+		return ErrAlreadyRecording
+	}
 	if s.currentPressure == 0 || s.currentPressure > minimumPressure {
 		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure)
 	}
@@ -102,12 +105,9 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = minRgaPollingInterval
 	}
-	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
-	}
 	// Create or Open csv
 	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%02d-%02d-%d-rga.csv", s.outputDir, current_time.Day(), current_time.Month(), current_time.Year())
+	file_name := fmt.Sprintf("%s/%d-%02d-%02d-rga.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
 	file_name = utils.UniqueFileName(file_name)
 	file, err := os.Create(file_name)
 	if err != nil {
@@ -115,36 +115,16 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	}
 	s.filepath = file_name
 	writer := csv.NewWriter(file)
-	// InitMsg
-	err = s.connection.InitMsg()
-	if err != nil {
-		return fmt.Errorf("Unable to communicate with RGA: %v", err)
-	}
-	// Setup Data
-	_, err = s.connection.Control(utils.AppName, utils.AppVersion)
-	if err != nil {
-		return err
-	}
-	resp, err := s.connection.SensorState()
-	if err != nil {
-		return err
-	}
-	if resp.Fields["State"].Value.(string) != Rga_SENSOR_STATE_INUSE {
-		return fmt.Errorf("Sensor not ready: %v", resp.Fields["State"])
-	}
-	_, err = s.connection.AddBarchart("Bar1", 1, 200, Rga_PeakCenter, 5, 0, 0, 0)
-	if err != nil {
-		return fmt.Errorf("Could not add Barchart: %v", err)
-	}
-	_, err = s.connection.ScanAdd("Bar1")
-	if err != nil {
-		return fmt.Errorf("Could not add measurement to scan: %v", err)
-	}
 	// Now we begin recording
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
+	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
+		return ErrAlreadyRecording
+	}
 	s.Logger.Info().Msg("Starting data recording...")
+	s.wgRecord.Add(1)
 	go func() {
+		defer s.wgRecord.Done()
 		ticks := 0
 		for {
 			select {
@@ -177,58 +157,33 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if ticks == 0 {
 		// Header data for csv file
 		headerData := []string{"Timestamp"}
-		// Start scan
-		_, err := s.connection.ScanStart(1)
-		if err != nil {
-			return fmt.Errorf("Could not start scan: %v", err)
+		for i := 0; i < 200; i++ {
+			headerData = append(headerData, fmt.Sprintf("%v AMU", i+1))
 		}
-		_, err = s.connection.FilamentControl("On")
-		if err != nil {
-			return fmt.Errorf("Could not turn on filament: %v", err)
-		}
-		for {
-			resp, err := s.connection.ReadResponse()
-			if err != nil {
-				return fmt.Errorf("Could not read response: %v", err)
-			}
-			if resp.ErrMsg.CommandName == massReading {
-				headerData = append(headerData, strconv.FormatInt(resp.Fields["MassPosition"].Value.(int64), 10))
-				if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
-					break
-				}
-			}
-		}
-		err = writer.Write(headerData)
+		err := writer.Write(headerData)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%02d-%02d-%d %02d:%02d:%02d", current_time.Day(), current_time.Month(), current_time.Year(), current_time.Hour(), current_time.Minute(), current_time.Second())
+	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
 	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
-	// Start scan
-	_, err := s.connection.ScanResume(1)
-	if err != nil {
-		return fmt.Errorf("Could not resume scan: %v", err)
+	// figure out noise amplitude and offset
+	// get current pressure set point
+	currentState := s.ctrlStateStore.GetState()
+	cState, ok := currentState.(data.InitialCtrlState)
+	if !ok {
+		return state.ErrInvalidStateType
 	}
-	for {
-		resp, err := s.connection.ReadResponse()
-		if err != nil {
-			return fmt.Errorf("Could not read response: %v", err)
+	for i := 0; i < 200; i++ {
+		v := (rand.Float64()*0.001)+cState.PressureSetPoint
+		dataField[int64(i)]= &fmtrpc.DataField{
+			Name: fmt.Sprintf("Mass %v", i+1),
+			Value: v,
 		}
-		if resp.ErrMsg.CommandName == massReading {
-			massPos := resp.Fields["MassPosition"].Value.(int64)
-			dataField[massPos]= &fmtrpc.DataField{
-				Name: fmt.Sprintf("Mass %s", strconv.FormatInt(massPos, 10)),
-				Value: resp.Fields["Value"].Value.(float64),
-			}
-			dataString = append(dataString, fmt.Sprintf("%g", resp.Fields["Value"].Value.(float64)))
-			if resp.Fields["MassPosition"].Value.(int64) == int64(200) {
-				break
-			}
-		}
+		dataString = append(dataString, fmt.Sprintf("%g", v))
 	}
 	//Write to csv in go routine
 	errChan := make(chan error)
@@ -240,12 +195,12 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 		echan<-nil
 	}(errChan)
 	
-	err = s.stateStore.Dispatch(
+	err := s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,
-				IsScanning: true,
+				IsScanning: false,
 				Timestamp: current_time.UnixMilli(),
 				Data: dataField,
 			},
@@ -257,6 +212,7 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if err = <-errChan; err != nil {
 		return err
 	}
+	close(errChan)
 	return nil
 }
 
@@ -266,22 +222,15 @@ func (s *RGAService) stopRecording() error {
 		return ErrAlreadyStoppedRecording
 	}
 	s.CancelChan <- struct{}{}
-	_, err := s.connection.FilamentControl("Off")
-	if err != nil {
-		return fmt.Errorf("Could nto safely turn off filament: %v", err)
-	}
-	_, err = s.connection.Release()
-	if err != nil {
-		return fmt.Errorf("Could not safely release control of RGA: %v", err)
-	}
 	return nil
 }
 
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
-	signalChan, unsub := s.stateStore.Subscribe(s.name)
+	defer s.wgListen.Done()
+	signalChan, unsub := s.rtdStateStore.Subscribe(s.name)
 	cleanUp := func() {
-		unsub(s.stateStore, s.name)
+		unsub(s.rtdStateStore, s.name)
 	}
 	defer cleanUp()
 	for {
@@ -311,16 +260,19 @@ func (s *RGAService) ListenForRTDSignal() {
 				}
 			}
 		case <- signalChan:
-			currentState := s.stateStore.GetState()
-			cState, ok := currentState.(fmtrpc.RealTimeData)
+			if atomic.LoadInt32(&s.Recording) != 1 {
+				continue
+			}
+			currentState := s.rtdStateStore.GetState()
+			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(fmtrpc.RealTimeData{})))
+				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(data.InitialRtdState{})))
 				err := s.stopRecording()
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
 			}
-			s.currentPressure = cState.Data[pressureRead].Value
+			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {

@@ -1,4 +1,4 @@
-package drivers
+package rga
 
 import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"

@@ -17,19 +17,19 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	"google.golang.org/grpc"
 )
 
 var (
-	FlukeName = "FLUKE"
+	TelemetryName = "TEL"
 	RgaName = "RGA"
 	RtdName = "RTD"
 	rpcEnumMap = map[fmtrpc.RecordService]string{
-		fmtrpc.RecordService_FLUKE: FlukeName,
+		fmtrpc.RecordService_TELEMETRY: TelemetryName,
 		fmtrpc.RecordService_RGA: RgaName,
 	}
 	defaultTCPBufferSize int64 = 1024
-	letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 )
 
 type StateType int32
@@ -59,6 +59,17 @@ type RTDService struct {
 	name				string
 	tcpServer			net.Listener
 	stateStore			*state.Store
+}
+
+type InitialRtdState struct {
+	AverageTemperature	float64
+	RealTimeData		fmtrpc.RealTimeData
+	TelPollingInterval	int64
+}
+
+type InitialCtrlState struct {
+	PressureSetPoint	float64
+	TemperatureSetPoint	float64
 }
 
 // Compile time check to ensure RTDService implements api.RestProxyService
@@ -141,13 +152,13 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 	}
 }
 
-// StartRecording is called by gRPC client and CLI to begin the data recording process with Fluke
+// StartRecording is called by gRPC client and CLI to begin the data recording process with Telemetry or RGA
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
 		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
 	}
 	switch req.Type {
-	case fmtrpc.RecordService_FLUKE:
+	case fmtrpc.RecordService_TELEMETRY:
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.PollingInterval)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
@@ -158,10 +169,10 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 		s.ServiceFilePaths[req.Type] = resp.Msg
 	case fmtrpc.RecordService_RGA:
-		if !s.ServiceRecStates[FlukeName] {
+		if !s.ServiceRecStates[TelemetryName] {
 			return &fmtrpc.RecordResponse{
-				Msg: fmt.Sprintf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type]),
-			}, fmt.Errorf("Could not start %s data recording: Fluke Service not yet recording data.", rpcEnumMap[req.Type])
+				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
+			}, fmt.Errorf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type])
 		}
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
@@ -196,21 +207,12 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 	}, nil
 }
 
-// randSeq generates a random string of length n
-func randSeq(n int) string {
-    b := make([]rune, n)
-    for i := range b {
-        b[i] = letters[rand.Intn(len(letters))]
-    }
-    return string(b)
-}
-
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
 	s.Logger.Info().Msg("Have a new data listener.")
 	lastSentRTDTimestamp := int64(0)
 	rand.Seed(time.Now().UnixNano())
-	subscriberName := s.name+randSeq(10)
+	subscriberName := s.name+utils.RandSeq(10)
 	updateChan, unsub := s.stateStore.Subscribe(subscriberName)
 	cleanUp := func() {
 		unsub(s.stateStore, subscriberName)
@@ -220,17 +222,17 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 		select {	
 		case <-updateChan:
 			currentState := s.stateStore.GetState()
-			RTD, ok := currentState.(fmtrpc.RealTimeData)
+			RTD, ok := currentState.(InitialRtdState)
 			if !ok {
 				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
 			}
-			if RTD.Timestamp < lastSentRTDTimestamp {
+			if RTD.RealTimeData.Timestamp < lastSentRTDTimestamp {
 				continue
 			} 
-			if err := updateStream.Send(&RTD); err != nil {
+			if err := updateStream.Send(&RTD.RealTimeData); err != nil {
 				return err
 			}
-			lastSentRTDTimestamp = RTD.Timestamp
+			lastSentRTDTimestamp = RTD.RealTimeData.Timestamp
 		case <-updateStream.Context().Done():
 			if errors.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil

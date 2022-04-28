@@ -19,3 +19,10 @@
 
 # random test files
 rga_testerino.go
+
+# Docker Image File
+Dockerfile
+
+# tls certificates and macaroons
+*.macaroon
+*.cert

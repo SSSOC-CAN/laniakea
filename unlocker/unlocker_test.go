@@ -118,7 +118,6 @@ func initGrpcServer(t *testing.T) (func(), string) {
 			case msg := <-unlockerService.PasswordMsgs:
 				t.Log(msg.Err)
 			case <-shutdownChan:
-				t.Log("Shutting Down")
 				return
 			}
 		}

@@ -12,11 +12,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/controller"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -40,8 +44,8 @@ var (
 		return fmtrpc.NewDataCollectorClient(conn), cleanUp, nil
 	}
 	testPlanFileLines = []string{
-		fmt.Sprint("plan_name: \"Test\"\n"),
-		"test_duration: 300\n", // 5 minute test
+		"plan_name: \"Test\"\n",
+		"test_duration: 120\n", // 2 minute test
 		"data_providers:\n",
 		"  - provider_name: \"Fluke\"\n",
 		"    driver: \"Fluke DAQ\"\n",
@@ -53,8 +57,46 @@ var (
 		"  - alert_name: \"Wait 60 seconds\"\n",
 		"    action: \"WaitForTime\"\n",
 		"    action_arg: 60\n",
-		"    action_start_time: 60\n",
+		"    action_start_time: 30\n",
 		//"report_file_path: \"C:\\\\Users\\\\Michael Graham\\\\Downloads\\\\testplan_test.csv\"\n",
+	}
+	rtdInitialState = data.InitialRtdState{}
+	rtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+		// assert type of s
+		oldState, ok := s.(data.InitialRtdState)
+		if !ok {
+			return nil, state.ErrInvalidStateType
+		}
+		// switch case action
+		switch a.Type {
+		case "telemetry/update":
+			// assert type of payload
+			newState, ok := a.Payload.(data.InitialRtdState)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState.RealTimeData
+			oldState.AverageTemperature = newState.AverageTemperature
+			return oldState, nil
+		case "rga/update":
+			// assert type of payload
+			newState, ok := a.Payload.(fmtrpc.RealTimeData)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.RealTimeData = newState
+			return oldState, nil
+		case "telemetry/polling_interval/update":
+			// assert type of payload
+			newPol, ok := a.Payload.(int64)
+			if !ok {
+				return nil, state.ErrInvalidPayloadType
+			}
+			oldState.TelPollingInterval = newPol
+			return oldState, nil
+		default:
+			return nil, state.ErrInvalidAction
+		} 
 	}
 )
 
@@ -103,18 +145,28 @@ func TestTestplan(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	// init logger
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	// state store
-	store := state.CreateStore(drivers.FlukeInitialState, drivers.FlukeReducer)
-	// Fluke Service
-	flukeLogger := logger.With().Str("subsystem", "FLUKE").Logger()
-	flukeService, err := drivers.NewFlukeService(
-		&flukeLogger,
+	// state stores
+	store := state.CreateStore(rtdInitialState, rtdReducer)
+	ctrlStore := state.CreateStore(controller.InitialState, controller.ControllerReducer)
+	// Telemetry Service
+	telemetryLogger := logger.With().Str("subsystem", "TEL").Logger()
+	// Connect to DAQ
+	c, err := drivers.ConnectToDAQ()
+	if err != nil {
+		t.Fatalf("Could not connect to telemetry DAQ: %v", err)
+	}
+	daqConn, ok := c.(*drivers.DAQConnection)
+	if !ok {
+		t.Fatalf("Could not connect to telemetry DAQ OPC: %v", errors.ErrInvalidType)
+	}
+	defer daqConn.Close()
+	telemetryService := telemetry.NewTelemetryService(
+		&telemetryLogger,
 		tempDir,
 		store,
+		ctrlStore,
+		daqConn,
 	)
-	if err != nil {
-		t.Fatalf("Could not initialize Fluke Service: %v", err)
-	}
 	// RTD Service
 	rtdLogger := logger.With().Str("subsystem", "RTD").Logger()
 	rtdService := data.NewRTDService(
@@ -127,8 +179,8 @@ func TestTestplan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not register RTD service with gRPC server: %v", err)
 	}
-	// Register Fluke with RTD
-	flukeService.RegisterWithRTDService(rtdService)
+	// Register telemetry with RTD
+	telemetryService.RegisterWithRTDService(rtdService)
 	// Testplan Executor
 	tpexLogger := logger.With().Str("subsystem", "TPEX").Logger()
 	tpexService := NewTestPlanService(
@@ -164,10 +216,10 @@ func TestTestplan(t *testing.T) {
 		}
 		t.Log(resp)
 	})
-	// Start Fluke, Start TPEX, Start gRPC
-	err = flukeService.Start()
+	// Start telemetry, Start TPEX, Start gRPC
+	err = telemetryService.Start()
 	if err != nil {
-		t.Errorf("Could not start Fluke service: %v", err)
+		t.Errorf("Could not start telemetry service: %v", err)
 	}
 	err = tpexService.Start()
 	if err != nil {
@@ -176,7 +228,7 @@ func TestTestplan(t *testing.T) {
 	defer func() {
 		tpexService.Stop()
 		rtdService.Stop()
-		flukeService.Stop()
+		telemetryService.Stop()
 		grpcServer.Stop()
 	}()
 	// Load Test Plan
@@ -197,8 +249,8 @@ func TestTestplan(t *testing.T) {
 		}
 		t.Log(resp)
 	})
-	// wait 2 minutes
-	time.Sleep(122*time.Second)
+	// wait 1 minute and a half
+	time.Sleep(92*time.Second)
 	// Insert ROI
 	t.Run("fmtcli insert-roi", func(t *testing.T) {
 		resp, err := client.InsertROIMarker(ctx, &fmtrpc.InsertROIRequest{
@@ -273,5 +325,5 @@ func TestTestplan(t *testing.T) {
 		}
 		t.Log(resp)
 	})
-	time.Sleep(312*time.Second)
+	time.Sleep(122*time.Second)
 }

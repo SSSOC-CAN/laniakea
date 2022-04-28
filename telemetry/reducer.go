@@ -1,4 +1,4 @@
-package drivers
+package telemetry
 
 import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	FlukeInitialState = fmtrpc.RealTimeData{}
-	FlukeReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	TelemetryInitialState = fmtrpc.RealTimeData{}
+	TelemetryReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
 		if !ok {
@@ -15,7 +15,7 @@ var (
 		}
 		// switch case action
 		switch a.Type {
-		case "fluke/update":
+		case "telemetry/update":
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {

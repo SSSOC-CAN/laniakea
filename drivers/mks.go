@@ -1,7 +1,10 @@
+// +build mks,!demo
+
 package drivers
 
 import (
 	"net"
+	"github.com/SSSOC-CAN/fmtd/errors"
 )
 
 // TODO:SSSOCPaulCote - Add list of RGA commands
@@ -9,15 +12,21 @@ var (
 	rgaIPAddr = "192.168.0.77"
 	rgaPort = "10014"
 	rgaServer = rgaIPAddr+":"+rgaPort
+	RGAMinimumPressure float64 = 0.00005
+	RGAMinPollingInterval int64 = 15
 )
 
-//connectToRGA establishes a conncetion with the RGA
-func ConnectToRGA() (*net.TCPConn, error) {
+// ConnectToRGA establishes a conncetion with the RGA
+func ConnectToRGA() (DriverConnectionErr, error) {
 	c, err := net.Dial("tcp", rgaServer)
 	if err != nil {
 		return nil, err
 	}
-	return c.(*net.TCPConn), nil
+	cAssert, ok := c.(*net.TCPConn)
+	if !ok {
+		return nil, errors.ErrInvalidType
+	}
+	return &RGAConnection{cAssert}, nil
 }
 
 // func main() {

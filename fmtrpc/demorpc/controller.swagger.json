@@ -1,0 +1,203 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "demorpc/controller.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Controller"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/set/pressure": {
+      "post": {
+        "summary": "fmtcli: `set-pressure`\nSetPressure will set the pressure setpoint at a specified pressure (Torr).\nCan also set the pressure change rate (torr/minute). Default is instantaneous change.\nReturns a stream of updates of the setpoint until it reaches the desired pressure.",
+        "operationId": "Controller_SetPressure",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/demorpcSetPresResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of demorpcSetPresResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/demorpcSetPresRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Controller"
+        ]
+      }
+    },
+    "/v1/set/temperature": {
+      "post": {
+        "summary": "fmtcli: `set-temperature`\nSetTemperature will set the temperature setpoint at a specified temperature (degrees celsius).\nCan also set the temperature change rate (degree celsius/minute). Default is instantaneous change.\nReturns a stream of updates of the setpoint until it reaches the desired temperature.",
+        "operationId": "Controller_SetTemperature",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/demorpcSetTempResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of demorpcSetTempResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/demorpcSetTempRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Controller"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "demorpcSetPresRequest": {
+      "type": "object",
+      "properties": {
+        "pressure_set_point": {
+          "type": "number",
+          "format": "double",
+          "title": "The desired pressure set point in Torr"
+        },
+        "pressure_change_rate": {
+          "type": "number",
+          "format": "double",
+          "title": "The desired pressure change rate in Torr per minute"
+        }
+      }
+    },
+    "demorpcSetPresResponse": {
+      "type": "object",
+      "properties": {
+        "current_pressure_set_point": {
+          "type": "number",
+          "format": "double",
+          "title": "The current pressure set point in Torr"
+        },
+        "current_pressure_change_rate": {
+          "type": "number",
+          "format": "double",
+          "title": "The current pressure change rate in Torr per minute"
+        },
+        "current_avg_pressure": {
+          "type": "number",
+          "format": "double",
+          "title": "The current average pressure of all pressure readings in Torr"
+        }
+      }
+    },
+    "demorpcSetTempRequest": {
+      "type": "object",
+      "properties": {
+        "temp_set_point": {
+          "type": "number",
+          "format": "double",
+          "title": "The desired temperature set point in degrees Celsius"
+        },
+        "temp_change_rate": {
+          "type": "number",
+          "format": "double",
+          "title": "The desired temperature change rate in degrees Celsius per minute"
+        }
+      }
+    },
+    "demorpcSetTempResponse": {
+      "type": "object",
+      "properties": {
+        "current_temp_set_point": {
+          "type": "number",
+          "format": "double",
+          "title": "The current temperature set point in degrees Celsius"
+        },
+        "current_temp_change_rate": {
+          "type": "number",
+          "format": "double",
+          "title": "The current temperature change rate in degrees Celsius per minute"
+        },
+        "current_avg_temp": {
+          "type": "number",
+          "format": "double",
+          "title": "The current average temperature of all temperature readings in degrees Celsius"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}
