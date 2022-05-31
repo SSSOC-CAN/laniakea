@@ -594,7 +594,7 @@ var (
 			}
 			time.Sleep(10*time.Second)
 			_, err = client.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
-			if err != nil {
+			if err == nil {
 				return nil, errors.Error("Macaroon didn't expire")
 			}
 			return conn, nil
@@ -688,7 +688,9 @@ func TestFmtGrpcApi(t *testing.T) {
 				if err != nil {
 					t.Errorf("Error when testing freshly baked macaroon: %v", err)
 				}
-				defer testConn.Close()
+				if testConn != nil {
+					defer testConn.Close()
+				}
 			}
 		})
 	}
@@ -843,7 +845,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 			case <-ticker.C:
 				return
 			default:
-				resp, err := stream.Recv()
+				_, err = stream.Recv()
 				if err == io.EOF {
 					return
 				}
@@ -851,7 +853,6 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 					t.Error(err)
 					return
 				}
-				t.Log(resp)
 			}
 		}
 	})
@@ -872,7 +873,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 					case <-ticker.C:
 						return
 					default:
-						resp, err := stream.Recv()
+						_, err = stream.Recv()
 						if err == io.EOF {
 							return
 						}
@@ -880,7 +881,6 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 							t.Error(err)
 							return
 						}
-						t.Log(resp)
 					}
 				}
 			}()
@@ -925,7 +925,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 							case <-quitChan:
 								return
 							default:
-								resp, err := stream.Recv()
+								_, err = stream.Recv()
 								if err == io.EOF {
 									return
 								}
@@ -933,7 +933,6 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 									t.Error(err)
 									return
 								}
-								t.Log(resp)
 							}
 						}
 					}(shutdownChan)
@@ -1068,7 +1067,7 @@ func TestControllerGrpcApi(t *testing.T) {
 			TempChangeRate: 0.0,
 		})
 		_, err := stream.Recv()
-		if err != nil {
+		if err == nil {
 			t.Error("Expected an error and got none when doing concurrent temperature sets")
 		}
 		wg.Wait()
@@ -1106,7 +1105,7 @@ func TestControllerGrpcApi(t *testing.T) {
 			PressureChangeRate: 0.0,
 		})
 		_, err := stream.Recv()
-		if err != nil {
+		if err == nil {
 			t.Error("Expected an error and got none when doing concurrent pressure sets")
 		}
 		wg.Wait()
@@ -1119,64 +1118,52 @@ func TestControllerGrpcApi(t *testing.T) {
 					TempSetPoint: c.setPoint,
 					TempChangeRate: c.rampRate,
 				})
-				if c.expectErr {
-					if err == nil {
-						t.Error("Expected an error and got none")
+				if err != nil {
+					t.Errorf("Could not invoke set temperature command: %v", err)
+				}
+				for {
+					resp, err := stream.Recv()
+					if err == io.EOF {
+						break
 					}
-				} else {
-					if err != nil {
-						t.Errorf("Could not set temperature: %v", err)
-					}
-					for {
-						resp, err := stream.Recv()
-						if err == io.EOF {
+					if c.expectErr {
+						if err == nil {
+							t.Error("Expected an error and got none")
+						}
+						break
+					} else {
+						if err != nil {
+							t.Errorf("Could not receive from stream: %v", err)
 							break
 						}
-						if c.expectErr {
-							if err == nil {
-								t.Error("Expected an error and got none")
-								break
-							}
-						} else {
-							if err != nil {
-								t.Errorf("Could not receive from stream: %v", err)
-								break
-							}
-						}
-						t.Log(resp)
 					}
+					t.Log(resp)
 				}
 			case "set-pres":
 				stream, err := client.SetPressure(ctx, &demorpc.SetPresRequest{
 					PressureSetPoint: c.setPoint,
 					PressureChangeRate: c.rampRate,
 				})
-				if c.expectErr {
-					if err == nil {
-						t.Error("Expected an error and got none")
+				if err != nil {
+					t.Errorf("Could not invoke set pressure command: %v", err)
+				}
+				for {
+					resp, err := stream.Recv()
+					if err == io.EOF {
+						break
 					}
-				} else {
-					if err != nil {
-						t.Errorf("Could not set pressure: %v", err)
-					}
-					for {
-						resp, err := stream.Recv()
-						if err == io.EOF {
+					if c.expectErr {
+						if err == nil {
+							t.Error("Expected an error and got none")
+						}
+						break
+					} else {
+						if err != nil {
+							t.Errorf("Could not receive from stream: %v", err)
 							break
 						}
-						if c.expectErr {
-							if err == nil {
-								t.Error("Expected an error and got none")
-								break
-							}
-						} else {
-							if err != nil {
-								t.Errorf("Could not receive from stream: %v", err)
-								break
-							}
-						}
-						t.Log(resp)
 					}
+					t.Log(resp)
 				}
 			}
 		})
