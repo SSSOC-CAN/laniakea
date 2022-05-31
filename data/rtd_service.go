@@ -138,7 +138,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 	}
 	switch req.Type {
 	case fmtrpc.RecordService_TELEMETRY:
-		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v:%v", req.PollingInterval, req.RecordName)}
+		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v:%v:%v", req.PollingInterval, req.OrgName, req.BucketName)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
@@ -152,7 +152,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
 			}, fmt.Errorf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type])
 		}
-		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.RecordName)}
+		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.OrgName)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{

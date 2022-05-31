@@ -36,8 +36,6 @@ type Config struct {
 	WSPongWait		time.Duration
 	InfluxURL		string
 	InfluxAPIToken  string
-	InfluxOrg		string
-	InfluxOrgId		string
 }
 
 // default_config returns the default configuration
@@ -61,9 +59,7 @@ var (
 	default_ws_ping_interval = time.Second * 30
 	default_ws_pong_wait = time.Second * 5
 	default_influx_url string = "https://174.113.21.199:8088"
-	default_influx_api_token string = "CxDRmxMhIbHBn-Y6F_YtbrLmMza__h54RM5DHFW4sOebkdc2ORF3CEjWGLpxLz7-lLV9mPsm9EIX083rjhsLGg==" // write/read to any bucket
-	default_influx_org string = "sssoc"
-	default_influx_org_id string = "a47f817601301a22"
+	default_influx_api_token string = "3Dlp63Nu_J1XlLsyGSsfH-5-c_DZKJMqb4DzDBMvvDebuGD1gH44rnyZsvQsUAk74tn3CqJfa8eULRlKgTZ7Tw==" // write/read to any bucket
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
@@ -83,8 +79,6 @@ var (
 			WSPongWait: default_ws_pong_wait,
 			InfluxURL: default_influx_url,
 			InfluxAPIToken: default_influx_api_token,
-			InfluxOrg: default_influx_org,
-			InfluxOrgId: default_influx_org_id,
 		}
 	}
 )

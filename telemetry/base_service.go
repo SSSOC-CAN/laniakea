@@ -28,8 +28,6 @@ type BaseTelemetryService struct {
 	currentPressure		float64
 	wgListen			sync.WaitGroup
 	wgRecord			sync.WaitGroup
-	influxOrgName		string
-	influxOrgId			string
 	idb 				influx.Client
 }	
 

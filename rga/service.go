@@ -23,10 +23,6 @@ import (
 	"github.com/SSSOC-CAN/fmtd/utils"
 )
 
-var (
-	bucketName string = "test"
-)
-
 type RGAService struct {
 	BaseRGAService
 	connection			*drivers.RGAConnection
@@ -43,8 +39,6 @@ func NewRGAService(
 	connection *drivers.RGAConnection,
 	influxUrl string,
 	influxToken string,
-	influxOrg string,
-	influxOrgId string,
 ) *RGAService {
 	var (
 		wgL sync.WaitGroup
@@ -60,8 +54,6 @@ func NewRGAService(
 			name: 			  data.RgaName,
 			wgListen: 		  wgL,
 			wgRecord: 		  wgR,
-			influxOrgName:    influxOrg,
-			influxOrgId:      influxOrgId,
 			idb:        	  client,
 		},
 		connection: connection,
@@ -111,7 +103,7 @@ func (s *RGAService) Name() string {
 }
 
 // startRecording starts data recording from the RGA device
-func (s *RGAService) startRecording(pol_int int64, bucketName string) error {
+func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		return ErrAlreadyRecording
 	}
@@ -149,15 +141,20 @@ func (s *RGAService) startRecording(pol_int int64, bucketName string) error {
 		return fmt.Errorf("Could not add measurement to scan: %v", err)
 	}
 	// Get bucket, create it if it doesn't exist
+	orgAPI := s.idb.OrganizationsAPI()
+	org, err := orgAPI.FindOrganizationByName(context.Background(), orgName)
+	if err != nil {
+		return err
+	}
 	bucketAPI := s.idb.BucketsAPI()
-	bucket, _ := bucketAPI.FindBucketByName(context.Background(), bucketName)
+	bucket, _ := bucketAPI.FindBucketByName(context.Background(), influxRGABucketName)
 	if bucket == nil {
-		_, err := bucketAPI.CreateBucketWithName(context.Background(), &domain.Organization{Name: s.influxOrgName, Id: &s.influxOrgId}, bucketName, domain.RetentionRule{EverySeconds: 0})
+		_, err := bucketAPI.CreateBucketWithName(context.Background(), org, influxRGABucketName, domain.RetentionRule{EverySeconds: 0})
 		if err != nil {
 			return err
 		}
 	}
-	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
+	writeAPI := s.idb.WriteAPI(orgName, influxRGABucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {

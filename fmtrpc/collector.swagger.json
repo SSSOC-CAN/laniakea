@@ -167,9 +167,13 @@
           "$ref": "#/definitions/fmtrpcRecordService",
           "title": "Recording service type. Choose from either `telemetry` or `rga`"
         },
-        "record_name": {
+        "org_name": {
           "type": "string",
-          "description": "Name of the recording."
+          "description": "Name of the organization."
+        },
+        "bucket_name": {
+          "type": "string",
+          "description": "Name of the bucket."
         }
       }
     },

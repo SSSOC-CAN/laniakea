@@ -180,8 +180,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		daqConnAssert,
 		server.cfg.InfluxURL,
 		server.cfg.InfluxAPIToken,
-		server.cfg.InfluxOrg,
-		server.cfg.InfluxOrgId,
 	)
 	telemetryService.RegisterWithRTDService(rtdService)
 	services = append(services, telemetryService)
@@ -204,8 +202,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		rgaConnAssert,
 		server.cfg.InfluxURL,
 		server.cfg.InfluxAPIToken,
-		server.cfg.InfluxOrg,
-		server.cfg.InfluxOrgId,
 	)
 	rgaService.RegisterWithRTDService(rtdService)
 	services = append(services, rgaService)
