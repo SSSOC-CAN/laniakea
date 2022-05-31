@@ -47,8 +47,6 @@ func NewTelemetryService(
 	_ drivers.DriverConnection,
 	influxUrl string,
 	influxToken string,
-	influxOrg string,
-	influxOrgId string,
 ) *TelemetryService {
 	var (
 		wgL sync.WaitGroup
@@ -65,8 +63,6 @@ func NewTelemetryService(
 			name: 	      	  data.TelemetryName,
 			wgListen:		  wgL,
 			wgRecord:		  wgR,
-			influxOrgName:    influxOrg,
-			influxOrgId: 	  influxOrgId,
 			idb:              client,
 		},
 	}
@@ -111,7 +107,7 @@ func (s *TelemetryService) Name() string {
 }
 
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
-func (s *TelemetryService) startRecording(pol_int int64, bucketName string) error {
+func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		return ErrAlreadyRecording
 	}
@@ -121,18 +117,23 @@ func (s *TelemetryService) startRecording(pol_int int64, bucketName string) erro
 		pol_int = DefaultPollingInterval
 	}
 	// Get bucket, create it if it doesn't exist
+	orgAPI := s.idb.OrganizationsAPI()
+	org, err := orgAPI.FindOrganizationByName(context.Background(), orgName)
+	if err != nil {
+		return err
+	}
 	bucketAPI := s.idb.BucketsAPI()
 	bucket, _ := bucketAPI.FindBucketByName(context.Background(), bucketName)
 	if bucket == nil {
-		_, err := bucketAPI.CreateBucketWithName(context.Background(), &domain.Organization{Name: s.influxOrgName, Id: &s.influxOrgId}, bucketName, domain.RetentionRule{EverySeconds: 0})
+		_, err := bucketAPI.CreateBucketWithName(context.Background(), org, bucketName, domain.RetentionRule{EverySeconds: 0})
 		if err != nil {
 			return err
 		}
 	}
-	writeAPI := s.idb.WriteAPI(s.influxOrgName, bucketName)
+	writeAPI := s.idb.WriteAPI(orgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// Write polling interval to state
-	err := s.rtdStateStore.Dispatch(
+	err = s.rtdStateStore.Dispatch(
 		state.Action{
 			Type: 	 "telemetry/polling_interval/update",
 			Payload: pol_int,
@@ -296,7 +297,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 					if err != nil {
 						n = DefaultPollingInterval
 					}
-					err = s.startRecording(n, split[1])
+					err = s.startRecording(n, split[1], split[2])
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}

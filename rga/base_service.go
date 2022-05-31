@@ -13,6 +13,7 @@ import (
 var (
 	ErrAlreadyRecording			 = fmt.Errorf("Could not start recording. Data recording already started")
 	ErrAlreadyStoppedRecording   = fmt.Errorf("Could not stop data recording. Data recording already stopped.")
+	influxRGABucketName 		 = "rga"
 )
 
 type BaseRGAService struct {
@@ -29,8 +30,6 @@ type BaseRGAService struct {
 	currentPressure		float64
 	wgListen			sync.WaitGroup
 	wgRecord			sync.WaitGroup
-	influxOrgName		string
-	influxOrgId			string
 	idb 				influx.Client
 }
 

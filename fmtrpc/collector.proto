@@ -37,8 +37,11 @@ message RecordRequest {
     // Recording service type. Choose from either `telemetry` or `rga`
     RecordService type = 2;
 
-    // Name of the recording. 
-    string record_name = 3;
+    // Name of the organization. 
+    string org_name = 3;
+
+    // Name of the bucket. 
+    string bucket_name = 4;
 }
 
 message RecordResponse {
