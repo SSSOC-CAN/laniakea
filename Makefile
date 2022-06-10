@@ -1,3 +1,7 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/06/10
+
 PKG := github.com/SSSOC-CAN/fmtd
 
 GOBUILD := GO111MODULE=on go build -v
