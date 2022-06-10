@@ -1,4 +1,11 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+*/
+
 // TODO:SSSOCPaulCote - Get gRPC to return actual errors
+
 package testplan
 
 import (
