@@ -8,7 +8,8 @@ package controller
 
 import (
 	"github.com/SSSOC-CAN/fmtd/data"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 var (
@@ -16,11 +17,11 @@ var (
 		PressureSetPoint: float64(760.0),
 		TemperatureSetPoint: float64(25.0),
 	}
-	ControllerReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	ControllerReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialCtrlState)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -28,7 +29,7 @@ var (
 			// assert type of payload
 			newTemp, ok := a.Payload.(float64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.TemperatureSetPoint = newTemp
 			return oldState, nil
@@ -36,22 +37,22 @@ var (
 			// assert type of payload
 			newPres, ok := a.Payload.(float64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.PressureSetPoint = newPres
 			return oldState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
-	updateTempSetPointAction = func(newTempSetPoint float64) state.Action {
-		return state.Action{
+	updateTempSetPointAction = func(newTempSetPoint float64) gux.Action {
+		return gux.Action{
 			Type: "setpoint/temperature/update",
 			Payload: newTempSetPoint,
 		}
 	}
-	updatePresSetPointAction = func(newPresSetPoint float64) state.Action {
-		return state.Action{
+	updatePresSetPointAction = func(newPresSetPoint float64) gux.Action {
+		return gux.Action{
 			Type: "setpoint/pressure/update",
 			Payload: newPresSetPoint,
 		}

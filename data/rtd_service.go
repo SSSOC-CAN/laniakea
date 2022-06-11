@@ -18,8 +18,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 )
 
@@ -54,7 +54,7 @@ type RTDService struct {
 	StateChangeChans	map[string]chan *StateChangeMsg
 	ServiceRecStates	map[string]bool
 	name				string
-	stateStore			*state.Store
+	stateStore			*gux.Store
 }
 
 type InitialRtdState struct {
@@ -72,7 +72,7 @@ type InitialCtrlState struct {
 var _ api.RestProxyService = (*RTDService)(nil)
 
 //NewDataBuffer returns an instantiated DataBuffer struct
-func NewRTDService(log *zerolog.Logger, s *state.Store) *RTDService {
+func NewRTDService(log *zerolog.Logger, s *gux.Store) *RTDService {
 	return &RTDService{
 		ServiceRecStates: 	make(map[string]bool),
 		StateChangeChans: 	make(map[string]chan *StateChangeMsg),

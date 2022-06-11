@@ -25,8 +25,8 @@ import (
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 type RGAService struct {
@@ -40,8 +40,8 @@ var _ data.Service = (*RGAService) (nil)
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(
 	logger *zerolog.Logger,
-	rtdStore *state.Store, 
-	_ *state.Store,
+	rtdStore *gux.Store, 
+	_ *gux.Store,
 	connection *drivers.RGAConnection,
 	influxUrl string,
 	influxToken string,
@@ -233,7 +233,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 		}
 	}
 	err = s.rtdStateStore.Dispatch(
-		state.Action{
+		gux.Action{
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,

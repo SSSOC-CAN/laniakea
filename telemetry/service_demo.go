@@ -25,9 +25,10 @@ import (
 	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"github.com/rs/zerolog"
 )
 
@@ -48,8 +49,8 @@ var _ data.Service = (*TelemetryService) (nil)
 // NewTelemetryService creates a new Telemetry Service object which will use the drivers for the DAQ software
 func NewTelemetryService(
 	logger *zerolog.Logger,
-	rtdStore *state.Store,
-	ctrlStore *state.Store,
+	rtdStore *gux.Store,
+	ctrlStore *gux.Store,
 	_ drivers.DriverConnection,
 	influxUrl string,
 	influxToken string,
@@ -140,7 +141,7 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// Write polling interval to state
 	err = s.rtdStateStore.Dispatch(
-		state.Action{
+		gux.Action{
 			Type: 	 "telemetry/polling_interval/update",
 			Payload: pol_int,
 		},
@@ -193,7 +194,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 	currentState := s.ctrlStateStore.GetState()
 	cState, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidStateType
 	}
 	var (
 		factorT float64
@@ -261,7 +262,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 		}
 	}
 	err = s.rtdStateStore.Dispatch(
-		state.Action{
+		gux.Action{
 			Type: 	 "telemetry/update",
 			Payload: data.InitialRtdState{
 				RealTimeData: fmtrpc.RealTimeData{

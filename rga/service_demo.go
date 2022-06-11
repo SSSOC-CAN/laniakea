@@ -24,9 +24,10 @@ import (
 	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOCPaulCote/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"github.com/rs/zerolog"
 )
 
@@ -45,8 +46,8 @@ var _ data.Service = (*RGAService) (nil)
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(
 	logger *zerolog.Logger, 
-	rtdStore *state.Store, 
-	ctrlStore *state.Store,
+	rtdStore *gux.Store, 
+	ctrlStore *gux.Store,
 	_ drivers.DriverConnectionErr,
 	influxUrl string,
 	influxToken string,
@@ -179,7 +180,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 	currentState := s.ctrlStateStore.GetState()
 	cState, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidStateType
 	}
 	var (
 		factor float64
@@ -215,7 +216,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 		writer.WritePoint(p)
 	}
 	err = s.rtdStateStore.Dispatch(
-		state.Action{
+		gux.Action{
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,

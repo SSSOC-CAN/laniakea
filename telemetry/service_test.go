@@ -16,7 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 // initTelemetryService initializes a new telemetry service
@@ -26,7 +26,7 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	stateStore := state.CreateStore(TelemetryInitialState, TelemetryReducer)
+	stateStore := gux.CreateStore(TelemetryInitialState, TelemetryReducer)
 	c, err := drivers.ConnectToDAQ()
 	if err != nil {
 		t.Fatalf("Could not connect to telemetry DAQ: %v", err)

@@ -26,10 +26,11 @@ import (
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -64,11 +65,11 @@ var (
 			Data: makeInitialDataMap(),
 		},
 	}
-	rtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	rtdReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialRtdState)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -76,7 +77,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(data.InitialRtdState)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.RealTimeData = newState.RealTimeData
 			oldState.AverageTemperature = newState.AverageTemperature
@@ -85,7 +86,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.RealTimeData = newState
 			return oldState, nil
@@ -93,12 +94,12 @@ var (
 			// assert type of payload
 			newPol, ok := a.Payload.(int64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.TelPollingInterval = newPol
 			return oldState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
 	bufSize = 1 * 1024 * 1024
@@ -123,8 +124,8 @@ func initController(t *testing.T) (*ControllerService, func(string) error, strin
 	if err != nil {
 		t.Fatalf("Could not create a temporary directory: %v", err)
 	}
-	stateStore := state.CreateStore(rtdInitialState, rtdReducer)
-	ctrlStore := state.CreateStore(InitialState, ControllerReducer)
+	stateStore := gux.CreateStore(rtdInitialState, rtdReducer)
+	ctrlStore := gux.CreateStore(InitialState, ControllerReducer)
 	ctrlConn, _ := drivers.ConnectToController()
 	return NewControllerService(
 		&log,
@@ -259,7 +260,7 @@ func TestControllerAPI(t *testing.T) {
 					}
 				}
 				err := controllerService.rtdStateStore.Dispatch(
-					state.Action{
+					gux.Action{
 						Type: 	 "telemetry/update",
 						Payload: data.InitialRtdState{
 							RealTimeData: fmtrpc.RealTimeData{
@@ -307,7 +308,7 @@ func TestControllerAPI(t *testing.T) {
 			currentState := controllerService.rtdStateStore.GetState()
 			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				t.Errorf("%v", state.ErrInvalidStateType)
+				t.Errorf("%v", errors.ErrInvalidStateType)
 			}
 			if cState.AverageTemperature > c.expectedTempMax || cState.AverageTemperature < c.expectedTempMin {
 				t.Errorf("Unexpected average temperature value after changing setpoint: %v", cState.AverageTemperature)
