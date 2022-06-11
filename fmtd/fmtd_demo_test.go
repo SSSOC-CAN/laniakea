@@ -33,11 +33,11 @@ import (
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/rga"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
@@ -84,8 +84,8 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	defer cancel()
 
 	// Create State stores
-	rtdStateStore := state.CreateStore(RtdInitialState, RtdReducer)
-	ctrlStateStore := state.CreateStore(controller.InitialState, controller.ControllerReducer)
+	rtdStateStore := gux.CreateStore(RtdInitialState, RtdReducer)
+	ctrlStateStore := gux.CreateStore(controller.InitialState, controller.ControllerReducer)
 	
 	// Starting main server
 	err = server.Start()
@@ -596,12 +596,12 @@ var (
 			}
 			_, err = client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{})
 			if err == nil {
-				return nil, errors.Error("Expected an error and got none")
+				return nil, errors.ErrNoError
 			}
 			time.Sleep(10*time.Second)
 			_, err = client.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
 			if err == nil {
-				return nil, errors.Error("Macaroon didn't expire")
+				return nil, errors.ErrMacNotExpired
 			}
 			return conn, nil
 		}},

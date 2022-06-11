@@ -16,15 +16,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 )
 
@@ -64,7 +65,7 @@ type TestPlanService struct {
 	stateWriter 		*json.Encoder
 	reportWriter 		goroutineSafeCSVWriter
 	collectorClient		func() (fmtrpc.DataCollectorClient, func(), error)
-	stateStore			*state.Store
+	stateStore			*gux.Store
 	wg					sync.WaitGroup
 }
 
@@ -93,7 +94,7 @@ func writeMsgToReport(report goroutineSafeCSVWriter, lvl fmtrpc.ReportLvl, msg, 
 }
 
 // NewTestPlanService instantiates the TestPlanService struct
-func NewTestPlanService(logger *zerolog.Logger, getConnection func() (fmtrpc.DataCollectorClient, func(), error), store *state.Store) *TestPlanService {
+func NewTestPlanService(logger *zerolog.Logger, getConnection func() (fmtrpc.DataCollectorClient, func(), error), store *gux.Store) *TestPlanService {
 	return &TestPlanService{
 		Logger: logger,
 		name: testPlanExecName,

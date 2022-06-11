@@ -12,6 +12,8 @@ require (
 )
 
 require (
+	github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a // indirect
+	github.com/SSSOCPaulCote/gux v0.0.0-20220610071000-9f65ed9f367d // indirect
 	github.com/beorn7/perks v1.0.0 // indirect
 	github.com/btcsuite/btcwallet v0.12.0 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect

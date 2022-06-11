@@ -23,16 +23,9 @@ import (
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
-)
-
-const (
-	ErrNegativeRate = errors.Error("rates cannot be negative")
-	ErrTelNotRecoring = errors.Error("telemetry service not yet recording")
-	ErrCtrllerInUse = errors.Error("controller service currently in use")
-	ErrNegativePressure = errors.Error("pressures cannot be negative")
 )
 
 type ControllerService struct {
@@ -46,7 +39,7 @@ var _ api.RestProxyService = (*ControllerService)(nil)
 var _ data.Service = (*ControllerService) (nil)
 
 // NewControllerService creates an instance of the ControllerService struct
-func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlStore *state.Store, _ drivers.DriverConnection) *ControllerService {
+func NewControllerService(logger *zerolog.Logger, rtdStore *gux.Store, ctrlStore *gux.Store, _ drivers.DriverConnection) *ControllerService {
 	return &ControllerService{
 		BaseControllerService: BaseControllerService{
 			ctrlState: waitingToStart,
@@ -62,7 +55,7 @@ func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlSto
 func (s *ControllerService) Start() error {
 	s.Logger.Info().Msg("Starting controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return ErrServiceAlreadyStarted
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("No Connection to a controller is currently active.`")
 	s.Logger.Info().Msg("Controller Service successfully started.")
@@ -73,7 +66,7 @@ func (s *ControllerService) Start() error {
 func (s *ControllerService) Stop() error {
 	s.Logger.Info().Msg("Stopping controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return ErrServiceAlreadyStopped
+		return errors.ErrServiceAlreadyStopped
 	}
 	s.Logger.Info().Msg("Controller service successfully stopped.")
 	return nil
@@ -118,25 +111,25 @@ func(s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *proxy
 // SetTemperature takes a gRPC request and changes the temperature set point accordingly
 func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateStream demorpc.Controller_SetTemperatureServer) error {
 	if s.ctrlState != waitingToStart {
-		return ErrCtrllerInUse
+		return errors.ErrCtrllerInUse
 	}
 	if req.TempChangeRate < float64(0) {
-		return ErrNegativeRate
+		return errors.ErrNegativeRate
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidStateType
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return ErrTelNotRecoring
+		return errors.ErrTelNotRecoring
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidStateType
 	}
 	var (
 		actualTempChangeRate float64
@@ -256,7 +249,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return state.ErrInvalidStateType
+				return errors.ErrInvalidStateType
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetTempResponse{
@@ -289,29 +282,29 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 // SetPressure takes a gRPC request and changes the pressure set point accordingly
 func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStream demorpc.Controller_SetPressureServer) error {
 	if s.ctrlState != waitingToStart {
-		return ErrCtrllerInUse
+		return errors.ErrCtrllerInUse
 	}
 	// check if we have negative rate
 	if req.PressureChangeRate < float64(0) {
-		return ErrNegativeRate
+		return errors.ErrNegativeRate
 	}
 	if req.PressureSetPoint < float64(0) {
-		return ErrNegativePressure
+		return errors.ErrNegativePressure
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidStateType
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return ErrTelNotRecoring
+		return errors.ErrTelNotRecoring
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidStateType
 	}
 	var (
 		actualPresChangeRate float64
@@ -431,7 +424,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return state.ErrInvalidStateType
+				return errors.ErrInvalidStateType
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetPresResponse{

@@ -15,18 +15,19 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 var (
 	ctrlInitialState = data.InitialCtrlState{
 		PressureSetPoint: 760.0,
 	}
-	ctrlReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	ctrlReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialCtrlState)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -34,7 +35,7 @@ var (
 			// assert type of payload
 			newTemp, ok := a.Payload.(float64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.TemperatureSetPoint = newTemp
 			return oldState, nil
@@ -42,12 +43,12 @@ var (
 			// assert type of payload
 			newPres, ok := a.Payload.(float64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			oldState.PressureSetPoint = newPres
 			return oldState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
 )
@@ -60,8 +61,8 @@ func TestNewMessage(t *testing.T) {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmp_dir)
-	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	ctrlStore := state.CreateStore(ctrlInitialState, ctrlReducer)
+	stateStore := gux.CreateStore(RGAInitialState, RGAReducer)
+	ctrlStore := gux.CreateStore(ctrlInitialState, ctrlReducer)
 	rga := NewRGAService(&log, tmp_dir, stateStore, ctrlStore, drivers.BlankConnectionErr{})
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)

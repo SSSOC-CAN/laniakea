@@ -24,7 +24,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOCPaulCote/gux"
 	"github.com/rs/zerolog"
 )
 
@@ -41,8 +41,8 @@ var _ data.Service = (*TelemetryService) (nil)
 // NewTelemetryService creates a new Telemetry Service object which will use the appropriate drivers
 func NewTelemetryService(
 	logger *zerolog.Logger,
-	store *state.Store,
-	_ *state.Store,
+	store *gux.Store,
+	_ *gux.Store,
 	connection *drivers.DAQConnection,
 	influxUrl string,
 	influxToken string,
@@ -133,7 +133,7 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// Write polling interval to state
 	err := s.rtdStateStore.Dispatch(
-		state.Action{
+		gux.Action{
 			Type: 	 "telemetry/polling_interval/update",
 			Payload: pol_int,
 		},
@@ -257,7 +257,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 
 	}
 	err := s.rtdStateStore.Dispatch(
-		state.Action{
+		gux.Action{
 			Type: 	 "telemetry/update",
 			Payload: data.InitialRtdState{
 				RealTimeData: fmtrpc.RealTimeData{

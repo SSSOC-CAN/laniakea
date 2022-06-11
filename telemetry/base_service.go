@@ -13,7 +13,7 @@ import (
 	influx "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 var (
@@ -24,8 +24,8 @@ var (
 type BaseTelemetryService struct {
 	Running				int32 //atomically
 	Recording			int32 //atomically
-	rtdStateStore		*state.Store
-	ctrlStateStore		*state.Store
+	rtdStateStore		*gux.Store
+	ctrlStateStore		*gux.Store
 	Logger				*zerolog.Logger
 	StateChangeChan		chan *data.StateChangeMsg
 	QuitChan			chan struct{}

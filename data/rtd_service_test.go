@@ -12,19 +12,21 @@ import (
 	"os"
 	"net"
 	"testing"
+
 	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
 
 var (
-	testReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	testReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -32,11 +34,11 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidPayloadType
 			}
 			return newState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
 	bufSize = 1 * 1024 * 1024
@@ -47,7 +49,7 @@ var (
 // TestRTDServiceStartStop tests if we can initialize, start and stop the RTD service
 func TestRTDServiceStartStop(t *testing.T) {
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	stateStore := state.CreateStore(fmtrpc.RealTimeData{}, testReducer)
+	stateStore := gux.CreateStore(fmtrpc.RealTimeData{}, testReducer)
 	rtdService := NewRTDService(
 		&logger,
 		stateStore,
@@ -67,7 +69,7 @@ func Init(t *testing.T) func() {
 	lis = bufconn.Listen(bufSize)
 	grpcServer := grpc.NewServer()
 	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	stateStore := state.CreateStore(fmtrpc.RealTimeData{}, testReducer)
+	stateStore := gux.CreateStore(fmtrpc.RealTimeData{}, testReducer)
 	rtdService := NewRTDService(&logger, stateStore)
 	err := rtdService.Start()
 	if err != nil {
