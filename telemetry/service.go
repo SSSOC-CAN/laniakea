@@ -122,8 +122,18 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 		return err
 	}
 	bucketAPI := s.idb.BucketsAPI()
-	bucket, _ := bucketAPI.FindBucketByName(context.Background(), bucketName)
-	if bucket == nil {
+	buckets, err := bucketAPI.FindBucketsByOrgName(context.Background(), orgName)
+	if err != nil {
+		return err
+	}
+	var found bool
+	for _, bucket := range *buckets {
+		if bucket.Name == bucketName {
+			found = true
+			break
+		}
+	}
+	if !found {
 		_, err := bucketAPI.CreateBucketWithName(context.Background(), org, bucketName, domain.RetentionRule{EverySeconds: 0})
 		if err != nil {
 			return err

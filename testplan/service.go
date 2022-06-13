@@ -22,8 +22,8 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
@@ -280,7 +280,7 @@ func (s *TestPlanService) executeTestPlan() {
 		Type: fmtrpc.RecordService_TELEMETRY,
 	}
 	_, err = client.StartRecording(ctx, telemetryRecordReq)
-	if err != nil && err != telemetry.ErrAlreadyRecording {
+	if err != nil && err != errors.ErrAlreadyRecording {
 		s.Logger.Fatal().Msg(fmt.Sprintf("Cannot start telemetry data recording: %v", err))
 		err := writeMsgToReport(
 			s.reportWriter,
@@ -394,7 +394,7 @@ func (s *TestPlanService) executeTestPlan() {
 						Type: fmtrpc.RecordService_RGA,
 					}
 					_, err = client.StartRecording(ctx, rgaRecordReq)
-					if err != nil && err != telemetry.ErrAlreadyRecording {
+					if err != nil && err != errors.ErrAlreadyRecording {
 						s.Logger.Error().Msg(fmt.Sprintf("Cannot start RGA data recording: %v", err))
 						newLines = append(newLines, NewLine{
 							RptLvl: fmtrpc.ReportLvl_ERROR,

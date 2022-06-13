@@ -24,6 +24,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/SSSOCPaulCote/gux"
@@ -111,7 +112,7 @@ func (s *RGAService) Name() string {
 // startRecording starts data recording from the RGA device
 func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	if s.currentPressure == 0 || s.currentPressure > drivers.RGAMinimumPressure {
 		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, drivers.RGAMinimumPressure)
@@ -153,8 +154,18 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 		return err
 	}
 	bucketAPI := s.idb.BucketsAPI()
-	bucket, _ := bucketAPI.FindBucketByName(context.Background(), influxRGABucketName)
-	if bucket == nil {
+	buckets, err := bucketAPI.FindBucketsByOrgName(context.Background(), orgName)
+	if err != nil {
+		return err
+	}
+	var found bool
+	for _, bucket := range *buckets {
+		if bucket.Name == influxRGABucketName {
+			found = true
+			break
+		}
+	}
+	if !found {
 		_, err := bucketAPI.CreateBucketWithName(context.Background(), org, influxRGABucketName, domain.RetentionRule{EverySeconds: 0})
 		if err != nil {
 			return err
@@ -164,7 +175,7 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -252,7 +263,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 // stopRecording stops the data recording process
 func (s *RGAService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return ErrAlreadyStoppedRecording
+		return errors.ErrAlreadyStoppedRecording
 	}
 	s.CancelChan <- struct{}{}
 	_, err := s.connection.FilamentControl("Off")
