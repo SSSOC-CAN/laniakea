@@ -18,7 +18,7 @@ var (
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
 		if !ok {
-			return nil, errors.ErrInvalidStateType
+			return nil, errors.ErrInvalidType
 		}
 		// switch case action
 		switch a.Type {
@@ -26,7 +26,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, errors.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			return newState, nil
 		default:

@@ -24,7 +24,7 @@ import (
 	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
-	"github.com/SSSOCPaulCote/errors"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/SSSOCPaulCote/gux"
@@ -112,7 +112,7 @@ func (s *RGAService) Stop() error {
 // startRecording starts data recording from the RGA device
 func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	if s.currentPressure == 0 || s.currentPressure > minimumPressure {
 		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure)
@@ -129,8 +129,18 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 		return err
 	}
 	bucketAPI := s.idb.BucketsAPI()
-	bucket, _ := bucketAPI.FindBucketByName(context.Background(), influxRGABucketName)
-	if bucket == nil {
+	buckets, err := bucketAPI.FindBucketsByOrgName(context.Background(), orgName)
+	if err != nil {
+		return err
+	}
+	var found bool
+	for _, bucket := range *buckets {
+		if bucket.Name == influxRGABucketName {
+			found = true
+			break
+		}
+	}
+	if !found {
 		_, err := bucketAPI.CreateBucketWithName(context.Background(), org, influxRGABucketName, domain.RetentionRule{EverySeconds: 0})
 		if err != nil {
 			return err
@@ -140,7 +150,7 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -180,7 +190,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 	currentState := s.ctrlStateStore.GetState()
 	cState, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return errors.ErrInvalidStateType
+		return errors.ErrInvalidType
 	}
 	var (
 		factor float64
@@ -235,7 +245,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 // stopRecording stops the data recording process
 func (s *RGAService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return ErrAlreadyStoppedRecording
+		return errors.ErrAlreadyStoppedRecording
 	}
 	s.CancelChan <- struct{}{}
 	return nil

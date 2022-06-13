@@ -12,6 +12,7 @@ import (
 
 const (
 	ErrInvalidType = bg.Error("invalid type")
+	ErrInvalidAction = bg.Error("invalid action")
 	ErrNegativeRate = bg.Error("rates cannot be negative")
 	ErrTelNotRecoring = bg.Error("telemetry service not yet recording")
 	ErrCtrllerInUse = bg.Error("controller service currently in use")
@@ -23,4 +24,6 @@ const (
 	ErrFloatLargerThanOne = bg.Error("float is larger than or equal to 1")
 	ErrNoError = bg.Error("expected an error and got none")
 	ErrMacNotExpired = bg.Error("macaroon didn't expire")
+	ErrAlreadyRecording = bg.Error("already recording")
+	ErrAlreadyStoppedRecording = bg.Error("already stopped recording")
 )
