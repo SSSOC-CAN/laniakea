@@ -35,7 +35,7 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 	if !ok {
 		t.Fatalf("Could not connect to telemetry DAQ: %v", errors.ErrInvalidType)
 	}
-	return NewTelemetryService(&log, tmp_dir, stateStore, _, daqConn), func(){
+	return NewTelemetryService(&log, stateStore, _, daqConn, "", ""), func(){
 		daqConn.Close()
 		os.RemoveAll(tmp_dir)
 	}
@@ -60,12 +60,12 @@ func TelemetryServiceStart(t *testing.T, s *TelemetryService) {
 // Recording tests whether a recording can be successfully started and stopped
 func TelemetryRecording(t *testing.T, s *TelemetryService) {
 	err := s.startRecording(drivers.TelemetryDefaultPollingInterval)
-	if err != nil {
-		t.Errorf("Could not start recording: %v", err)
+	if err == nil {
+		t.Errorf("Expected an error and none occured")
 	}
 	err = s.stopRecording()
-	if err != nil {
-		t.Errorf("Could not stop recording: %v", err)
+	if err == nil {
+		t.Errorf("Expected an error and none occured")
 	}
 	time.Sleep(5*time.Second)
 	err = s.Stop() // Only stop after since closing closes the channels

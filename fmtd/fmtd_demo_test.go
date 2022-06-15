@@ -48,6 +48,8 @@ import (
 var (
 	testingConsoleOutput bool = false
 	defaultTestingPwd = []byte("abcdefgh")
+	defaultBucketName = "test"
+	defaultOrgName = "sssoc"
 )
 
 func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySigChan chan struct{}, wg *sync.WaitGroup, tempDir string) {
@@ -152,7 +154,6 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	}
 	telemetryService := telemetry.NewTelemetryService(
 		&NewSubLogger(server.logger, "TEL").SubLogger,
-		server.cfg.DataOutputDir,
 		rtdStateStore,
 		ctrlStateStore,
 		daqConnAssert,
@@ -173,7 +174,6 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	}
 	rgaService := rga.NewRGAService(
 		&NewSubLogger(server.logger, "RGA").SubLogger,
-		server.cfg.DataOutputDir,
 		rtdStateStore,
 		ctrlStateStore,
 		rgaConnAssert,
@@ -774,6 +774,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
 			PollingInterval: int64(1),
 			Type: fmtrpc.RecordService_TELEMETRY,
+			OrgName: defaultOrgName,
+			BucketName: defaultBucketName,
 		})
 		if err == nil {
 			t.Error("Expected an error but got none")
@@ -783,6 +785,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	t.Run("start-record-rga-service-before-telemetry", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
 			Type: fmtrpc.RecordService_RGA,
+			OrgName: defaultOrgName,
 		})
 		if err == nil {
 			t.Error("Expected an error but got none")
@@ -792,6 +795,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	t.Run("start-record-telemetry", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
 			Type: fmtrpc.RecordService_TELEMETRY,
+			OrgName: defaultOrgName,
+			BucketName: defaultBucketName,
 		})
 		if err != nil {
 			t.Errorf("Could not start telemetry: %v", err)
@@ -801,6 +806,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	t.Run("start-record-telemetry-after-starting", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
 			Type: fmtrpc.RecordService_TELEMETRY,
+			OrgName: defaultOrgName,
+			BucketName: defaultBucketName,
 		})
 		if err == nil {
 			t.Error("Expected an error but got none")
@@ -837,6 +844,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	t.Run("restart-record-telemetry", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
 			Type: fmtrpc.RecordService_TELEMETRY,
+			OrgName: defaultOrgName,
+			BucketName: defaultBucketName,
 		})
 		if err != nil {
 			t.Errorf("Could not start telemetry: %v", err)
@@ -1039,6 +1048,8 @@ func TestControllerGrpcApi(t *testing.T) {
 	dataClient := fmtrpc.NewDataCollectorClient(authConn)
 	_, err = dataClient.StartRecording(ctx, &fmtrpc.RecordRequest{
 		Type: fmtrpc.RecordService_TELEMETRY,
+		OrgName: defaultOrgName,
+		BucketName: defaultBucketName,
 	})
 	if err != nil {
 		t.Fatalf("Could not start telemetry data recording: %v", err)

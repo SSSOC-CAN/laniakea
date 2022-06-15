@@ -147,7 +147,7 @@ func TestStartStopControllerService(t *testing.T) {
 	})
 	t.Run("Start Controller Service Invalid", func(t *testing.T) {
 		err := controllerService.Start()
-		if err != ErrServiceAlreadyStarted {
+		if err != errors.ErrServiceAlreadyStarted {
 			t.Errorf("Unexpected error when starting controller service: %v", err)
 		}
 	})
@@ -159,7 +159,7 @@ func TestStartStopControllerService(t *testing.T) {
 	})
 	t.Run("Stop Controller Service Invalid", func(t *testing.T) {
 		err := controllerService.Stop()
-		if err != ErrServiceAlreadyStopped {
+		if err != errors.ErrServiceAlreadyStopped {
 			t.Errorf("Unexpected error when starting controller service: %v", err)
 		}
 	})

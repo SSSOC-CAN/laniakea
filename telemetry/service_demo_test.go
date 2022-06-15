@@ -103,7 +103,7 @@ func initTelemetryService(t *testing.T) (*TelemetryService, func()) {
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	stateStore := gux.CreateStore(rtdInitialState, rtdReducer)
 	ctrlStore := gux.CreateStore(ctrlInitialState, ctrlReducer)
-	return NewTelemetryService(&log, tmp_dir, stateStore, ctrlStore, drivers.BlankConnection{}), func(){os.RemoveAll(tmp_dir)}
+	return NewTelemetryService(&log, stateStore, ctrlStore, drivers.BlankConnection{}, "", ""), func(){os.RemoveAll(tmp_dir)}
 }
 
 // TestTelemetryService tests if we can initialize the TelemetryService struct and properly connect to the telemetry DAQ
@@ -125,12 +125,12 @@ func TelemetryServiceStart(t *testing.T, s *TelemetryService) {
 // Recording tests whether a recording can be successfully started and stopped
 func TelemetryRecording(t *testing.T, s *TelemetryService) {
 	err := s.startRecording(DefaultPollingInterval)
-	if err != nil {
-		t.Errorf("Could not start recording: %v", err)
+	if err == nil {
+		t.Errorf("Expected an error and none occured")
 	}
 	err = s.stopRecording()
-	if err != nil {
-		t.Errorf("Could not stop recording: %v", err)
+	if err == nil {
+		t.Errorf("Expected an error and none occured")
 	}
 	time.Sleep(5*time.Second)
 	err = s.Stop() // Only stop after since closing closes the channels
