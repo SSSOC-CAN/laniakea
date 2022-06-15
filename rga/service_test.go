@@ -36,7 +36,7 @@ func TestNewMessage(t *testing.T) {
 	}
 	defer rgaConn.Close()
 	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	rgaService := NewRGAService(&log, tmp_dir, stateStore, _, rgaConn)
+	rgaService := NewRGAService(&log, stateStore, _, rgaConn, "", "")
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
@@ -65,7 +65,7 @@ func RGAServiceStop(t *testing.T, s *RGAService) {
 
 // RGAStartRecord tests the startRecording method and expects an error
 func RGAStartRecord(t *testing.T, s *RGAService) {
-	err := s.startRecording(drivers.RGAMinPollingInterval)
+	err := s.startRecording(drivers.RGAMinPollingInterval, "test")
 	if err == nil {
 		t.Fatalf("Expected an error and none occured")
 	}
