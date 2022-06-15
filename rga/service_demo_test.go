@@ -27,7 +27,7 @@ var (
 		// assert type of s
 		oldState, ok := s.(data.InitialCtrlState)
 		if !ok {
-			return nil, errors.ErrInvalidStateType
+			return nil, errors.ErrInvalidType
 		}
 		// switch case action
 		switch a.Type {
@@ -35,7 +35,7 @@ var (
 			// assert type of payload
 			newTemp, ok := a.Payload.(float64)
 			if !ok {
-				return nil, errors.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.TemperatureSetPoint = newTemp
 			return oldState, nil
@@ -43,7 +43,7 @@ var (
 			// assert type of payload
 			newPres, ok := a.Payload.(float64)
 			if !ok {
-				return nil, errors.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.PressureSetPoint = newPres
 			return oldState, nil

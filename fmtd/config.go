@@ -33,6 +33,8 @@ type Config struct {
 	TCPAddr			string		`yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
 	DataOutputDir	string		`yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
 	ExtraIPAddr		[]string	`yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
+	InfluxURL		string      `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
+	InfluxAPIToken  string      `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
 	MacaroonDBPath	string
 	TLSCertPath		string
 	TLSKeyPath		string
@@ -40,8 +42,6 @@ type Config struct {
 	TestMacPath		string
 	WSPingInterval	time.Duration
 	WSPongWait		time.Duration
-	InfluxURL		string
-	InfluxAPIToken  string
 }
 
 // default_config returns the default configuration
@@ -65,7 +65,6 @@ var (
 	default_ws_ping_interval = time.Second * 30
 	default_ws_pong_wait = time.Second * 5
 	default_influx_url string = "https://174.113.21.199:8088"
-	default_influx_api_token string = "3Dlp63Nu_J1XlLsyGSsfH-5-c_DZKJMqb4DzDBMvvDebuGD1gH44rnyZsvQsUAk74tn3CqJfa8eULRlKgTZ7Tw==" // write/read to any bucket
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
@@ -84,7 +83,6 @@ var (
 			WSPingInterval: default_ws_ping_interval,
 			WSPongWait: default_ws_pong_wait,
 			InfluxURL: default_influx_url,
-			InfluxAPIToken: default_influx_api_token,
 		}
 	}
 )
@@ -98,7 +96,7 @@ func InitConfig(isTesting bool) (Config, error) {
 			log.Println(err)
 		}
 	}
-	var config Config
+	config := default_config()
 	if utils.FileExists(path.Join(default_log_dir(), config_file_name)) {
 		filename, _ := filepath.Abs(path.Join(default_log_dir(), config_file_name))
 		config_file, err := ioutil.ReadFile(filename)
@@ -116,8 +114,6 @@ func InitConfig(isTesting bool) (Config, error) {
 		}
 		config.WSPingInterval = default_ws_ping_interval
 		config.WSPongWait = default_ws_pong_wait
-	} else {
-		config = default_config()
 	}
 	// now to parse the flags
 	if !isTesting {
@@ -216,6 +212,12 @@ func check_yaml_config(config Config) Config {
 			if f.String() == "" {
 				change_field(f, default_data_output_dir)
 			}
+		case "InfluxURL":
+			if f.String() == "" {
+				change_field(f, default_influx_url)
+			}
+		default:
+			continue 
 		}
 	}
 	return config
