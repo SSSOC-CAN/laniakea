@@ -84,7 +84,7 @@ var (
 			// assert type of payload
 			newPol, ok := a.Payload.(int64)
 			if !ok {
-				return nil, errors.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.TelPollingInterval = newPol
 			return oldState, nil
@@ -124,7 +124,7 @@ func TelemetryServiceStart(t *testing.T, s *TelemetryService) {
 
 // Recording tests whether a recording can be successfully started and stopped
 func TelemetryRecording(t *testing.T, s *TelemetryService) {
-	err := s.startRecording(DefaultPollingInterval)
+	err := s.startRecording(DefaultPollingInterval, "")
 	if err == nil {
 		t.Errorf("Expected an error and none occured")
 	}

@@ -180,8 +180,6 @@ func TestTestplan(t *testing.T) {
 	rtdLogger := logger.With().Str("subsystem", "RTD").Logger()
 	rtdService := data.NewRTDService(
 		&rtdLogger,
-		defaultTestingTCPAddr,
-		defaultTestingTCPPort,
 		store,
 	)
 	err = rtdService.RegisterWithGrpcServer(grpcServer)
