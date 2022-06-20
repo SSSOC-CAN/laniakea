@@ -124,7 +124,7 @@ func TelemetryServiceStart(t *testing.T, s *TelemetryService) {
 
 // Recording tests whether a recording can be successfully started and stopped
 func TelemetryRecording(t *testing.T, s *TelemetryService) {
-	err := s.startRecording(DefaultPollingInterval, "")
+	err := s.startRecording(DefaultPollingInterval, "", "")
 	if err == nil {
 		t.Errorf("Expected an error and none occured")
 	}
