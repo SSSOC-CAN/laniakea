@@ -722,6 +722,7 @@ func TestFmtGrpcApi(t *testing.T) {
 
 // TestDataCollectorGrpcApi tests the data collector API service
 func TestDataCollectorGrpcApi(t *testing.T) {
+	t.Skip("Cannot be currently tested in this release")
 	// temp dir
 	tempDir, err := ioutil.TempDir("", "integration-testing-")
 	if err != nil {
@@ -998,6 +999,7 @@ var (
 
 // TestControllerGrpcApi tests the Controller API service
 func TestControllerGrpcApi(t *testing.T) {
+	t.Skip("Already thoroughly tested in controller package")
 	// temp dir
 	tempDir, err := ioutil.TempDir("", "integration-testing-")
 	if err != nil {
