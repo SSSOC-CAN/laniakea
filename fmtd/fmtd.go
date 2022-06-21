@@ -1,4 +1,8 @@
 /*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -44,11 +48,11 @@ import (
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/rga"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/macaroon-bakery.v2/bakery"
@@ -59,11 +63,11 @@ var (
 	tempPwd = []byte("abcdefgh")
 	defaultMacTimeout int64 = 60
 	RtdInitialState = data.InitialRtdState{}
-	RtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	RtdReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialRtdState)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidType
 		}
 		// switch case action
 		switch a.Type {
@@ -71,7 +75,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(data.InitialRtdState)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.RealTimeData = newState.RealTimeData
 			oldState.AverageTemperature = newState.AverageTemperature
@@ -80,7 +84,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.RealTimeData = newState
 			return oldState, nil
@@ -88,12 +92,12 @@ var (
 			// assert type of payload
 			newPol, ok := a.Payload.(int64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.TelPollingInterval = newPol
 			return oldState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
 )
@@ -106,8 +110,8 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer cancel()
 
 	// Create State stores
-	rtdStateStore := state.CreateStore(RtdInitialState, RtdReducer)
-	ctrlStateStore := state.CreateStore(controller.InitialState, controller.ControllerReducer)
+	rtdStateStore := gux.CreateStore(RtdInitialState, RtdReducer)
+	ctrlStateStore := gux.CreateStore(controller.InitialState, controller.ControllerReducer)
 
 	// Starting main server
 	err := server.Start()
@@ -152,7 +156,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
-	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, server.cfg.TCPAddr, server.cfg.TCPPort, rtdStateStore)
+	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, rtdStateStore)
 	err = rtdService.RegisterWithGrpcServer(grpc_server)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
@@ -175,10 +179,11 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	telemetryService := telemetry.NewTelemetryService(
 		&NewSubLogger(server.logger, "TEL").SubLogger,
-		server.cfg.DataOutputDir,
 		rtdStateStore,
 		ctrlStateStore,
 		daqConnAssert,
+		server.cfg.InfluxURL,
+		server.cfg.InfluxAPIToken,
 	)
 	telemetryService.RegisterWithRTDService(rtdService)
 	services = append(services, telemetryService)
@@ -196,10 +201,11 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	rgaService := rga.NewRGAService(
 		&NewSubLogger(server.logger, "RGA").SubLogger,
-		server.cfg.DataOutputDir,
 		rtdStateStore,
 		ctrlStateStore,
 		rgaConnAssert,
+		server.cfg.InfluxURL,
+		server.cfg.InfluxAPIToken,
 	)
 	rgaService.RegisterWithRTDService(rtdService)
 	services = append(services, rgaService)

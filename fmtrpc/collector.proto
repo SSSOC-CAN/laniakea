@@ -1,3 +1,9 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+*/
+
 syntax = "proto3";
 
 package fmtrpc;
@@ -17,10 +23,6 @@ service DataCollector {
     SubscribeDataStream returns a uni-directional stream (server -> client) of data being recorded from the Telemetry and RGA services.
     */
     rpc SubscribeDataStream (SubscribeDataRequest) returns (stream RealTimeData);
-    /*
-    DownloadHistoricalData opens up a TCP server on the FMTD and returns the TCP port. Once the TCP server accepts a request, it sends the requested file.
-    */
-    rpc DownloadHistoricalData (HistoricalDataRequest) returns (HistoricalDataResponse);
 }
 
 /*
@@ -40,6 +42,12 @@ message RecordRequest {
 
     // Recording service type. Choose from either `telemetry` or `rga`
     RecordService type = 2;
+
+    // Name of the organization. 
+    string org_name = 3;
+
+    // Name of the bucket. 
+    string bucket_name = 4;
 }
 
 message RecordResponse {
@@ -80,17 +88,4 @@ message RealTimeData {
 
     // A map of the data points for this packet
     map<int64, DataField> data = 4;
-}
-
-message HistoricalDataRequest {
-    // Recording service type. Choose from either `telemetry` or `rga`
-    RecordService source = 1;
-}
-
-message HistoricalDataResponse {
-    // The TCP server port
-    int64 server_port = 1;
-
-    // The size of the buffer to use for the TCP connection
-    int64 buffer_size = 2;
 }

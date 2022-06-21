@@ -1,4 +1,9 @@
 /*
+
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

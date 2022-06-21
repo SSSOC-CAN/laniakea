@@ -1,3 +1,7 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/06/10
+
 FROM golang:1.18.0-buster
 
 RUN apt-get -y update \
@@ -10,5 +14,4 @@ RUN cd /tmp
 
 RUN git clone https:/github.com/SSSOC-CAN/fmtd /tmp/fmtd \
   && cd /tmp/fmtd \
-  && git checkout build_tags \
   && make install tags="demo"

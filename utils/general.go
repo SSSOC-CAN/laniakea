@@ -1,4 +1,8 @@
 /*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,10 +26,15 @@ THE SOFTWARE.
 package utils
 
 import (
+	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+
+	"github.com/SSSOC-CAN/fmtd/errors"
 )
 
 var (
@@ -67,4 +76,40 @@ func RandSeq(n int) string {
         b[i] = letters[rand.Intn(len(letters))]
     }
     return string(b)
+}
+
+// NormalizeToNDecimalPlace will take any float below 1 and get the factor to transform it to 1 with equivalent decimal places
+func NormalizeToNDecimalPlace(oldF float64) (float64, error) {
+	if oldF >= 1 {
+		return 0, errors.ErrFloatLargerThanOne
+	}
+	s := fmt.Sprintf("%f", oldF)
+	newS := strings.Replace(s, ".", "", -1)
+	i := 0
+	for {
+		if newS[0] == byte('0') {
+			newS = strings.Replace(newS, "0", "", 1)
+			i++
+		} else {
+			break
+		}
+	}
+	newS = newS[:1] + "." + newS[1:]
+	newF, err := strconv.ParseFloat(newS, 64)
+	if err != nil {
+		return 0, err
+	}
+	factor := oldF / newF
+	factor = math.Round(factor*math.Pow(10, float64(i))) / math.Pow(10, float64(i))
+	return factor, nil
+}
+
+// NumDecPlaces returns the number of decimal places a float is specified to
+func NumDecPlaces(v float64) int {
+	s := strconv.FormatFloat(v, 'f', -1, 64)
+	i := strings.IndexByte(s, '.')
+	if i > -1 {
+		return len(s) - i - 1
+	}
+	return 1
 }

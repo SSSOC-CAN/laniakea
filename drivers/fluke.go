@@ -1,6 +1,10 @@
 // +build windows,386,fluke,!demo
 
 /*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+
 The MIT License (MIT)
 
 Copyright © 2018 Kalkfabrik Netstal AG, <info@kfn.ch>

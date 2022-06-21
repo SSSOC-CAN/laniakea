@@ -1,4 +1,8 @@
 /*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -140,6 +144,14 @@ var startRecording = cli.Command{
 			Name:  "polling_interval",
 			Usage: "If set, then the time between polls to the DAQ will be set to the specified amount in seconds.",
 		},
+		cli.StringFlag{
+			Name: "org_name",
+			Usage: "Required. Name of the influx organization",
+		},
+		cli.StringFlag{
+			Name: "record_name",
+			Usage: "Required for telemetry. Name given to the recording",
+		},
 	},
 	Action: startRecord,
 }
@@ -147,13 +159,16 @@ var startRecording = cli.Command{
 // startRecord is the CLI wrapper around the TelemetryService StartRecording method
 func startRecord(ctx *cli.Context) error {
 	ctxc := getContext()
-	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
+	if ctx.NArg() != 1 || ctx.NumFlags() > 3 || ctx.String("org_name") == "" {
 		return cli.ShowCommandHelp(ctx, "start-record")
 	}
 	client, cleanUp := getDataCollectorClient(ctx)
 	defer cleanUp()
 	var polling_interval int64
 	serviceNameStr := ctx.Args().First()
+	if serviceNameStr == "telemetry" && ctx.String("record_name") == "" {
+		return cli.ShowCommandHelp(ctx, "start-record")
+	}
 	var serviceName fmtrpc.RecordService
 	if ctx.NumFlags() != 0 {
 		polling_interval = ctx.Int64("polling_interval")
@@ -169,6 +184,8 @@ func startRecord(ctx *cli.Context) error {
 	recordRequest := &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
 		Type: serviceName,
+		OrgName: ctx.String("org_name"),
+		BucketName: ctx.String("record_name"),
 	}
 	recordResponse, err := client.StartRecording(ctxc, recordRequest)
 	if err != nil {
