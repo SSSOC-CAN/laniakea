@@ -26,6 +26,8 @@ import (
 type Config struct {
 	DefaultLogDir	bool 		`yaml:"DefaultLogDir"`
 	LogFileDir 		string		`yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	MaxLogFiles		int64		`yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
+	MaxLogFileSize	int64		`yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`		
 	ConsoleOutput	bool		`yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
 	GrpcPort		int64		`yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
 	RestPort		int64		`yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
@@ -65,10 +67,14 @@ var (
 	default_ws_ping_interval = time.Second * 30
 	default_ws_pong_wait = time.Second * 5
 	default_influx_url string = "https://174.113.21.199:8088"
+	default_log_file_size int64 = 10
+	default_max_log_files int64 = 0
 	default_config = func() Config {
 		return Config{
 			DefaultLogDir: true,
 			LogFileDir: default_log_dir(),
+			MaxLogFiles: default_max_log_files,
+			MaxLogFileSize: default_log_file_size,
 			ConsoleOutput: true,
 			GrpcPort: default_grpc_port,
 			RestPort: default_rest_port,
@@ -167,6 +173,10 @@ func check_yaml_config(config Config) Config {
 				change_field(f, default_log_dir())
 				dld := v.FieldByName("DefaultLogDir")
 				change_field(dld, true)
+			}
+		case "MaxLogFileSize":
+			if f.Int() == 0 {
+				change_field(f, default_log_file_size)
 			}
 		case "GrpcPort":
 			if f.Int() == 0 { // This may end up being a range of values
