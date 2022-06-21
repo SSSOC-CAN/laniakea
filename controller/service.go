@@ -1,5 +1,11 @@
 // +build !demo
 
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+*/
+
 package controller
 
 import (
@@ -10,7 +16,8 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOC-CAN/gux"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 )
@@ -25,7 +32,7 @@ var _ api.RestProxyService = (*ControllerService)(nil)
 var _ data.Service = (*ControllerService) (nil)
 
 // NewControllerService creates an instance of the ControllerService struct
-func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlStore *state.Store, _ drivers.DriverConnection) *ControllerService {
+func NewControllerService(logger *zerolog.Logger, rtdStore *gux.Store, ctrlStore *gux.Store, _ drivers.DriverConnection) *ControllerService {
 	return &ControllerService{
 		BaseControllerService: BaseControllerService{
 			rtdStateStore: rtdStore,
@@ -40,7 +47,7 @@ func NewControllerService(logger *zerolog.Logger, rtdStore *state.Store, ctrlSto
 func (s *ControllerService) Start() error {
 	s.Logger.Info().Msg("Starting controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return ErrServiceAlreadyStarted
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("No Connection to a controller is currently active.`")
 	s.Logger.Info().Msg("Controller Service successfully started.")
@@ -51,7 +58,7 @@ func (s *ControllerService) Start() error {
 func (s *ControllerService) Stop() error {
 	s.Logger.Info().Msg("Stopping controller service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return ErrServiceAlreadyStopped
+		return errors.ErrServiceAlreadyStopped
 	}
 	s.Logger.Info().Msg("Controller service successfully stopped.")
 	return nil

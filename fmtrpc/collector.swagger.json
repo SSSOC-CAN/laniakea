@@ -16,44 +16,9 @@
     "application/json"
   ],
   "paths": {
-    "/v1/download/{source}": {
-      "get": {
-        "summary": "DownloadHistoricalData opens up a TCP server on the FMTD and returns the server address. Once the TCP server accepts a request, it sends the requested file",
-        "operationId": "DataCollector_DownloadHistoricalData",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/fmtrpcHistoricalDataResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "source",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "enum": [
-              "TELEMETRY",
-              "RGA"
-            ]
-          }
-        ],
-        "tags": [
-          "DataCollector"
-        ]
-      }
-    },
     "/v1/start/recording": {
       "post": {
-        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from specified service and writing it.",
+        "summary": "fmtcli: `start-record`\nStartRecording will begin recording data from specified service.",
         "operationId": "DataCollector_StartRecording",
         "responses": {
           "200": {
@@ -119,7 +84,7 @@
     },
     "/v1/subscribe/datastream": {
       "get": {
-        "summary": "fmtcli: `subscribe-data-stream`\nSubscribeDataStream returns a uni-directional stream (server -\u003e client) of data being recorded from the Fluke DAQ.",
+        "summary": "SubscribeDataStream returns a uni-directional stream (server -\u003e client) of data being recorded from the Telemetry and RGA services.",
         "operationId": "DataCollector_SubscribeDataStream",
         "responses": {
           "200": {
@@ -155,24 +120,13 @@
       "type": "object",
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "title": "The given name of the data field"
         },
         "value": {
           "type": "number",
-          "format": "double"
-        }
-      }
-    },
-    "fmtrpcHistoricalDataResponse": {
-      "type": "object",
-      "properties": {
-        "server_port": {
-          "type": "string",
-          "format": "int64"
-        },
-        "buffer_size": {
-          "type": "string",
-          "format": "int64"
+          "format": "double",
+          "title": "The floating point value of the data field"
         }
       }
     },
@@ -180,20 +134,24 @@
       "type": "object",
       "properties": {
         "source": {
-          "type": "string"
+          "type": "string",
+          "title": "The name of the FMT service providing this data packet"
         },
         "is_scanning": {
-          "type": "boolean"
+          "type": "boolean",
+          "title": "A boolean value indicating whether this service is actively scanning for new data points or not"
         },
         "timestamp": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "title": "The UNIX millisecond timestamp of when the data was recorded"
         },
         "data": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/definitions/fmtrpcDataField"
-          }
+          },
+          "title": "A map of the data points for this packet"
         }
       }
     },
@@ -202,10 +160,20 @@
       "properties": {
         "polling_interval": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "title": "The time interval, in seconds, between data readings"
         },
         "type": {
-          "$ref": "#/definitions/fmtrpcRecordService"
+          "$ref": "#/definitions/fmtrpcRecordService",
+          "title": "Recording service type. Choose from either `telemetry` or `rga`"
+        },
+        "org_name": {
+          "type": "string",
+          "description": "Name of the organization."
+        },
+        "bucket_name": {
+          "type": "string",
+          "description": "Name of the bucket."
         }
       }
     },
@@ -213,7 +181,8 @@
       "type": "object",
       "properties": {
         "msg": {
-          "type": "string"
+          "type": "string",
+          "title": "A short message indicating success or failure"
         }
       }
     },
@@ -223,13 +192,16 @@
         "TELEMETRY",
         "RGA"
       ],
-      "default": "TELEMETRY"
+      "default": "TELEMETRY",
+      "description": "- `telemetry`: Temperature and pressure data recording (`TELEMETRY` = 0)\n- `rga`: Residual gas analyser data recording (`RGA` = 1)",
+      "title": "`RecordService` has to be one of:"
     },
     "fmtrpcStopRecRequest": {
       "type": "object",
       "properties": {
         "type": {
-          "$ref": "#/definitions/fmtrpcRecordService"
+          "$ref": "#/definitions/fmtrpcRecordService",
+          "title": "Recording service type. Choose from either `telemetry` or `rga`"
         }
       }
     },
@@ -237,7 +209,8 @@
       "type": "object",
       "properties": {
         "msg": {
-          "type": "string"
+          "type": "string",
+          "title": "A short message indicating success or failure"
         }
       }
     },

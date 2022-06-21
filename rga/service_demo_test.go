@@ -1,5 +1,11 @@
 // +build demo
 
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+*/
+
 package rga
 
 import (
@@ -9,18 +15,19 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 var (
 	ctrlInitialState = data.InitialCtrlState{
 		PressureSetPoint: 760.0,
 	}
-	ctrlReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	ctrlReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialCtrlState)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidType
 		}
 		// switch case action
 		switch a.Type {
@@ -28,7 +35,7 @@ var (
 			// assert type of payload
 			newTemp, ok := a.Payload.(float64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.TemperatureSetPoint = newTemp
 			return oldState, nil
@@ -36,12 +43,12 @@ var (
 			// assert type of payload
 			newPres, ok := a.Payload.(float64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.PressureSetPoint = newPres
 			return oldState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
 )
@@ -54,9 +61,9 @@ func TestNewMessage(t *testing.T) {
 		t.Errorf("Could not create a temporary directory: %v", err)
 	}
 	defer os.RemoveAll(tmp_dir)
-	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
-	ctrlStore := state.CreateStore(ctrlInitialState, ctrlReducer)
-	rga := NewRGAService(&log, tmp_dir, stateStore, ctrlStore, drivers.BlankConnectionErr{})
+	stateStore := gux.CreateStore(RGAInitialState, RGAReducer)
+	ctrlStore := gux.CreateStore(ctrlInitialState, ctrlReducer)
+	rga := NewRGAService(&log, stateStore, ctrlStore, drivers.BlankConnectionErr{}, "", "")
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
 	}
@@ -85,7 +92,7 @@ func RGAServiceStop(t *testing.T, s *RGAService) {
 
 // RGAStartRecord tests the startRecording method and expects an error
 func RGAStartRecord(t *testing.T, s *RGAService) {
-	err := s.startRecording(minRgaPollingInterval)
+	err := s.startRecording(minRgaPollingInterval, "test")
 	if err == nil {
 		t.Fatalf("Expected an error and none occured")
 	}

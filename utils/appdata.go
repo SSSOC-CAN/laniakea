@@ -1,4 +1,8 @@
 /*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+
 ISC License
 
 Copyright (c) 2013-2017 The btcsuite developers

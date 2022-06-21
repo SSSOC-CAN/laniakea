@@ -1,5 +1,11 @@
 // +build !demo
 
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+*/
+
 package controller
 
 import (
@@ -13,8 +19,9 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOCPaulCote/gux"
 )
 
 var (
@@ -38,11 +45,11 @@ var (
 			Data: makeInitialDataMap(),
 		},
 	}
-	rtdReducer state.Reducer = func(s interface{}, a state.Action) (interface{}, error) {
+	rtdReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialRtdState)
 		if !ok {
-			return nil, state.ErrInvalidStateType
+			return nil, errors.ErrInvalidType
 		}
 		// switch case action
 		switch a.Type {
@@ -50,7 +57,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(data.InitialRtdState)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.RealTimeData = newState.RealTimeData
 			oldState.AverageTemperature = newState.AverageTemperature
@@ -59,7 +66,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.RealTimeData = newState
 			return oldState, nil
@@ -67,12 +74,12 @@ var (
 			// assert type of payload
 			newPol, ok := a.Payload.(int64)
 			if !ok {
-				return nil, state.ErrInvalidPayloadType
+				return nil, errors.ErrInvalidType
 			}
 			oldState.TelPollingInterval = newPol
 			return oldState, nil
 		default:
-			return nil, state.ErrInvalidAction
+			return nil, errors.ErrInvalidAction
 		} 
 	}
 )
@@ -84,8 +91,8 @@ func initController(t *testing.T) (*ControllerService, func(string) error, strin
 	if err != nil {
 		t.Fatalf("Could not create a temporary directory: %v", err)
 	}
-	stateStore := state.CreateStore(rtdInitialState, rtdReducer)
-	ctrlStore := state.CreateStore(InitialState, ControllerReducer)
+	stateStore := gux.CreateStore(rtdInitialState, rtdReducer)
+	ctrlStore := gux.CreateStore(InitialState, ControllerReducer)
 	ctrlConn, _ := drivers.ConnectToController()
 	return NewControllerService(
 		&log,
@@ -107,7 +114,7 @@ func TestStartStopControllerService(t *testing.T) {
 	})
 	t.Run("Start Controller Service Invalid", func(t *testing.T) {
 		err := controllerService.Start()
-		if err != ErrServiceAlreadyStarted {
+		if err != errors.ErrServiceAlreadyStarted {
 			t.Errorf("Unexpected error when starting controller service: %v", err)
 		}
 	})
@@ -119,7 +126,7 @@ func TestStartStopControllerService(t *testing.T) {
 	})
 	t.Run("Stop Controller Service Invalid", func(t *testing.T) {
 		err := controllerService.Stop()
-		if err != ErrServiceAlreadyStopped {
+		if err != errors.ErrServiceAlreadyStopped {
 			t.Errorf("Unexpected error when starting controller service: %v", err)
 		}
 	})

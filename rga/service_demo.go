@@ -1,22 +1,33 @@
 // +build demo
 
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/10
+*/
+
 package rga
 
 import (
-	"encoding/csv"
+	"context"
+	"crypto/tls"
 	"fmt"
+	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/state"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOCPaulCote/gux"
 	"github.com/rs/zerolog"
 )
 
@@ -35,26 +46,28 @@ var _ data.Service = (*RGAService) (nil)
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(
 	logger *zerolog.Logger, 
-	outputDir string, 
-	rtdStore *state.Store, 
-	ctrlStore *state.Store,
+	rtdStore *gux.Store, 
+	ctrlStore *gux.Store,
 	_ drivers.DriverConnectionErr,
+	influxUrl string,
+	influxToken string,
 ) *RGAService {
 	var (
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
 	return &RGAService{
 		BaseRGAService{
-			rtdStateStore: rtdStore,
-			ctrlStateStore: ctrlStore,
-			Logger: logger,
-			QuitChan: make(chan struct{}),
-			CancelChan: make(chan struct{}),
-			outputDir: outputDir,
-			name: data.RgaName,
-			wgListen: wgL,
-			wgRecord: wgR,
+			rtdStateStore: 	  rtdStore,
+			ctrlStateStore:   ctrlStore,
+			Logger: 		  logger,
+			QuitChan:		  make(chan struct{}),
+			CancelChan: 	  make(chan struct{}),
+			name: 			  data.RgaName,
+			wgListen: 		  wgL,
+			wgRecord: 		  wgR,
+			idb:      		  client,
 		},
 	}
 }
@@ -78,14 +91,18 @@ func (s *RGAService) Stop() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
 		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
 	}
+	var stoppedRec bool
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
 			return fmt.Errorf("Could not stop RGA service: %v", err)
 		}
+		stoppedRec = true
 	}
 	close(s.CancelChan)
-	s.wgRecord.Wait()
+	if stoppedRec {
+		s.wgRecord.Wait()
+	}
 	close(s.QuitChan)
 	s.wgListen.Wait()
 	s.Logger.Info().Msg("RGA Service successfully stopped.")
@@ -93,9 +110,9 @@ func (s *RGAService) Stop() error {
 }
 
 // startRecording starts data recording from the RGA device
-func (s *RGAService) startRecording(pol_int int64) error {
+func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	if s.currentPressure == 0 || s.currentPressure > minimumPressure {
 		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure)
@@ -105,45 +122,57 @@ func (s *RGAService) startRecording(pol_int int64) error {
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = minRgaPollingInterval
 	}
-	// Create or Open csv
-	current_time := time.Now()
-	file_name := fmt.Sprintf("%s/%d-%02d-%02d-rga.csv", s.outputDir, current_time.Year(), current_time.Month(), current_time.Day())
-	file_name = utils.UniqueFileName(file_name)
-	file, err := os.Create(file_name)
+	// Get bucket, create it if it doesn't exist
+	orgAPI := s.idb.OrganizationsAPI()
+	org, err := orgAPI.FindOrganizationByName(context.Background(), orgName)
 	if err != nil {
-		return fmt.Errorf("Could not create file %v: %v", file, err)
+		return err
 	}
-	s.filepath = file_name
-	writer := csv.NewWriter(file)
-	// Now we begin recording
+	bucketAPI := s.idb.BucketsAPI()
+	buckets, err := bucketAPI.FindBucketsByOrgName(context.Background(), orgName)
+	if err != nil {
+		return err
+	}
+	var found bool
+	for _, bucket := range *buckets {
+		if bucket.Name == influxRGABucketName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		_, err := bucketAPI.CreateBucketWithName(context.Background(), org, influxRGABucketName, domain.RetentionRule{EverySeconds: 0})
+		if err != nil {
+			return err
+		}
+	}
+	writeAPI := s.idb.WriteAPI(orgName, influxRGABucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// the actual data
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
 	go func() {
 		defer s.wgRecord.Done()
-		ticks := 0
 		for {
 			select {
 			case <-ticker.C:
-				err = s.record(writer, ticks)
+				err := s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to %s: %v", file_name, err))
+					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
 				}
-				ticks++
 			case <-s.CancelChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			case <-s.QuitChan:
 				ticker.Stop()
-				file.Close()
-				writer.Flush()
+				writeAPI.Flush()
+				s.idb.Close()
 				s.Logger.Info().Msg("Data recording stopped.")
 				return
 			}
@@ -153,50 +182,51 @@ func (s *RGAService) startRecording(pol_int int64) error {
 }
 
 //record writes data from the RGA to a csv file and will pass it along it's Output channel
-func (s *RGAService) record(writer *csv.Writer, ticks int) error {
-	if ticks == 0 {
-		// Header data for csv file
-		headerData := []string{"Timestamp"}
-		for i := 0; i < 200; i++ {
-			headerData = append(headerData, fmt.Sprintf("%v AMU", i+1))
-		}
-		err := writer.Write(headerData)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
+func (s *RGAService) record(writer api.WriteAPI) error {
 	current_time := time.Now()
-	current_time_str := fmt.Sprintf("%d-%02d-%02d %02d:%02d:%02d", current_time.Year(), current_time.Month(), current_time.Day(), current_time.Hour(), current_time.Minute(), current_time.Second())
-	dataString := []string{current_time_str}
 	dataField := make(map[int64]*fmtrpc.DataField)
 	// figure out noise amplitude and offset
 	// get current pressure set point
 	currentState := s.ctrlStateStore.GetState()
 	cState, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return state.ErrInvalidStateType
+		return errors.ErrInvalidType
+	}
+	var (
+		factor float64
+		err error
+	)
+	if cState.PressureSetPoint >= 1 {
+		factor = math.Pow(10, float64(-1*utils.NumDecPlaces(cState.PressureSetPoint)))
+	} else {
+		factor, err = utils.NormalizeToNDecimalPlace(cState.PressureSetPoint)
+		if err != nil {
+			return err
+		}
+		factor = factor/10
 	}
 	for i := 0; i < 200; i++ {
-		v := (rand.Float64()*0.001)+cState.PressureSetPoint
+		var v float64
+		v = (rand.Float64()*factor)+cState.PressureSetPoint
 		dataField[int64(i)]= &fmtrpc.DataField{
 			Name: fmt.Sprintf("Mass %v", i+1),
 			Value: v,
 		}
-		dataString = append(dataString, fmt.Sprintf("%g", v))
+		p := influx.NewPoint(
+			"pressure",
+			map[string]string{
+				"mass":       fmt.Sprintf("%v", i+1),
+			},
+			map[string]interface{}{
+				"pressure": v,
+			},
+			current_time,
+		)
+		// write asynchronously
+		writer.WritePoint(p)
 	}
-	//Write to csv in go routine
-	errChan := make(chan error)
-	go func(echan chan error) {
-		err := writer.Write(dataString)
-		if err != nil {
-			echan<-err
-		}
-		echan<-nil
-	}(errChan)
-	
-	err := s.rtdStateStore.Dispatch(
-		state.Action{
+	err = s.rtdStateStore.Dispatch(
+		gux.Action{
 			Type: 	 "rga/update",
 			Payload: fmtrpc.RealTimeData{
 				Source: s.name,
@@ -209,17 +239,13 @@ func (s *RGAService) record(writer *csv.Writer, ticks int) error {
 	if err != nil {
 		return fmt.Errorf("Could not update state: %v", err)
 	}
-	if err = <-errChan; err != nil {
-		return err
-	}
-	close(errChan)
 	return nil
 }
 
 // stopRecording stops the data recording process
 func (s *RGAService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return ErrAlreadyStoppedRecording
+		return errors.ErrAlreadyStoppedRecording
 	}
 	s.CancelChan <- struct{}{}
 	return nil
@@ -239,13 +265,13 @@ func (s *RGAService) ListenForRTDSignal() {
 			switch msg.Type {
 			case data.RECORDING:
 				if msg.State {
-					err := s.startRecording(0)
+					err := s.startRecording(0, msg.Msg)
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")
@@ -260,9 +286,6 @@ func (s *RGAService) ListenForRTDSignal() {
 				}
 			}
 		case <- signalChan:
-			if atomic.LoadInt32(&s.Recording) != 1 {
-				continue
-			}
 			currentState := s.rtdStateStore.GetState()
 			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {
@@ -271,6 +294,9 @@ func (s *RGAService) ListenForRTDSignal() {
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
+			}
+			if cState.RealTimeData.Data == nil {
+				continue
 			}
 			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
