@@ -134,6 +134,8 @@ func TestInitConfigFromYAML(t *testing.T) {
 		WSPingInterval: default_ws_ping_interval,
 		WSPongWait: default_ws_pong_wait,
 		InfluxURL: default_influx_url,
+		MaxLogFiles: default_max_log_files,
+		MaxLogFileSize: default_log_file_size,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -164,6 +166,14 @@ func TestInitConfigFromYAML(t *testing.T) {
 		t.Errorf("%s", err)
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("InfluxURL: %v\n", d_config.InfluxURL))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("MaxLogFileSize: %v\n", d_config.MaxLogFileSize))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	_, err = config_file.WriteString(fmt.Sprintf("MaxLogFiles: %v\n", d_config.MaxLogFiles))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
@@ -206,6 +216,8 @@ func TestDefaultConfig(t *testing.T) {
 		WSPingInterval: default_ws_ping_interval,
 		WSPongWait: default_ws_pong_wait,
 		InfluxURL: default_influx_url,
+		MaxLogFiles: default_max_log_files,
+		MaxLogFileSize: default_log_file_size,
 	}
 	if !cmp.Equal(d_config, default_config()) {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())
