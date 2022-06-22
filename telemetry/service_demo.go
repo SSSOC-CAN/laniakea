@@ -204,7 +204,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 	currentState := s.ctrlStateStore.GetState()
 	cState, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return errors.ErrInvalidType
+		return gux.ErrInvalidStateType
 	}
 	var (
 		factorT float64

@@ -121,7 +121,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return errors.ErrInvalidType
+		return gux.ErrInvalidStateType
 	}
 	if RTD.TelPollingInterval == int64(0) {
 		return errors.ErrTelNotRecoring
@@ -129,7 +129,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return errors.ErrInvalidType
+		return gux.ErrInvalidStateType
 	}
 	var (
 		actualTempChangeRate float64
@@ -249,7 +249,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return errors.ErrInvalidType
+				return gux.ErrInvalidStateType
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetTempResponse{
@@ -296,7 +296,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return errors.ErrInvalidType
+		return gux.ErrInvalidStateType
 	}
 	if RTD.TelPollingInterval == int64(0) {
 		return errors.ErrTelNotRecoring
@@ -304,7 +304,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return errors.ErrInvalidType
+		return gux.ErrInvalidStateType
 	}
 	var (
 		actualPresChangeRate float64
@@ -424,7 +424,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return errors.ErrInvalidType
+				return gux.ErrInvalidStateType
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetPresResponse{

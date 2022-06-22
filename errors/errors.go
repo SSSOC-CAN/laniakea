@@ -12,7 +12,7 @@ import (
 
 const (
 	ErrInvalidType = bg.Error("invalid type")
-	ErrInvalidAction = bg.Error("invalid action")
+	// ErrInvalidAction = bg.Error("invalid action")
 	ErrNegativeRate = bg.Error("rates cannot be negative")
 	ErrTelNotRecoring = bg.Error("telemetry service not yet recording")
 	ErrCtrllerInUse = bg.Error("controller service currently in use")
