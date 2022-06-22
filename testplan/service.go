@@ -29,6 +29,8 @@ import (
 	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -157,7 +159,7 @@ func (s *TestPlanService) Name() string {
 // LoadTestPlan is called by gRPC client and CLI to load a given testplan
 func (s *TestPlanService) LoadTestPlan(ctx context.Context, req *fmtrpc.LoadTestPlanRequest) (*fmtrpc.LoadTestPlanResponse, error) {
 	if atomic.LoadInt32(&s.Running) != 1 {
-		return nil, ErrTPEXNotStarted
+		return nil, status.Error(codes.Aborted, ErrTPEXNotStarted)
 	}
 	s.Logger.Info().Msg(fmt.Sprintf("Loading test plan file at: %s", req.PathToFile))
 	tp, err := loadTestPlan(req.PathToFile)
@@ -165,7 +167,7 @@ func (s *TestPlanService) LoadTestPlan(ctx context.Context, req *fmtrpc.LoadTest
 		s.Logger.Error().Msg(fmt.Sprintf("Could not load test plan file: %v", err))
 		return &fmtrpc.LoadTestPlanResponse{
 			Msg: fmt.Sprintf("Could not load test plan: %v", err),
-		}, err
+		}, status.Error(codes.Internal, err)
 	}
 	s.Logger.Info().Msg("Test plan successfully loaded.")
 	s.testPlan = tp
@@ -511,7 +513,11 @@ func (s *TestPlanService) StartTestPlan(ctx context.Context, req *fmtrpc.StartTe
 	err := s.startTestPlan()
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Could not start execution of test plan: %v", err))
-		return nil, err
+	}
+	if err == ErrNoTestPlanLoaded || err == ErrTestPlanAlreadyStarted {
+		return nil, status.Error(codes.FailedPrecondition, err)
+	} else if err != nil {
+		return nil, status.Error(codes.Internal, err)
 	}
 	s.Logger.Info().Msg("Test plan execution successfully started.")
 	return &fmtrpc.StartTestPlanResponse{
@@ -539,7 +545,7 @@ func (s *TestPlanService) stopTestPlan() error {
 func (s *TestPlanService) StopTestPlan(ctx context.Context, req *fmtrpc.StopTestPlanRequest) (*fmtrpc.StopTestPlanResponse, error) {
 	err := s.stopTestPlan()
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.FailedPrecondition, err)
 	}
 	return &fmtrpc.StopTestPlanResponse{
 		Msg: "Execution of test plan successfully stopped",
@@ -549,11 +555,11 @@ func (s *TestPlanService) StopTestPlan(ctx context.Context, req *fmtrpc.StopTest
 // InsertROIMarker creates a new entry in the rest report
 func (s *TestPlanService) InsertROIMarker(ctx context.Context, req *fmtrpc.InsertROIRequest) (*fmtrpc.InsertROIResponse, error) {
 	if atomic.LoadInt32(&s.Executing) != 1 {
-		return nil, ErrNoTestPlanExecuting
+		return nil, status.Error(codes.FailedPrecondition, ErrNoTestPlanExecuting)
 	}
 	err := writeMsgToReport(s.reportWriter, req.ReportLvl, req.Text, req.Author, time.Now())
 	if err != nil {
-		return nil, e.Wrap(err, "cannot write to report")
+		return nil, status.Error(codes.Internal, e.Wrap(err, "cannot write to report"))
 	}
 	return &fmtrpc.InsertROIResponse{
 		Msg: "Region of Interest marker inserted successfully.",
