@@ -201,9 +201,9 @@ func (i *GrpcInterceptor) rpcStateStreamServerInterceptor() grpc.StreamServerInt
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		err := i.checkRPCState(srv)
 		if err != nil && err != ErrInvalidRPCState {
-			return nil, status.Error(codes.FailedPrecondition, err.Error())
+			return status.Error(codes.FailedPrecondition, err.Error())
 		} else if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return status.Error(codes.Internal, err.Error())
 		}
 
 		return handler(srv, ss)

@@ -294,29 +294,29 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 // SetPressure takes a gRPC request and changes the pressure set point accordingly
 func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStream demorpc.Controller_SetPressureServer) error {
 	if s.ctrlState != waitingToStart {
-		return status.Error(codes.FailedPrecondition, ErrCtrllerInUse)
+		return status.Error(codes.FailedPrecondition, ErrCtrllerInUse.Error())
 	}
 	// check if we have negative rate
 	if req.PressureChangeRate < float64(0) {
-		return status.Error(codes.InvalidArgument, ErrNegativeRate)
+		return status.Error(codes.InvalidArgument, ErrNegativeRate.Error())
 	}
 	if req.PressureSetPoint < float64(0) {
-		return status.Error(codes.InvalidArgument, ErrNegativeRate)
+		return status.Error(codes.InvalidArgument, ErrNegativeRate.Error())
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return status.Error(codes.Internal, gux.ErrInvalidStateType)
+		return status.Error(codes.Internal, gux.ErrInvalidStateType.Error())
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return status.Error(codes.FailedPrecondition, ErrTelNotRecoring)
+		return status.Error(codes.FailedPrecondition, ErrTelNotRecoring.Error())
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return status.Error(codes.Internal, gux.ErrInvalidStateType)
+		return status.Error(codes.Internal, gux.ErrInvalidStateType.Error())
 	}
 	var (
 		actualPresChangeRate float64
@@ -331,7 +331,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 	if req.PressureChangeRate == float64(0) {
 		err := s.ctrlStateStore.Dispatch(updatePresSetPointAction(req.PressureSetPoint))
 		if err != nil {
-			return status.Error(codes.Internal, err)
+			return status.Error(codes.Internal, err.Error())
 		}
 		if err := updateStream.Send(&demorpc.SetPresResponse{
 			CurrentPressureSetPoint: req.PressureSetPoint,
@@ -436,7 +436,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return status.Error(codes.Internal, gux.ErrInvalidStateType)
+				return status.Error(codes.Internal, gux.ErrInvalidStateType.Error())
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetPresResponse{
@@ -450,7 +450,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 				lastPresSetPoint = lastPresSetPoint + changeRateSlice[intervalCnt].Rate
 				err := s.ctrlStateStore.Dispatch(updatePresSetPointAction(lastPresSetPoint))
 				if err != nil {
-					return status.Error(codes.Internal, err)
+					return status.Error(codes.Internal, err.Error())
 				}
 				if intervalCnt == totalIntervals {
 					return nil
