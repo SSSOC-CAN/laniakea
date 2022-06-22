@@ -323,6 +323,9 @@ func (s *RGAService) ListenForRTDSignal() {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
 			}
+			if cState.RealTimeData.Data == nil {
+				continue
+			}
 			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= drivers.RGAMinimumPressure && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
