@@ -113,14 +113,14 @@ func InitLogger(config *Config) (zerolog.Logger, error) {
 		if config.DefaultLogDir {
 			err = os.Mkdir(config.LogFileDir, 0775)
 			if err != nil {
-				return zerolog.Logger{}, err
+				return logger, err
 			}
 			log_file, err = os.OpenFile(config.LogFileDir+"/logfile.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0775)
 			if err != nil {
-				return zerolog.Logger{}, err
+				return logger, err
 			}
 		} else {
-			return zerolog.Logger{}, err
+			return logger, err
 		}
 	}
 	// use new modified writer
