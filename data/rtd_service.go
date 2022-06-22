@@ -147,7 +147,7 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Telemetry or RGA
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, status.Error(codes.Aborted, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type]))
+		return nil, status.Error(codes.Aborted, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type]).Error())
 	}
 	switch req.Type {
 	case fmtrpc.RecordService_TELEMETRY:
@@ -156,21 +156,21 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
-			}, status.Error(codes.Internal, resp.ErrMsg)
+			}, status.Error(codes.Internal, resp.ErrMsg.Error())
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	case fmtrpc.RecordService_RGA:
 		if !s.ServiceRecStates[TelemetryName] {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
-			}, status.Error(codes.FailedPrecondition, e.Wrapf(ErrServiceNotRecording, "Could not start %s data recording", rpcEnumMap[req.Type]))
+			}, status.Error(codes.FailedPrecondition, e.Wrapf(ErrServiceNotRecording, "Could not start %s data recording", rpcEnumMap[req.Type]).Error())
 		}
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.OrgName)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
-			}, status.Error(codes.Internal, resp.ErrMsg)
+			}, status.Error(codes.Internal, resp.ErrMsg.Error())
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	}
@@ -182,14 +182,14 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, status.Error(codes.Aborted, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type]))
+		return nil, status.Error(codes.Aborted, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type]).Error())
 	}
 	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
 	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 	if resp.ErrMsg != nil {
 		return &fmtrpc.StopRecResponse{
 			Msg: fmt.Sprintf("could not stop data recording: %v", resp.ErrMsg),
-		}, status.Error(codes.Internal, resp.ErrMsg)
+		}, status.Error(codes.Internal, resp.ErrMsg.Error())
 	}
 	s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	return &fmtrpc.StopRecResponse{
@@ -214,7 +214,7 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 			currentState := s.stateStore.GetState()
 			RTD, ok := currentState.(InitialRtdState)
 			if !ok {
-				return status.Error(codes.Internal, errors.ErrInvalidType)
+				return status.Error(codes.Internal, errors.ErrInvalidType.Error())
 			}
 			if RTD.RealTimeData.Timestamp < lastSentRTDTimestamp {
 				continue
