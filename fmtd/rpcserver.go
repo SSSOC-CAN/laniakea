@@ -43,6 +43,8 @@ import (
 	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
@@ -259,26 +261,26 @@ func (s *RpcServer) TestCommand(_ context.Context, _ *fmtrpc.TestRequest) (*fmtr
 // BakeMacaroon bakes a new macaroon based on input permissions and constraints
 func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRequest) (*fmtrpc.BakeMacaroonResponse, error) {
 	if s.macSvc == nil {
-		return nil, e.Wrap(errors.ErrMacSvcNil, "could not bake macaroon")
+		return nil, status.Error(codes.Aborted, e.Wrap(errors.ErrMacSvcNil, "could not bake macaroon"))
 	}
 	if s.grpcInterceptor == nil {
-		return nil, e.Wrap(ErrGRPCMiddlewareNil, "could not bake macaroon")
+		return nil, status.Error(codes.Aborted, e.Wrap(ErrGRPCMiddlewareNil, "could not bake macaroon"))
 	}
 	if len(req.Permissions) == 0 {
-		return nil, e.Wrap(ErrEmptyPermissionsList, "could not bake macaroon")
+		return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrEmptyPermissionsList, "could not bake macaroon"))
 	}
 	perms := make([]bakery.Op, len(req.Permissions))
 	for i, op := range req.Permissions {
 		if !stringInSlice(op.Entity, validEntities) {
-			return nil, e.Wrap(ErrInvalidMacEntity, "could not bake macaroon")
+			return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrInvalidMacEntity, "could not bake macaroon"))
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
 			allPermissions := s.grpcInterceptor.Permissions()
 			if _, ok := allPermissions[op.Action]; !ok {
-				return nil, e.Wrap(ErrInvalidMacAction, "could not bake macaroon")
+				return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrInvalidMacAction, "could not bake macaroon"))
 			}
 		} else if !stringInSlice(op.Action, validActions) {
-			return nil, e.Wrap(ErrInvalidMacAction, "could not bake macaroon")
+			return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrInvalidMacAction, "could not bake macaroon"))
 		}
 		perms[i] = bakery.Op{
 			Entity: op.Entity,
@@ -304,7 +306,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}
 	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeout, timeoutSeconds)
 	if err != nil {
-		return nil, e.Wrap(err, "could not bake macaroon")
+		return nil, status.Error(codes.Internal, e.Wrap(err, "could not bake macaroon"))
 	}
 	return &fmtrpc.BakeMacaroonResponse{
 		Macaroon: hex.EncodeToString(macBytes),
