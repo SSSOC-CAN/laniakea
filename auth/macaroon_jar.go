@@ -32,12 +32,14 @@ import(
 	"fmt"
 	"strings"
 	"github.com/btcsuite/btcwallet/snacl"
-	"github.com/SSSOC-CAN/fmtd/errors"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	macaroon "gopkg.in/macaroon.v2"
 )
 
 const (
 	encryptionPrefix = "snacl:"
+	ErrEmptyMac = bg.Error("macaroon data is empty")
+	ErrInvalidMacEncrypt = bg.Error("invalid encrypted macaroon. Format expected: 'snacl:<key_base64>:<encrypted_macaroon_base64>'")
 )
 
 type getPasswordFunc func(prompt string) ([]byte, error)
@@ -72,7 +74,7 @@ func decryptMacaroon(keyBase64, dataBase64 string, pw []byte) ([]byte, error) {
 // LoadMacaroon takes a password prompting function and hex encoded macaroon and returns an instantiated macaroon object
 func LoadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon, error) {
 	if len(strings.TrimSpace(macHex)) == 0 {
-		return nil, errors.ErrEmptyMac
+		return nil, ErrEmptyMac
 	}
 	var (
 		macBytes	[]byte
@@ -81,7 +83,7 @@ func LoadMacaroon(pwCallback getPasswordFunc, macHex string) (*macaroon.Macaroon
 	if strings.HasPrefix(macHex, encryptionPrefix) {
 		parts := strings.Split(macHex, ":")
 		if len(parts) != 3 {
-			return nil, errors.ErrInvalidMacEncrypt
+			return nil, ErrInvalidMacEncrypt
 		}
 		pw, err := pwCallback("Enter macaroon encryption password: ")
 		if err != nil {
