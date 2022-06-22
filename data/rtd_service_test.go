@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
-	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
@@ -25,7 +24,7 @@ var (
 		// assert type of s
 		_, ok := s.(fmtrpc.RealTimeData)
 		if !ok {
-			return nil, errors.ErrInvalidType
+			return nil, gux.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -33,11 +32,11 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			return newState, nil
 		default:
-			return nil, errors.ErrInvalidAction
+			return nil, gux.ErrInvalidAction
 		} 
 	}
 	bufSize = 1 * 1024 * 1024

@@ -8,7 +8,6 @@ package controller
 
 import (
 	"github.com/SSSOC-CAN/fmtd/data"
-	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOCPaulCote/gux"
 )
 
@@ -21,7 +20,7 @@ var (
 		// assert type of s
 		oldState, ok := s.(data.InitialCtrlState)
 		if !ok {
-			return nil, errors.ErrInvalidType
+			return nil, gux.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -29,7 +28,7 @@ var (
 			// assert type of payload
 			newTemp, ok := a.Payload.(float64)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.TemperatureSetPoint = newTemp
 			return oldState, nil
@@ -37,12 +36,12 @@ var (
 			// assert type of payload
 			newPres, ok := a.Payload.(float64)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.PressureSetPoint = newPres
 			return oldState, nil
 		default:
-			return nil, errors.ErrInvalidAction
+			return nil, gux.ErrInvalidAction
 		} 
 	}
 	updateTempSetPointAction = func(newTempSetPoint float64) gux.Action {

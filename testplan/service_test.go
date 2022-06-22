@@ -72,7 +72,7 @@ var (
 		// assert type of s
 		oldState, ok := s.(data.InitialRtdState)
 		if !ok {
-			return nil, errors.ErrInvalidType
+			return nil, gux.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -80,7 +80,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(data.InitialRtdState)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.RealTimeData = newState.RealTimeData
 			oldState.AverageTemperature = newState.AverageTemperature
@@ -89,7 +89,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.RealTimeData = newState
 			return oldState, nil
@@ -97,12 +97,12 @@ var (
 			// assert type of payload
 			newPol, ok := a.Payload.(int64)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.TelPollingInterval = newPol
 			return oldState, nil
 		default:
-			return nil, errors.ErrInvalidAction
+			return nil, gux.ErrInvalidAction
 		} 
 	}
 )
