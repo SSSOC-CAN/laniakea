@@ -227,7 +227,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 	}
 	err = macaroonService.Close()
 	if err != nil {
-		return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service").Error())
+		return nil, status.Error(codes.Internal, e.Wrap(err, "error when closing macaroon service").Error())
 	}
 
 	// We can now send the UnlockMsg through the channel
