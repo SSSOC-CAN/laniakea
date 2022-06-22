@@ -185,9 +185,9 @@ func (i *GrpcInterceptor) rpcStateUnaryServerInterceptor() grpc.UnaryServerInter
 		handler grpc.UnaryHandler) (interface{}, error) {
 		err := i.checkRPCState(info.Server)
 		if err != nil && err != ErrInvalidRPCState {
-			return nil, status.Error(codes.FailedPrecondition, err)
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		} else if err != nil {
-			return nil, status.Error(codes.Internal, err)
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		return handler(ctx, req)
@@ -201,9 +201,9 @@ func (i *GrpcInterceptor) rpcStateStreamServerInterceptor() grpc.StreamServerInt
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		err := i.checkRPCState(srv)
 		if err != nil && err != ErrInvalidRPCState {
-			return nil, status.Error(codes.FailedPrecondition, err)
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		} else if err != nil {
-			return nil, status.Error(codes.Internal, err)
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		return handler(srv, ss)
@@ -317,7 +317,7 @@ func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInter
 		handler grpc.UnaryHandler) (interface{}, error) {
 		// Check macaroons.
 		if err := i.checkMacaroon(ctx, info.FullMethod); err != nil {
-			return nil, status.Error(codes.PermissionDenied, err)
+			return nil, status.Error(codes.PermissionDenied, err.Error())
 		}
 		return handler(ctx, req)
 	}
@@ -331,7 +331,7 @@ func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInt
 		// Check macaroons.
 		err := i.checkMacaroon(ss.Context(), info.FullMethod)
 		if err != nil {
-			return status.Error(codes.PermissionDenied, err)
+			return status.Error(codes.PermissionDenied, err.Error())
 		}
 		return handler(srv, ss)
 	}

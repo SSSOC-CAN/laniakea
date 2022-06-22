@@ -147,18 +147,18 @@ func (u *UnlockerService) readPassword(password []byte) error {
 func (u *UnlockerService) Login(ctx context.Context, req *fmtrpc.LoginRequest) (*fmtrpc.LoginResponse, error) {
 	err := u.readPassword(req.Password)
 	if err == ErrPasswordNotSet {
-		return nil, status.Error(codes.FailedPrecondition, err)
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	} else if err == ErrWrongPassword {
-		return nil, status.Error(codes.InvalidArgument, err)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	} else if err != nil {
-		return nil, status.Error(codes.Internal, err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	// We can now send the a PasswordMsg through the channel and return a successful loging message
 	select {
 	case u.PasswordMsgs <- &PasswordMsg{Password: req.Password, Err: nil}:
 		return &fmtrpc.LoginResponse{}, nil
 	case <-ctx.Done():
-		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout)
+		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout.Error())
 	}
 }
 
@@ -166,9 +166,9 @@ func (u *UnlockerService) Login(ctx context.Context, req *fmtrpc.LoginRequest) (
 func (u *UnlockerService) SetPassword(ctx context.Context, req *fmtrpc.SetPwdRequest) (*fmtrpc.SetPwdResponse, error) {
 	err := u.setPassword(req.Password, false)
 	if err == ErrPasswordAlreadySet {
-		return nil, status.Error(codes.FailedPrecondition, err)
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	} else if err != nil {
-		return nil, status.Error(codes.Internal, err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	// We can now send the SetPasswordMsg through the channel
 	select {
@@ -176,7 +176,7 @@ func (u *UnlockerService) SetPassword(ctx context.Context, req *fmtrpc.SetPwdReq
 		return &fmtrpc.SetPwdResponse{}, nil
 
 	case <-ctx.Done():
-		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout)
+		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout.Error())
 	}
 }
 
@@ -185,49 +185,49 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 	// first we check the validaty of the old password
 	err := u.readPassword(req.CurrentPassword)
 	if err == ErrPasswordNotSet {
-		return nil, status.Error(codes.FailedPrecondition, err)
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	} else if err == ErrWrongPassword {
-		return nil, status.Error(codes.InvalidArgument, err)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	} else if err != nil {
-		return nil, status.Error(codes.Internal, err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	// Next we set the new password
 	err = u.setPassword(req.NewPassword, true)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if req.NewMacaroonRootKey {
 		for _, file := range u.macaroonFiles {
 			err := os.Remove(file)
 			if err != nil {
-				return nil, status.Error(codes.Internal, e.Wrap(err, "could not remove macaroon file"))
+				return nil, status.Error(codes.Internal, e.Wrap(err, "could not remove macaroon file").Error())
 			}
 		}
 	}
 	// Then we have to load the macaroon key-store, unlock it, change the old password and then shut it down
 	macaroonService, err := macaroons.InitService(*u.ps, "fmtd")
 	if err != nil {
-		return nil, status.Error(codes.Internal, err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	err = macaroonService.CreateUnlock(&req.CurrentPassword)
 	if err != nil {
 		closeErr := macaroonService.Close()
 		if closeErr != nil {
-			return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service"))
+			return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service").Error())
 		}
-		return nil, status.Error(codes.Internal, e.Wrap(err, "could not create unlock"))
+		return nil, status.Error(codes.Internal, e.Wrap(err, "could not create unlock").Error())
 	}
 	err = macaroonService.ChangePassword(req.CurrentPassword, req.NewPassword)
 	if err != nil {
 		closeErr := macaroonService.Close()
 		if closeErr != nil {
-			return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service"))
+			return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service").Error())
 		}
-		return nil, status.Error(codes.Internal, e.Wrap(err, "could not change password"))
+		return nil, status.Error(codes.Internal, e.Wrap(err, "could not change password").Error())
 	}
 	err = macaroonService.Close()
 	if err != nil {
-		return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service"))
+		return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service").Error())
 	}
 
 	// We can now send the UnlockMsg through the channel
@@ -235,6 +235,6 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 	case u.PasswordMsgs <- &PasswordMsg{Password: req.NewPassword, Err: nil}:
 		return &fmtrpc.ChangePwdResponse{}, nil
 	case <-ctx.Done():
-		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout)
+		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout.Error())
 	}
 }

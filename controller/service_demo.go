@@ -123,25 +123,25 @@ func (s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *prox
 // SetTemperature takes a gRPC request and changes the temperature set point accordingly
 func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateStream demorpc.Controller_SetTemperatureServer) error {
 	if s.ctrlState != waitingToStart {
-		return status.Error(codes.FailedPrecondition, ErrCtrllerInUse)
+		return status.Error(codes.FailedPrecondition, ErrCtrllerInUse.Error())
 	}
 	if req.TempChangeRate < float64(0) {
-		return status.Error(codes.InvalidArgument, ErrNegativeRate)
+		return status.Error(codes.InvalidArgument, ErrNegativeRate.Error())
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return status.Error(codes.Internal, gux.ErrInvalidStateType)
+		return status.Error(codes.Internal, gux.ErrInvalidStateType.Error())
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return status.Error(codes.FailedPrecondition, ErrTelNotRecoring)
+		return status.Error(codes.FailedPrecondition, ErrTelNotRecoring.Error())
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return status.Error(codes.Internal, gux.ErrInvalidStateType)
+		return status.Error(codes.Internal, gux.ErrInvalidStateType.Error())
 	}
 	var (
 		actualTempChangeRate float64
@@ -156,7 +156,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	if req.TempChangeRate == float64(0) {
 		err := s.ctrlStateStore.Dispatch(updateTempSetPointAction(req.TempSetPoint))
 		if err != nil {
-			return status.Error(codes.Internal, err)
+			return status.Error(codes.Internal, err.Error())
 		}
 		if err := updateStream.Send(&demorpc.SetTempResponse{
 			CurrentTempSetPoint: req.TempSetPoint,
@@ -261,7 +261,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return status.Error(codes.Internal, gux.ErrInvalidStateType)
+				return status.Error(codes.Internal, gux.ErrInvalidStateType.Error())
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetTempResponse{
@@ -275,7 +275,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 				lastTempSetPoint = lastTempSetPoint + changeRateSlice[intervalCnt].Rate
 				err := s.ctrlStateStore.Dispatch(updateTempSetPointAction(lastTempSetPoint))
 				if err != nil {
-					return status.Error(codes.Internal, err)
+					return status.Error(codes.Internal, err.Error())
 				}
 				if intervalCnt == totalIntervals {
 					return nil
