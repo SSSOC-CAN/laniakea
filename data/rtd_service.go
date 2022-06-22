@@ -15,11 +15,13 @@ import (
 	"time"
 	"sync/atomic"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 )
@@ -39,6 +41,8 @@ type StateType int32
 const (
 	BROADCASTING StateType = 0
 	RECORDING StateType = 1
+	ErrServiceNotRegistered = bg.Error("service not registered with RTD service")
+	ErrServiceNotRecording = bg.Error("service not yet recording data")
 )
 
 type StateChangeMsg struct {
@@ -141,7 +145,7 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Telemetry or RGA
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+		return nil, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type])
 	}
 	switch req.Type {
 	case fmtrpc.RecordService_TELEMETRY:
@@ -157,7 +161,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		if !s.ServiceRecStates[TelemetryName] {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
-			}, fmt.Errorf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type])
+			}, e.Wrapf(ErrServiceNotRecording, "Could not start %s data recording", rpcEnumMap[req.Type])
 		}
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.OrgName)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
@@ -176,7 +180,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+		return nil, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type])
 	}
 	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
 	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
@@ -208,7 +212,7 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 			currentState := s.stateStore.GetState()
 			RTD, ok := currentState.(InitialRtdState)
 			if !ok {
-				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
+				return errors.ErrInvalidType
 			}
 			if RTD.RealTimeData.Timestamp < lastSentRTDTimestamp {
 				continue

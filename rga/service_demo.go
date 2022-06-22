@@ -1,3 +1,4 @@
+//go:build demo
 // +build demo
 
 /*
@@ -19,21 +20,22 @@ import (
 	"sync/atomic"
 	"time"
 
-	influx "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/influxdata/influxdb-client-go/v2/api"
-	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/SSSOCPaulCote/gux"
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/influxdata/influxdb-client-go/v2/domain"
+	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
 var (
-	minRgaPollingInterval int64 = 15 // After manual testing, value will be 15 seconds
-	minimumPressure float64 = 0.00005
+	minRgaPollingInterval int64   = 15 // After manual testing, value will be 15 seconds
+	minimumPressure       float64 = 0.00005
 )
 
 type RGAService struct {
@@ -41,12 +43,12 @@ type RGAService struct {
 }
 
 // A compile time check to make sure that RGAService fully implements the data.Service interface
-var _ data.Service = (*RGAService) (nil)
+var _ data.Service = (*RGAService)(nil)
 
 // NewRGAService creates an instance of the RGAService struct. It also establishes a connection to the RGA device
 func NewRGAService(
-	logger *zerolog.Logger, 
-	rtdStore *gux.Store, 
+	logger *zerolog.Logger,
+	rtdStore *gux.Store,
 	ctrlStore *gux.Store,
 	_ drivers.DriverConnectionErr,
 	influxUrl string,
@@ -56,18 +58,18 @@ func NewRGAService(
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
-	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	return &RGAService{
 		BaseRGAService{
-			rtdStateStore: 	  rtdStore,
-			ctrlStateStore:   ctrlStore,
-			Logger: 		  logger,
-			QuitChan:		  make(chan struct{}),
-			CancelChan: 	  make(chan struct{}),
-			name: 			  data.RgaName,
-			wgListen: 		  wgL,
-			wgRecord: 		  wgR,
-			idb:      		  client,
+			rtdStateStore:  rtdStore,
+			ctrlStateStore: ctrlStore,
+			Logger:         logger,
+			QuitChan:       make(chan struct{}),
+			CancelChan:     make(chan struct{}),
+			name:           data.RgaName,
+			wgListen:       wgL,
+			wgRecord:       wgR,
+			idb:            client,
 		},
 	}
 }
@@ -95,7 +97,7 @@ func (s *RGAService) Stop() error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
-			return fmt.Errorf("Could not stop RGA service: %v", err)
+			return e.Wrap(err, "could not stop RGA service")
 		}
 		stoppedRec = true
 	}
@@ -115,10 +117,10 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 		return errors.ErrAlreadyRecording
 	}
 	if s.currentPressure == 0 || s.currentPressure > minimumPressure {
-		return fmt.Errorf("Current chamber pressure is too high. Current: %.6f Torr\tMinimum: %.5f Torr", s.currentPressure, minimumPressure)
+		return ErrPressureTooHigh
 	}
 	if pol_int < minRgaPollingInterval && pol_int != 0 {
-		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", minRgaPollingInterval)
+		return errors.ErrPollingIntervalTooSmall
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = minRgaPollingInterval
 	}
@@ -194,7 +196,7 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 	}
 	var (
 		factor float64
-		err error
+		err    error
 	)
 	if cState.PressureSetPoint >= 1 {
 		factor = math.Pow(10, float64(-1*utils.NumDecPlaces(cState.PressureSetPoint)))
@@ -203,19 +205,19 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 		if err != nil {
 			return err
 		}
-		factor = factor/10
+		factor = factor / 10
 	}
 	for i := 0; i < 200; i++ {
 		var v float64
-		v = (rand.Float64()*factor)+cState.PressureSetPoint
-		dataField[int64(i)]= &fmtrpc.DataField{
-			Name: fmt.Sprintf("Mass %v", i+1),
+		v = (rand.Float64() * factor) + cState.PressureSetPoint
+		dataField[int64(i)] = &fmtrpc.DataField{
+			Name:  fmt.Sprintf("Mass %v", i+1),
 			Value: v,
 		}
 		p := influx.NewPoint(
 			"pressure",
 			map[string]string{
-				"mass":       fmt.Sprintf("%v", i+1),
+				"mass": fmt.Sprintf("%v", i+1),
 			},
 			map[string]interface{}{
 				"pressure": v,
@@ -227,17 +229,17 @@ func (s *RGAService) record(writer api.WriteAPI) error {
 	}
 	err = s.rtdStateStore.Dispatch(
 		gux.Action{
-			Type: 	 "rga/update",
+			Type: "rga/update",
 			Payload: fmtrpc.RealTimeData{
-				Source: s.name,
+				Source:     s.name,
 				IsScanning: false,
-				Timestamp: current_time.UnixMilli(),
-				Data: dataField,
+				Timestamp:  current_time.UnixMilli(),
+				Data:       dataField,
 			},
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("Could not update state: %v", err)
+		return e.Wrap(err, "could not update state")
 	}
 	return nil
 }
@@ -261,14 +263,14 @@ func (s *RGAService) ListenForRTDSignal() {
 	defer cleanUp()
 	for {
 		select {
-		case msg := <- s.StateChangeChan:
+		case msg := <-s.StateChangeChan:
 			switch msg.Type {
 			case data.RECORDING:
 				if msg.State {
 					err := s.startRecording(0, msg.Msg)
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: e.Wrap(err, "could not start recording")}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
@@ -278,14 +280,14 @@ func (s *RGAService) ListenForRTDSignal() {
 					err := s.stopRecording()
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: fmt.Errorf("Could not stop recording: %v", err)}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: e.Wrap(err, "could not stop recording")}
 					} else {
 						s.Logger.Info().Msg("Stopped recording.")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: nil}
 					}
 				}
 			}
-		case <- signalChan:
+		case <-signalChan:
 			currentState := s.rtdStateStore.GetState()
 			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {

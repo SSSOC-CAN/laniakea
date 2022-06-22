@@ -29,11 +29,24 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"fmt"
 	"io"
+
 	"github.com/btcsuite/btcwallet/snacl"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	bolt "go.etcd.io/bbolt"
+)
+
+const (
+	ErrAlreadyUnlocked   	 = bg.Error("macaroon store already unlocked")
+	ErrContextRootKeyID  	 = bg.Error("failed to read root key ID from context")
+	ErrKeyValueForbidden 	 = bg.Error("root key ID value is not allowed")
+	ErrPasswordRequired      = bg.Error("a non-nil password is required")
+	ErrStoreLocked           = bg.Error("macaroon store is locked")
+	ErrRootKeyBucketNotFound = bg.Error("root key bucket not found")
+	ErrEncKeyNotFound        = bg.Error("macaroon encryption key not found")
+	ErrDeletionForbidden     = bg.Error("the specified ID cannot be deleted")
+	ErrRootKeyIDNotFound     = bg.Error("root key with id doesn't exist")
 )
 
 var (
@@ -42,14 +55,6 @@ var (
 	RootKeyLen 				 = 32
 	DefaultRootKeyID 		 = []byte("0")
 	encryptionKeyID 		 = []byte("enckey")
-	ErrAlreadyUnlocked 		 = fmt.Errorf("Macaroon store already unlocked")
-	ErrContextRootKeyID 	 = fmt.Errorf("Failed to read root key ID from context")
-	ErrKeyValueForbidden 	 = fmt.Errorf("Root key ID value is not allowed")
-	ErrPasswordRequired 	 = fmt.Errorf("a non-nil password is required")
-	ErrStoreLocked 			 = fmt.Errorf("macaroon store is locked")
-	ErrRootKeyBucketNotFound = fmt.Errorf("Root key bucket not found")
-	ErrEncKeyNotFound        = fmt.Errorf("macaroon encryption key not found")
-	ErrDeletionForbidden     = fmt.Errorf("the specified ID cannot be deleted")
 )
 
 type contextKey struct {
@@ -86,11 +91,11 @@ func (r *RootKeyStorage) Get(_ context.Context, id []byte) ([]byte, error) {
 	err := r.DB.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(rootKeyBucketName) // get the rootkey bucket
 		if bucket == nil {
-			return fmt.Errorf("Root key bucket not found")
+			return ErrRootKeyBucketNotFound
 		}
 		dbKey := bucket.Get(id) //get the encryption key kv pair
 		if len(dbKey) == 0 {
-			return fmt.Errorf("Root key with id %s doesn't exist", string(id))
+			return ErrRootKeyIDNotFound
 		}
 		decKey, err := r.encKey.Decrypt(dbKey)
 		if err != nil {
@@ -156,7 +161,7 @@ func (r* RootKeyStorage) RootKey(ctx context.Context) ([]byte, []byte, error) {
 	err = r.DB.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(rootKeyBucketName) // get the rootkey bucket
 		if bucket == nil {
-			return fmt.Errorf("Root key bucket not found")
+			return ErrRootKeyBucketNotFound
 		}
 		dbKey := bucket.Get(id) //get the encryption key kv pair
 		if len(dbKey) != 0 {
@@ -193,7 +198,7 @@ func (r *RootKeyStorage) CreateUnlock(password *[]byte) error {
 	return r.DB.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(rootKeyBucketName) // get the rootkey bucket
 		if bucket == nil {
-			return fmt.Errorf("Root key bucket not found")
+			return ErrRootKeyBucketNotFound
 		}
 		dbKey := bucket.Get(encryptionKeyID) //get the encryption key kv pair
 		if len(dbKey) > 0 {
