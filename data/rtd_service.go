@@ -17,6 +17,7 @@ import (
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/SSSOCPaulCote/gux"
@@ -103,7 +104,7 @@ func(s *RTDService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeM
 func (s *RTDService) Start() error {
 	s.Logger.Info().Msg("Starting RTD Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start RTD service. Service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("RTD Service successfully started.")
 	return nil
@@ -113,7 +114,7 @@ func (s *RTDService) Start() error {
 func (s *RTDService) Stop() error {
 	s.Logger.Info().Msg("Stopping RTD Service ...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	for _, channel := range s.StateChangeChans {
 		close(channel)

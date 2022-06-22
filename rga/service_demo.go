@@ -76,7 +76,7 @@ func NewRGAService(
 func (s *RGAService) Start() error {
 	s.Logger.Info().Msg("Starting RGA Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start RGA service. Service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("Connection to MKS RGA is not currently active. Please recompile fmtd as follows `$ go install -tags \"mks\"`")
 	s.wgListen.Add(1)
@@ -89,7 +89,7 @@ func (s *RGAService) Start() error {
 func (s *RGAService) Stop() error {
 	s.Logger.Info().Msg("Stopping RGA Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop RGA service. Service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	var stoppedRec bool
 	if atomic.LoadInt32(&s.Recording) == 1 {
