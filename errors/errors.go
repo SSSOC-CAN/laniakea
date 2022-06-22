@@ -11,10 +11,12 @@ import (
 )
 
 const (
-	ErrInvalidType = bg.Error("invalid type")
-	ErrServiceAlreadyStarted = bg.Error("service already started")
-	ErrServiceAlreadyStopped = bg.Error("service already stopped")
-	ErrNoError = bg.Error("expected an error and got none")
-	ErrAlreadyRecording = bg.Error("already recording")
+	ErrInvalidType             = bg.Error("invalid type")
+	ErrServiceAlreadyStarted   = bg.Error("service already started")
+	ErrServiceAlreadyStopped   = bg.Error("service already stopped")
+	ErrNoError                 = bg.Error("expected an error and got none")
+	ErrAlreadyRecording        = bg.Error("already recording")
 	ErrAlreadyStoppedRecording = bg.Error("already stopped recording")
+	ErrPollingIntervalTooSmall = bg.Error("inputted polling interval smaller than minimum required value")
+	ErrMacSvcNil               = bg.Error("macaroon service uninitialized")
 )

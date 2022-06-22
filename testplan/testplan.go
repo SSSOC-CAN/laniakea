@@ -7,21 +7,26 @@ Last Date Changed: 2022/06/10
 package testplan
 
 import (
-	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"time"
+
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	yaml "gopkg.in/yaml.v2"
 )
 
+const (
+	ErrInvalidTPEXAction = bg.Error("invalid testplan action")
+)
+
 var (
-	stateFileName = "state.json"
+	stateFileName   = "state.json"
 	possibleActions = map[string]actionFunc{
 		"WaitForTime": WaitForTime,
 	}
 	WaitForTime actionFunc = func(waitTime int64) error {
-		time.Sleep(time.Duration(waitTime)*time.Second)
+		time.Sleep(time.Duration(waitTime) * time.Second)
 		return nil
 	}
 	defaultStateFilePath = func(testPlanName string) string {
@@ -35,32 +40,32 @@ type actionFunc func(int64) error
 type AlertState string
 
 var (
-	ALERTSTATE_PENDING AlertState = "PENDING"
+	ALERTSTATE_PENDING   AlertState = "PENDING"
 	ALERTSTATE_COMPLETED AlertState = "COMPLETED"
-	ALERTSTATE_EXPIRED AlertState = "EXPIRED"
+	ALERTSTATE_EXPIRED   AlertState = "EXPIRED"
 )
 
 type Alert struct {
-	Name			string		`yaml:"alert_name"`
-	ActionName		string		`yaml:"action"`
-	ActionArg		int64		`yaml:"action_arg"`
-	ActionStartTime	int			`yaml:"action_start_time"`
-	ActionFunc		actionFunc
-	ExecutionState	AlertState
+	Name            string `yaml:"alert_name"`
+	ActionName      string `yaml:"action"`
+	ActionArg       int64  `yaml:"action_arg"`
+	ActionStartTime int    `yaml:"action_start_time"`
+	ActionFunc      actionFunc
+	ExecutionState  AlertState
 }
 
 type TestPlan struct {
-	Name				string			`yaml:"plan_name"`
-	TestDuration		int64			`yaml:"test_duration"`
-	DataProviders		[]*struct{
-		Name			string		`yaml:"provider_name"`
-		Driver			string		`yaml:"driver"`
+	Name          string `yaml:"plan_name"`
+	TestDuration  int64  `yaml:"test_duration"`
+	DataProviders []*struct {
+		Name   string `yaml:"provider_name"`
+		Driver string `yaml:"driver"`
 		//dependencies	string		`yaml:"dependencies"`
-		NumDataPoints	int64		`yaml:"num_data_points"`
+		NumDataPoints int64 `yaml:"num_data_points"`
 	} `yaml:"data_providers"`
-	Alerts				[]*Alert 	`yaml:"alerts"`
-	TestStateFilePath	string
-	TestReportFilePath 	string		`yaml:"report_file_path"`
+	Alerts             []*Alert `yaml:"alerts"`
+	TestStateFilePath  string
+	TestReportFilePath string `yaml:"report_file_path"`
 }
 
 // loadTestPlan will load the inputted test plan file into a TestPlan struct and return it
@@ -93,7 +98,7 @@ func assignActions(tp *TestPlan) error {
 			alert.ActionFunc = aFunc
 			alert.ExecutionState = ALERTSTATE_PENDING
 		} else {
-			return fmt.Errorf("Action provided is not recognized: %v", alert.ActionName)
+			return ErrInvalidTPEXAction
 		}
 	}
 	return nil

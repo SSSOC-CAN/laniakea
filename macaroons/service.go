@@ -28,17 +28,22 @@ package macaroons
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
+
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"google.golang.org/grpc/metadata"
 	macaroon "gopkg.in/macaroon.v2"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 )
 
-var (
-	PermissionEntityCustomURI = "uri"
-	ErrMissingRootKeyID 	  = fmt.Errorf("Missing root key ID")
+const (
+	PermissionEntityCustomURI 			= "uri"
+	ErrMissingRootKeyID 	  			= bg.Error("missing root key ID")
+	ErrValidatorNil			  			= bg.Error("validator cannot be nil")
+	ErrValidatorMethodAlreadyRegistered = bg.Error("external validator for method already registered")
+	ErrMetadataFromContext              = bg.Error("unable to get metadata from context")
+	ErrUnexpectedMacNumber              = bg.Error("unexpected number of macaroons")
 )
 
 type MacaroonValidator interface {
@@ -93,13 +98,12 @@ func (svc *Service) RegisterExternalValidator(fullMethod string,
 	validator MacaroonValidator) error {
 
 	if validator == nil {
-		return fmt.Errorf("validator cannot be nil")
+		return ErrValidatorNil
 	}
 
 	_, ok := svc.ExternalValidators[fullMethod]
 	if ok {
-		return fmt.Errorf("external validator for method %s already "+
-			"registered", fullMethod)
+		return ErrValidatorMethodAlreadyRegistered
 	}
 
 	svc.ExternalValidators[fullMethod] = validator
@@ -116,11 +120,10 @@ func (svc *Service) ValidateMacaroon(ctx context.Context,
 	// Get macaroon bytes from context and unmarshal into macaroon.
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return fmt.Errorf("unable to get metadata from context")
+		return ErrMetadataFromContext
 	}
 	if len(md["macaroon"]) != 1 {
-		return fmt.Errorf("expected 1 macaroon, got %d",
-			len(md["macaroon"]))
+		return ErrUnexpectedMacNumber
 	}
 
 	// With the macaroon obtained, we'll now decode the hex-string

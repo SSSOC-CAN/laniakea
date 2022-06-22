@@ -27,10 +27,15 @@ package utils
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strconv"
 	"strings"
+
+	bg "github.com/SSSOCPaulCote/blunderguard"
+)
+
+const (
+	ErrUnsupportedAddressType = bg.Error("unsupported address type")
 )
 
 var (
@@ -99,8 +104,7 @@ func ParseAddressString(strAddress string, defaultPort string,
 		)
 
 	case "ip", "ip4", "ip6", "udp", "udp4", "udp6", "unixgram":
-		return nil, fmt.Errorf("only TCP or unix socket "+
-			"addresses are supported: %s", parsedAddr)
+		return nil, ErrUnsupportedAddressType
 
 	default:
 		// We'll now possibly apply the default port, use the local
