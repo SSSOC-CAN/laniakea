@@ -37,6 +37,8 @@ import (
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
@@ -181,9 +183,11 @@ func (i *GrpcInterceptor) checkRPCState(srv interface{}) error {
 func (i *GrpcInterceptor) rpcStateUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler) (interface{}, error) {
-
-		if err := i.checkRPCState(info.Server); err != nil {
-			return nil, err
+		err := i.checkRPCState(info.Server)
+		if err != nil && err != ErrInvalidRPCState {
+			return nil, status.Error(codes.FailedPrecondition, err)
+		} else if err != nil {
+			return nil, status.Error(codes.Internal, err)
 		}
 
 		return handler(ctx, req)
@@ -195,9 +199,11 @@ func (i *GrpcInterceptor) rpcStateUnaryServerInterceptor() grpc.UnaryServerInter
 func (i *GrpcInterceptor) rpcStateStreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream,
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-
-		if err := i.checkRPCState(srv); err != nil {
-			return err
+		err := i.checkRPCState(srv)
+		if err != nil && err != ErrInvalidRPCState {
+			return nil, status.Error(codes.FailedPrecondition, err)
+		} else if err != nil {
+			return nil, status.Error(codes.Internal, err)
 		}
 
 		return handler(srv, ss)
@@ -311,7 +317,7 @@ func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInter
 		handler grpc.UnaryHandler) (interface{}, error) {
 		// Check macaroons.
 		if err := i.checkMacaroon(ctx, info.FullMethod); err != nil {
-			return nil, err
+			return nil, status.Error(codes.PermissionDenied, err)
 		}
 		return handler(ctx, req)
 	}
@@ -325,7 +331,7 @@ func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInt
 		// Check macaroons.
 		err := i.checkMacaroon(ss.Context(), info.FullMethod)
 		if err != nil {
-			return err
+			return status.Error(codes.PermissionDenied, err)
 		}
 		return handler(srv, ss)
 	}

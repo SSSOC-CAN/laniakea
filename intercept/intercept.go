@@ -27,13 +27,14 @@ THE SOFTWARE.
 package intercept
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"sync/atomic"
 	"syscall"
+
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -43,15 +44,15 @@ var (
 
 // Interceptor is the object controlling application shutdown requests
 type Interceptor struct {
-	interruptChannel chan os.Signal
-	Logger *zerolog.Logger
-	shutdownChannel chan struct{}
+	interruptChannel       chan os.Signal
+	Logger                 *zerolog.Logger
+	shutdownChannel        chan struct{}
 	shutdownRequestChannel chan struct{}
-	quit chan struct{}
+	quit                   chan struct{}
 }
 
-// mainInterruptHandler listens for SIGINT (Ctrl+C) signals on the interruptChannel and shutdown requests on the 
-// shutdownRequestChannel. 
+// mainInterruptHandler listens for SIGINT (Ctrl+C) signals on the interruptChannel and shutdown requests on the
+// shutdownRequestChannel.
 func (interceptor *Interceptor) mainInterruptHandler() {
 	defer atomic.StoreInt32(&started, 0)
 	var isShutdown bool
@@ -118,13 +119,13 @@ func (c *Interceptor) ShutdownChannel() <-chan struct{} {
 // InitInterceptor initializes the shutdown and interrupt interceptor
 func InitInterceptor() (*Interceptor, error) {
 	if !atomic.CompareAndSwapInt32(&started, 0, 1) {
-		return &Interceptor{}, errors.New("Interceptor already initialized")
+		return &Interceptor{}, errors.ErrServiceAlreadyStarted
 	}
 	interceptor := Interceptor{
-		interruptChannel: 		make(chan os.Signal, 1),
-		shutdownChannel:		make(chan struct{}),
-		shutdownRequestChannel:	make(chan struct{}),
-		quit:					make(chan struct{}),
+		interruptChannel:       make(chan os.Signal, 1),
+		shutdownChannel:        make(chan struct{}),
+		shutdownRequestChannel: make(chan struct{}),
+		quit:                   make(chan struct{}),
 	}
 	signalsToCatch := []os.Signal{
 		os.Interrupt,
@@ -140,7 +141,7 @@ func InitInterceptor() (*Interceptor, error) {
 // Close changes the atomic state variable for started
 func (i *Interceptor) Close() error {
 	if !atomic.CompareAndSwapInt32(&started, 1, 0) {
-		return errors.New("Interceptor already stopped")
+		return errors.ErrServiceAlreadyStopped
 	}
 	return nil
 }
