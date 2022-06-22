@@ -105,7 +105,7 @@ func (s *TelemetryService) Stop() error {
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
 func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	if pol_int < drivers.MinTelemetryPollingInterval && pol_int != 0 {
 		return errors.ErrPollingIntervalTooSmall
