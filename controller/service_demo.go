@@ -24,8 +24,16 @@ import (
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
+)
+
+const (
+	ErrNegativeRate = bg.Error("rates cannot be negative")
+	ErrTelNotRecoring = bg.Error("telemetry service not yet recording")
+	ErrCtrllerInUse = bg.Error("controller service currently in use")
+	ErrNegativePressure = bg.Error("pressures cannot be negative")
 )
 
 type ControllerService struct {
@@ -111,10 +119,10 @@ func(s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *proxy
 // SetTemperature takes a gRPC request and changes the temperature set point accordingly
 func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateStream demorpc.Controller_SetTemperatureServer) error {
 	if s.ctrlState != waitingToStart {
-		return errors.ErrCtrllerInUse
+		return ErrCtrllerInUse
 	}
 	if req.TempChangeRate < float64(0) {
-		return errors.ErrNegativeRate
+		return ErrNegativeRate
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
@@ -124,7 +132,7 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 		return gux.ErrInvalidStateType
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return errors.ErrTelNotRecoring
+		return ErrTelNotRecoring
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
@@ -282,14 +290,14 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 // SetPressure takes a gRPC request and changes the pressure set point accordingly
 func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStream demorpc.Controller_SetPressureServer) error {
 	if s.ctrlState != waitingToStart {
-		return errors.ErrCtrllerInUse
+		return ErrCtrllerInUse
 	}
 	// check if we have negative rate
 	if req.PressureChangeRate < float64(0) {
-		return errors.ErrNegativeRate
+		return ErrNegativeRate
 	}
 	if req.PressureSetPoint < float64(0) {
-		return errors.ErrNegativePressure
+		return ErrNegativePressure
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
@@ -299,7 +307,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 		return gux.ErrInvalidStateType
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return errors.ErrTelNotRecoring
+		return ErrTelNotRecoring
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)

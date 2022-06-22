@@ -34,7 +34,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
+	bg "github.com/SSSOCPaulCote/blunderguard"
+)
+
+const (
+	ErrFloatLargerThanOne = bg.Error("float is larger than or equal to 1")
 )
 
 var (
@@ -81,7 +85,7 @@ func RandSeq(n int) string {
 // NormalizeToNDecimalPlace will take any float below 1 and get the factor to transform it to 1 with equivalent decimal places
 func NormalizeToNDecimalPlace(oldF float64) (float64, error) {
 	if oldF >= 1 {
-		return 0, errors.ErrFloatLargerThanOne
+		return 0, ErrFloatLargerThanOne
 	}
 	s := fmt.Sprintf("%f", oldF)
 	newS := strings.Replace(s, ".", "", -1)

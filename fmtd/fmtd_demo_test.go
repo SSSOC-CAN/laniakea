@@ -37,12 +37,17 @@ import (
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	macaroon "gopkg.in/macaroon.v2"
+)
+
+const (
+	ErrMacNotExpired = bg.Error("macaroon didn't expire")
 )
 
 var (
@@ -605,7 +610,7 @@ var (
 			time.Sleep(10*time.Second)
 			_, err = client.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
 			if err == nil {
-				return nil, errors.ErrMacNotExpired
+				return nil, ErrMacNotExpired
 			}
 			return conn, nil
 		}},
