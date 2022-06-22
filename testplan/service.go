@@ -125,7 +125,7 @@ func(s *TestPlanService) RegisterWithRestProxy(ctx context.Context, mux *proxy.S
 func (s *TestPlanService) Start() error {
 	s.Logger.Info().Msg("Starting Test Plan Executor...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start Test Plan Executor. Service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("Test Plan Executor successfully started.")
 	return nil
@@ -135,7 +135,7 @@ func (s *TestPlanService) Start() error {
 func (s *TestPlanService) Stop() error {
 	s.Logger.Info().Msg("Stopping Test Plan Executor ...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop Test Plan Executor. Service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	if atomic.LoadInt32(&s.Executing) == 1 {
 		_ = s.stopTestPlan()

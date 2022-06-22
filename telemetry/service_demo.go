@@ -79,7 +79,7 @@ func NewTelemetryService(
 func (s *TelemetryService) Start() error {
 	s.Logger.Info().Msg("Starting telemetry service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start telemetry service: service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("Connection to DAQ is not currently active. Please recompile fmtd as follows `$ go install -tags \"fluke\"`")
 	s.wgListen.Add(1)
@@ -92,7 +92,7 @@ func (s *TelemetryService) Start() error {
 func (s *TelemetryService) Stop() error {
 	s.Logger.Info().Msg("Stopping telemetry service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop telemetry: service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()

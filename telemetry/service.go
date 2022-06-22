@@ -71,7 +71,7 @@ func NewTelemetryService(
 func (s *TelemetryService) Start() error {
 	s.Logger.Info().Msg("Starting Telemetry Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start Telemetry service: service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.wgListen.Add(1)
 	go s.ListenForRTDSignal()
@@ -83,7 +83,7 @@ func (s *TelemetryService) Start() error {
 func (s *TelemetryService) Stop() error {
 	s.Logger.Info().Msg("Stopping Telemetry Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop Telemetry service: service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
