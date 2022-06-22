@@ -1,3 +1,4 @@
+//go:build demo
 // +build demo
 
 /*
@@ -16,8 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
@@ -26,13 +25,17 @@ import (
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
-	ErrNegativeRate = bg.Error("rates cannot be negative")
-	ErrTelNotRecoring = bg.Error("telemetry service not yet recording")
-	ErrCtrllerInUse = bg.Error("controller service currently in use")
+	ErrNegativeRate     = bg.Error("rates cannot be negative")
+	ErrTelNotRecoring   = bg.Error("telemetry service not yet recording")
+	ErrCtrllerInUse     = bg.Error("controller service currently in use")
 	ErrNegativePressure = bg.Error("pressures cannot be negative")
 )
 
@@ -43,18 +46,19 @@ type ControllerService struct {
 
 // Compile time check to ensure ControllerService implements api.RestProxyService
 var _ api.RestProxyService = (*ControllerService)(nil)
+
 // A compile time check to make sure that ControllerService fully implements the data.Service interface
-var _ data.Service = (*ControllerService) (nil)
+var _ data.Service = (*ControllerService)(nil)
 
 // NewControllerService creates an instance of the ControllerService struct
 func NewControllerService(logger *zerolog.Logger, rtdStore *gux.Store, ctrlStore *gux.Store, _ drivers.DriverConnection) *ControllerService {
 	return &ControllerService{
 		BaseControllerService: BaseControllerService{
-			ctrlState: waitingToStart,
-			rtdStateStore: rtdStore,
+			ctrlState:      waitingToStart,
+			rtdStateStore:  rtdStore,
 			ctrlStateStore: ctrlStore,
-			Logger: logger,
-			name: ControllerName,
+			Logger:         logger,
+			name:           ControllerName,
 		},
 	}
 }
@@ -106,7 +110,7 @@ func (s *ControllerService) RegisterWithGrpcServer(grpcServer *grpc.Server) erro
 }
 
 // RegisterWithRestProxy registers the ControllerService with the REST proxy
-func(s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+func (s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
 	err := demorpc.RegisterControllerHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
@@ -119,32 +123,32 @@ func(s *ControllerService) RegisterWithRestProxy(ctx context.Context, mux *proxy
 // SetTemperature takes a gRPC request and changes the temperature set point accordingly
 func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateStream demorpc.Controller_SetTemperatureServer) error {
 	if s.ctrlState != waitingToStart {
-		return ErrCtrllerInUse
+		return status.Error(codes.FailedPrecondition, ErrCtrllerInUse)
 	}
 	if req.TempChangeRate < float64(0) {
-		return ErrNegativeRate
+		return status.Error(codes.InvalidArgument, ErrNegativeRate)
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return gux.ErrInvalidStateType
+		return status.Error(codes.Internal, gux.ErrInvalidStateType)
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return ErrTelNotRecoring
+		return status.Error(codes.FailedPrecondition, ErrTelNotRecoring)
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return gux.ErrInvalidStateType
+		return status.Error(codes.Internal, gux.ErrInvalidStateType)
 	}
 	var (
 		actualTempChangeRate float64
-		intervalCnt			 int
-		totalIntervals		 int
-		changeRateSlice []struct{
-			Rate 	 float64
+		intervalCnt          int
+		totalIntervals       int
+		changeRateSlice      []struct {
+			Rate     float64
 			SetPoint float64
 		}
 		lastTempSetPoint float64
@@ -152,11 +156,11 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	if req.TempChangeRate == float64(0) {
 		err := s.ctrlStateStore.Dispatch(updateTempSetPointAction(req.TempSetPoint))
 		if err != nil {
-			return err
+			return status.Error(codes.Internal, err)
 		}
 		if err := updateStream.Send(&demorpc.SetTempResponse{
 			CurrentTempSetPoint: req.TempSetPoint,
-			CurrentAvgTemp: RTD.AverageTemperature,
+			CurrentAvgTemp:      RTD.AverageTemperature,
 		}); err != nil {
 			return err
 		}
@@ -165,14 +169,14 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 		lastTempSetPoint = ctrl.TemperatureSetPoint
 		setPtHelp := float64(1)
 		// convert change rate from degree C/min to C/Polling Interval
-		actualTempChangeRate = req.TempChangeRate * float64(RTD.TelPollingInterval)/float64(60)
+		actualTempChangeRate = req.TempChangeRate * float64(RTD.TelPollingInterval) / float64(60)
 		if req.TempSetPoint < RTD.AverageTemperature {
 			actualTempChangeRate *= float64(-1)
 			setPtHelp *= float64(-1)
 		}
-		lastFiveRates := []struct{
+		lastFiveRates := []struct {
 			Intervals int
-			Rate	  float64
+			Rate      float64
 		}{}
 		var (
 			cumSum int
@@ -181,97 +185,97 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 		)
 		for i := 0; i < 4; i++ {
 			if i == 0 {
-				rate = actualTempChangeRate/float64(2)
-				lastFiveRates = append(lastFiveRates, struct{
+				rate = actualTempChangeRate / float64(2)
+				lastFiveRates = append(lastFiveRates, struct {
 					Intervals int
-					Rate	  float64
+					Rate      float64
 				}{
-					Intervals: int(0.25/math.Abs(rate)),
-					Rate: rate,
+					Intervals: int(0.25 / math.Abs(rate)),
+					Rate:      rate,
 				})
 			} else {
-				rate = lastFiveRates[i-1].Rate/float64(2)
-				lastFiveRates = append(lastFiveRates, struct{
+				rate = lastFiveRates[i-1].Rate / float64(2)
+				lastFiveRates = append(lastFiveRates, struct {
 					Intervals int
-					Rate	  float64
+					Rate      float64
 				}{
-					Intervals: int(0.25/math.Abs(rate)),
-					Rate: rate,
+					Intervals: int(0.25 / math.Abs(rate)),
+					Rate:      rate,
 				})
 			}
-			inter = int(0.25/math.Abs(rate))
+			inter = int(0.25 / math.Abs(rate))
 			cumSum += inter
 		}
 		for i := 3; i > -1; i-- {
 			for j := 0; j < lastFiveRates[i].Intervals; j++ {
-				changeRateSlice = append(changeRateSlice, struct{
-					Rate float64
+				changeRateSlice = append(changeRateSlice, struct {
+					Rate     float64
 					SetPoint float64
 				}{
-					Rate: lastFiveRates[i].Rate,
-					SetPoint: ctrl.TemperatureSetPoint+setPtHelp,
+					Rate:     lastFiveRates[i].Rate,
+					SetPoint: ctrl.TemperatureSetPoint + setPtHelp,
 				})
 			}
 		}
-		placeHolder := math.Abs(req.TempSetPoint-ctrl.TemperatureSetPoint)-float64(2)
-		totalIntervals = int(placeHolder/math.Abs(actualTempChangeRate))
-		totalIntervals = 2*cumSum+totalIntervals
+		placeHolder := math.Abs(req.TempSetPoint-ctrl.TemperatureSetPoint) - float64(2)
+		totalIntervals = int(placeHolder / math.Abs(actualTempChangeRate))
+		totalIntervals = 2*cumSum + totalIntervals
 		for i := 0; i < totalIntervals-(2*cumSum); i++ {
-			changeRateSlice = append(changeRateSlice, struct{
-				Rate float64
+			changeRateSlice = append(changeRateSlice, struct {
+				Rate     float64
 				SetPoint float64
 			}{
-				Rate: actualTempChangeRate,
-				SetPoint: req.TempSetPoint-setPtHelp,
+				Rate:     actualTempChangeRate,
+				SetPoint: req.TempSetPoint - setPtHelp,
 			})
 		}
 		for _, r := range lastFiveRates {
 			for j := 0; j < r.Intervals; j++ {
-				changeRateSlice = append(changeRateSlice, struct{
-					Rate float64
+				changeRateSlice = append(changeRateSlice, struct {
+					Rate     float64
 					SetPoint float64
 				}{
-					Rate: r.Rate,
+					Rate:     r.Rate,
 					SetPoint: req.TempSetPoint,
 				})
 			}
 		}
 	}
-	changeRateSlice = append(changeRateSlice, struct{
-		Rate float64
+	changeRateSlice = append(changeRateSlice, struct {
+		Rate     float64
 		SetPoint float64
 	}{
-		Rate: float64(0),
+		Rate:     float64(0),
 		SetPoint: req.TempSetPoint,
 	})
 	rand.Seed(time.Now().UnixNano())
-	subscriberName := s.name+utils.RandSeq(10)
+	subscriberName := s.name + utils.RandSeq(10)
 	updateChan, unsub := s.rtdStateStore.Subscribe(subscriberName)
 	cleanUp := func() {
 		unsub(s.rtdStateStore, subscriberName)
 	}
 	defer cleanUp()
 	for {
-		select {	
+		select {
 		case <-updateChan:
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return gux.ErrInvalidStateType
+				return status.Error(codes.Internal, gux.ErrInvalidStateType)
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetTempResponse{
-					CurrentTempSetPoint: changeRateSlice[intervalCnt].SetPoint,
-					CurrentAvgTemp: RTD.AverageTemperature,
-					CurrentTempChangeRate: changeRateSlice[intervalCnt].Rate*float64(60)/float64(RTD.TelPollingInterval),
+					CurrentTempSetPoint:   changeRateSlice[intervalCnt].SetPoint,
+					CurrentAvgTemp:        RTD.AverageTemperature,
+					CurrentTempChangeRate: changeRateSlice[intervalCnt].Rate * float64(60) / float64(RTD.TelPollingInterval),
 				}); err != nil {
 					return err
 				}
 				// Update set point
-				lastTempSetPoint = lastTempSetPoint+changeRateSlice[intervalCnt].Rate
+				lastTempSetPoint = lastTempSetPoint + changeRateSlice[intervalCnt].Rate
 				err := s.ctrlStateStore.Dispatch(updateTempSetPointAction(lastTempSetPoint))
 				if err != nil {
-					return err
+					return status.Error(codes.Internal, err)
 				}
 				if intervalCnt == totalIntervals {
 					return nil
@@ -290,36 +294,36 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 // SetPressure takes a gRPC request and changes the pressure set point accordingly
 func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStream demorpc.Controller_SetPressureServer) error {
 	if s.ctrlState != waitingToStart {
-		return ErrCtrllerInUse
+		return status.Error(codes.FailedPrecondition, ErrCtrllerInUse)
 	}
 	// check if we have negative rate
 	if req.PressureChangeRate < float64(0) {
-		return ErrNegativeRate
+		return status.Error(codes.InvalidArgument, ErrNegativeRate)
 	}
 	if req.PressureSetPoint < float64(0) {
-		return ErrNegativePressure
+		return status.Error(codes.InvalidArgument, ErrNegativeRate)
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
 	currentState := s.rtdStateStore.GetState()
 	RTD, ok := currentState.(data.InitialRtdState)
 	if !ok {
-		return gux.ErrInvalidStateType
+		return status.Error(codes.Internal, gux.ErrInvalidStateType)
 	}
 	if RTD.TelPollingInterval == int64(0) {
-		return ErrTelNotRecoring
+		return status.Error(codes.FailedPrecondition, ErrTelNotRecoring)
 	}
 	currentState = s.ctrlStateStore.GetState()
 	ctrl, ok := currentState.(data.InitialCtrlState)
 	if !ok {
-		return gux.ErrInvalidStateType
+		return status.Error(codes.Internal, gux.ErrInvalidStateType)
 	}
 	var (
 		actualPresChangeRate float64
-		intervalCnt			 int
-		totalIntervals		 int
-		changeRateSlice []struct{
-			Rate 	 float64
+		intervalCnt          int
+		totalIntervals       int
+		changeRateSlice      []struct {
+			Rate     float64
 			SetPoint float64
 		}
 		lastPresSetPoint float64
@@ -327,11 +331,11 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 	if req.PressureChangeRate == float64(0) {
 		err := s.ctrlStateStore.Dispatch(updatePresSetPointAction(req.PressureSetPoint))
 		if err != nil {
-			return err
+			return status.Error(codes.Internal, err)
 		}
 		if err := updateStream.Send(&demorpc.SetPresResponse{
 			CurrentPressureSetPoint: req.PressureSetPoint,
-			CurrentAvgPressure: RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value,
+			CurrentAvgPressure:      RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value,
 		}); err != nil {
 			return err
 		}
@@ -340,113 +344,113 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 		lastPresSetPoint = RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 		setPtHelp := float64(1)
 		// convert change rate from degree Torr/min to Torr/Polling Interval
-		actualPresChangeRate = req.PressureChangeRate * float64(RTD.TelPollingInterval)/float64(60)
+		actualPresChangeRate = req.PressureChangeRate * float64(RTD.TelPollingInterval) / float64(60)
 		if req.PressureSetPoint < RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value {
 			actualPresChangeRate *= float64(-1)
 			setPtHelp *= float64(-1)
 		}
-		lastFiveRates := []struct{
+		lastFiveRates := []struct {
 			Intervals int
-			Rate	  float64
+			Rate      float64
 		}{}
 		var (
 			cumSum int
 			rate   float64
 			inter  int
 		)
-		for i := 0; i < 4; i ++ {
+		for i := 0; i < 4; i++ {
 			if i == 0 {
-				rate = actualPresChangeRate/float64(2)
-				lastFiveRates = append(lastFiveRates, struct{
+				rate = actualPresChangeRate / float64(2)
+				lastFiveRates = append(lastFiveRates, struct {
 					Intervals int
-					Rate	  float64
+					Rate      float64
 				}{
-					Intervals: int(0.25/math.Abs(rate)),
-					Rate: rate,
+					Intervals: int(0.25 / math.Abs(rate)),
+					Rate:      rate,
 				})
 			} else {
-				rate = lastFiveRates[i-1].Rate/float64(2)
-				lastFiveRates = append(lastFiveRates, struct{
+				rate = lastFiveRates[i-1].Rate / float64(2)
+				lastFiveRates = append(lastFiveRates, struct {
 					Intervals int
-					Rate	  float64
+					Rate      float64
 				}{
-					Intervals: int(0.25/math.Abs(rate)),
-					Rate: rate,
+					Intervals: int(0.25 / math.Abs(rate)),
+					Rate:      rate,
 				})
 			}
-			inter = int(0.25/math.Abs(rate))
+			inter = int(0.25 / math.Abs(rate))
 			cumSum += inter
 		}
 		for i := 3; i > -1; i-- {
 			for j := 0; j < lastFiveRates[i].Intervals; j++ {
-				changeRateSlice = append(changeRateSlice, struct{
-					Rate float64
+				changeRateSlice = append(changeRateSlice, struct {
+					Rate     float64
 					SetPoint float64
 				}{
-					Rate: lastFiveRates[i].Rate,
-					SetPoint: ctrl.PressureSetPoint+setPtHelp,
+					Rate:     lastFiveRates[i].Rate,
+					SetPoint: ctrl.PressureSetPoint + setPtHelp,
 				})
 			}
 		}
-		placeHolder := math.Abs(req.PressureSetPoint-ctrl.PressureSetPoint)-float64(2)
-		totalIntervals = int(placeHolder/math.Abs(actualPresChangeRate)) 
-		totalIntervals = 2*cumSum+totalIntervals
+		placeHolder := math.Abs(req.PressureSetPoint-ctrl.PressureSetPoint) - float64(2)
+		totalIntervals = int(placeHolder / math.Abs(actualPresChangeRate))
+		totalIntervals = 2*cumSum + totalIntervals
 		for i := 0; i < totalIntervals-(2*cumSum); i++ {
-			changeRateSlice = append(changeRateSlice, struct{
-				Rate float64
+			changeRateSlice = append(changeRateSlice, struct {
+				Rate     float64
 				SetPoint float64
 			}{
-				Rate: actualPresChangeRate,
-				SetPoint: req.PressureSetPoint-setPtHelp,
+				Rate:     actualPresChangeRate,
+				SetPoint: req.PressureSetPoint - setPtHelp,
 			})
 		}
 		for _, r := range lastFiveRates {
 			for j := 0; j < r.Intervals; j++ {
-				changeRateSlice = append(changeRateSlice, struct{
-					Rate float64
+				changeRateSlice = append(changeRateSlice, struct {
+					Rate     float64
 					SetPoint float64
 				}{
-					Rate: r.Rate,
+					Rate:     r.Rate,
 					SetPoint: req.PressureSetPoint,
 				})
 			}
 		}
 	}
-	changeRateSlice = append(changeRateSlice, struct{
-		Rate float64
+	changeRateSlice = append(changeRateSlice, struct {
+		Rate     float64
 		SetPoint float64
 	}{
-		Rate: float64(0),
+		Rate:     float64(0),
 		SetPoint: req.PressureSetPoint,
 	})
 	rand.Seed(time.Now().UnixNano())
-	subscriberName := s.name+utils.RandSeq(10)
+	subscriberName := s.name + utils.RandSeq(10)
 	updateChan, unsub := s.rtdStateStore.Subscribe(subscriberName)
 	cleanUp := func() {
 		unsub(s.rtdStateStore, subscriberName)
 	}
 	defer cleanUp()
 	for {
-		select {	
+		select {
 		case <-updateChan:
 			currentState := s.rtdStateStore.GetState()
 			RTD, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				return gux.ErrInvalidStateType
+				return status.Error(codes.Internal, gux.ErrInvalidStateType)
 			}
 			if RTD.RealTimeData.Source == "TEL" {
 				if err := updateStream.Send(&demorpc.SetPresResponse{
-					CurrentPressureSetPoint: changeRateSlice[intervalCnt].SetPoint,
-					CurrentAvgPressure: RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value,
-					CurrentPressureChangeRate: changeRateSlice[intervalCnt].Rate*float64(60)/float64(RTD.TelPollingInterval),
+					CurrentPressureSetPoint:   changeRateSlice[intervalCnt].SetPoint,
+					CurrentAvgPressure:        RTD.RealTimeData.Data[drivers.TelemetryPressureChannel].Value,
+					CurrentPressureChangeRate: changeRateSlice[intervalCnt].Rate * float64(60) / float64(RTD.TelPollingInterval),
 				}); err != nil {
 					return err
 				}
 				// Update set point
-				lastPresSetPoint = lastPresSetPoint+changeRateSlice[intervalCnt].Rate
+				lastPresSetPoint = lastPresSetPoint + changeRateSlice[intervalCnt].Rate
 				err := s.ctrlStateStore.Dispatch(updatePresSetPointAction(lastPresSetPoint))
 				if err != nil {
-					return err
+					return status.Error(codes.Internal, err)
 				}
 				if intervalCnt == totalIntervals {
 					return nil
