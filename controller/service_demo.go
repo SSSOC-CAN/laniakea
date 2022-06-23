@@ -301,7 +301,7 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 		return status.Error(codes.InvalidArgument, ErrNegativeRate.Error())
 	}
 	if req.PressureSetPoint < float64(0) {
-		return status.Error(codes.InvalidArgument, ErrNegativeRate.Error())
+		return status.Error(codes.InvalidArgument, ErrNegativePressure.Error())
 	}
 	s.setInUse()
 	defer s.setWaitingToStart()
