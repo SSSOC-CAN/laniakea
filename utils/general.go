@@ -62,11 +62,11 @@ func UniqueFileName(path string) string {
 	for FileExists(path) {
 		ext := filepath.Ext(path)
 		if counter > 1 && counter < 11 {
-			path = path[:len(path)-len(ext)-4]+" ("+strconv.Itoa(counter)+")"+ext
+			path = path[:len(path)-len(ext)-4] + " (" + strconv.Itoa(counter) + ")" + ext
 		} else if counter >= 11 {
-			path = path[:len(path)-len(ext)-5]+" ("+strconv.Itoa(counter)+")"+ext
+			path = path[:len(path)-len(ext)-5] + " (" + strconv.Itoa(counter) + ")" + ext
 		} else {
-			path = path[:len(path)-len(ext)]+" ("+strconv.Itoa(counter)+")"+ext
+			path = path[:len(path)-len(ext)] + " (" + strconv.Itoa(counter) + ")" + ext
 		}
 		counter++
 	}
@@ -75,11 +75,11 @@ func UniqueFileName(path string) string {
 
 // RandSeq generates a random string of length n
 func RandSeq(n int) string {
-    b := make([]rune, n)
-    for i := range b {
-        b[i] = letters[rand.Intn(len(letters))]
-    }
-    return string(b)
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
 
 // NormalizeToNDecimalPlace will take any float below 1 and get the factor to transform it to 1 with equivalent decimal places
@@ -89,6 +89,9 @@ func NormalizeToNDecimalPlace(oldF float64) (float64, error) {
 	}
 	s := fmt.Sprintf("%f", oldF)
 	newS := strings.Replace(s, ".", "", -1)
+	if oldF < 0 {
+		newS = strings.Replace(newS, "-", "", -1)
+	}
 	i := 0
 	for {
 		if newS[0] == byte('0') {
