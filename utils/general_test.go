@@ -7,6 +7,7 @@ Last Date Changed: 2022/06/10
 package utils
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -66,6 +67,7 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+// TestNormalizeToNDecimalPlace tests the TestNormalizeToNDecimalPlace function
 func TestNormalizeToNDecimalPlace(t *testing.T) {
 	t.Run("test value greater than 1", func(t *testing.T) {
 		_, err := NormalizeToNDecimalPlace(2.0)
@@ -97,4 +99,25 @@ func TestNormalizeToNDecimalPlace(t *testing.T) {
 			t.Errorf("Unexpected result calling NormalizeToNDecimalPlace: %f", v)
 		}
 	})
+}
+
+// TestVerifyPluginStringFormat tests the VerifyPluginStringFormat function
+func TestVerifyPluginStringFormat(t *testing.T) {
+	cases := map[string]bool{
+		"My-Plugin_124:datasource:plugin.exe":          true,
+		"myplugin.test:datasource:plugin.exe":          true,
+		"myplugin123:random:plugin.exe":                false,
+		"myplugin_-123sdaASD:controller:plugin.exe":    true,
+		"myplugin:datasource:pLgste_sdaA-1234.exe_":    false,
+		"myplugin:datasource:pLgste_sdaA-1234.ex_e":    false,
+		"myplugin:datasource:pLgste_sdaA-1234.ex-e":    false,
+		"myplugin:datasource:pLgste_sdaA-1234.ex231e4": true,
+	}
+	for name, c := range cases {
+		t.Run(fmt.Sprintf("test %v", name), func(t *testing.T) {
+			if VerifyPluginStringFormat(name) != c {
+				t.Errorf("Unexpected result: case %v\texpected %v", name, c)
+			}
+		})
+	}
 }

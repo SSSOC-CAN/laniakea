@@ -31,6 +31,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -42,7 +43,8 @@ const (
 )
 
 var (
-	letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	letters     = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	pluginRegEx = `([a-zA-Z0-9_-]+)\:((?:datasource)|(?:controller))\:([a-zA-Z0-9_-]+\.[a-zA-Z0-9]+)$`
 )
 
 // FileExists reports whether the named file or directory exists.
@@ -119,4 +121,10 @@ func NumDecPlaces(v float64) int {
 		return len(s) - i - 1
 	}
 	return 1
+}
+
+// VerifyPluginStringFormat checks if the plugin format in the config is in the acceptable format
+func VerifyPluginStringFormat(s string) bool {
+	match, _ := regexp.MatchString(pluginRegEx, s)
+	return match
 }
