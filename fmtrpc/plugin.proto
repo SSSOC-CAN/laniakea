@@ -1,0 +1,36 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/29
+*/
+
+syntax = "proto3";
+
+package fmtrpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
+
+service Datasource {
+    rpc StartRecord(Empty) returns (stream Frame);
+    rpc StopRecord(Empty) returns (Empty);
+}
+
+service Controller {
+    rpc Stop(Empty) returns (Empty);
+    rpc Command(Frame) returns (stream Frame);
+}
+
+message Empty {}
+message Frame {
+    // The name of the source of this Frame
+    string source = 1;
+
+    // A MIME-like type indicating the kind of content within the payload field
+    string type = 2;
+
+    // The UNIX millisecond timestamp of this frame
+    int64 timestamp = 3;
+
+    // The actual payload data in bytes. Limit is 2^32
+    bytes payload = 4;
+}
