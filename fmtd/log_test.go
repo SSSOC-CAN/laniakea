@@ -22,7 +22,7 @@ func TestInitLoggerOutput(t *testing.T) {
 	// start with True
 	config := Config{
 		DefaultLogDir: true,
-		LogFileDir: default_log_dir(),
+		LogFileDir:    default_log_dir(),
 		ConsoleOutput: true,
 	}
 	log, err := InitLogger(&config)
@@ -33,7 +33,7 @@ func TestInitLoggerOutput(t *testing.T) {
 	// False
 	config = Config{
 		DefaultLogDir: true,
-		LogFileDir: default_log_dir(),
+		LogFileDir:    default_log_dir(),
 		ConsoleOutput: false,
 	}
 	log, err = InitLogger(&config)
@@ -53,7 +53,7 @@ func TestInitLoggerOutput(t *testing.T) {
 	w.Close()
 	os.Stdout = old
 	out := <-outC //reading last line of console output
-	
+
 	if strings.Contains(out, "This shouldn't appear in the console...") {
 		t.Errorf("InitLogger produced a logger that prints to console when it shouldn't")
 	}
@@ -67,7 +67,7 @@ func TestNewSubLogger(t *testing.T) {
 	// true first
 	config := Config{
 		DefaultLogDir: true,
-		LogFileDir: default_log_dir(),
+		LogFileDir:    default_log_dir(),
 		ConsoleOutput: true,
 	}
 	log, err := InitLogger(&config)
@@ -79,7 +79,7 @@ func TestNewSubLogger(t *testing.T) {
 	// false
 	config = Config{
 		DefaultLogDir: true,
-		LogFileDir: default_log_dir(),
+		LogFileDir:    default_log_dir(),
 		ConsoleOutput: false,
 	}
 	log, err = InitLogger(&config)
@@ -88,7 +88,7 @@ func TestNewSubLogger(t *testing.T) {
 	}
 	test_sub_log = NewSubLogger(&log, "TEST")
 	test_sub_log.SubLogger.Info().Msg("This shouldn't appear in the console...")
-	
+
 	outC := make(chan string)
 
 	go func() {
@@ -100,7 +100,7 @@ func TestNewSubLogger(t *testing.T) {
 	w.Close()
 	os.Stdout = old
 	out := <-outC //reading last line of console output
-	
+
 	if strings.Contains(out, "This shouldn't appear in the console...") {
 		t.Errorf("NewSubLogger produced a logger that prints to console when it shouldn't")
 	}
@@ -117,9 +117,9 @@ func TestLogWithErrors(t *testing.T) {
 		t.Errorf("%s", err)
 	}
 	test_sub_log := NewSubLogger(&log, "TEST")
-	tables := []struct{
-		level	string
-		msg		string
+	tables := []struct {
+		level string
+		msg   string
 	}{
 		{"INFO", "T1"},
 		{"DEBUG", "T2"},
@@ -134,7 +134,7 @@ func TestLogWithErrors(t *testing.T) {
 		level, msg = table.level, table.msg
 		err := test_sub_log.LogWithErrors(level, msg)
 		if i == len(tables)-1 {
-			if err == nil {
+			if err != ErrLogLvlNotFound {
 				t.Errorf("Log created a log with an invalid log level: %v", level)
 			}
 		}

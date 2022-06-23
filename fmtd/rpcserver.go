@@ -261,26 +261,26 @@ func (s *RpcServer) TestCommand(_ context.Context, _ *fmtrpc.TestRequest) (*fmtr
 // BakeMacaroon bakes a new macaroon based on input permissions and constraints
 func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRequest) (*fmtrpc.BakeMacaroonResponse, error) {
 	if s.macSvc == nil {
-		return nil, status.Error(codes.Aborted, e.Wrap(errors.ErrMacSvcNil, "could not bake macaroon").Error())
+		return nil, status.Error(codes.Aborted, errors.ErrMacSvcNil.Error())
 	}
 	if s.grpcInterceptor == nil {
-		return nil, status.Error(codes.Aborted, e.Wrap(ErrGRPCMiddlewareNil, "could not bake macaroon").Error())
+		return nil, status.Error(codes.Aborted, ErrGRPCMiddlewareNil.Error())
 	}
 	if len(req.Permissions) == 0 {
-		return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrEmptyPermissionsList, "could not bake macaroon").Error())
+		return nil, status.Error(codes.InvalidArgument, ErrEmptyPermissionsList.Error())
 	}
 	perms := make([]bakery.Op, len(req.Permissions))
 	for i, op := range req.Permissions {
 		if !stringInSlice(op.Entity, validEntities) {
-			return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrInvalidMacEntity, "could not bake macaroon").Error())
+			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacEntity.Error())
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
 			allPermissions := s.grpcInterceptor.Permissions()
 			if _, ok := allPermissions[op.Action]; !ok {
-				return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrInvalidMacAction, "could not bake macaroon").Error())
+				return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 			}
 		} else if !stringInSlice(op.Action, validActions) {
-			return nil, status.Error(codes.InvalidArgument, e.Wrap(ErrInvalidMacAction, "could not bake macaroon").Error())
+			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 		}
 		perms[i] = bakery.Op{
 			Entity: op.Entity,
