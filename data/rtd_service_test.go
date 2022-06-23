@@ -8,14 +8,16 @@ package data
 
 import (
 	"context"
-	"os"
 	"net"
+	"os"
 	"testing"
 
-	"github.com/rs/zerolog"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOCPaulCote/gux"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -37,10 +39,10 @@ var (
 			return newState, nil
 		default:
 			return nil, gux.ErrInvalidAction
-		} 
+		}
 	}
-	bufSize = 1 * 1024 * 1024
-	lis *bufconn.Listener
+	bufSize          = 1 * 1024 * 1024
+	lis              *bufconn.Listener
 	polling_interval int64
 )
 
@@ -52,14 +54,30 @@ func TestRTDServiceStartStop(t *testing.T) {
 		&logger,
 		stateStore,
 	)
-	err := rtdService.Start()
-	if err != nil {
-		t.Fatalf("Could not start rtdService: %v", err)
-	}
-	err = rtdService.Stop()
-	if err != nil {
-		t.Fatalf("Could not stop rtdService: %v", err)
-	}
+	t.Run("Start RTD Service", func(t *testing.T) {
+		err := rtdService.Start()
+		if err != nil {
+			t.Errorf("Could not start rtd service: %v", err)
+		}
+	})
+	t.Run("Start RTD Service Invalid", func(t *testing.T) {
+		err := rtdService.Start()
+		if err != errors.ErrServiceAlreadyStarted {
+			t.Errorf("Unexpected error when starting rtd service: %v", err)
+		}
+	})
+	t.Run("Stop RTD Service", func(t *testing.T) {
+		err := rtdService.Stop()
+		if err != nil {
+			t.Errorf("Could not stop rtd service: %v", err)
+		}
+	})
+	t.Run("Stop RTD Service Invalid", func(t *testing.T) {
+		err := rtdService.Stop()
+		if err != errors.ErrServiceAlreadyStopped {
+			t.Errorf("Unexpected error when stopping rtd service: %v", err)
+		}
+	})
 }
 
 // init initializes the gRPC server
@@ -91,8 +109,8 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
 }
 
-// TestStartRecordingFluke tests the gRPC StartRecording API endpoint. Expects an error
-func TestStartRecordingFluke(t *testing.T) {
+// TestStartRecordingTelemetry tests the gRPC StartRecording API endpoint. Expects an error
+func TestStartRecordingTelemetry(t *testing.T) {
 	cleanUp := Init(t)
 	defer cleanUp()
 	ctx := context.Background()
@@ -104,15 +122,19 @@ func TestStartRecordingFluke(t *testing.T) {
 	client := fmtrpc.NewDataCollectorClient(conn)
 	_, err = client.StartRecording(ctx, &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
-		Type: fmtrpc.RecordService_TELEMETRY,
+		Type:            fmtrpc.RecordService_TELEMETRY,
 	})
-	if err == nil {
-		t.Fatalf("Expected error and none were raised")
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("Error is not a gRPC status error")
+	}
+	if st.Message() != ErrServiceNotRegistered.Error() {
+		t.Errorf("Unexpected error when starting telemetry recording: %v", st.Message())
 	}
 }
 
-// TestStopRecordingFluke tests the gRPC StopRecording API endpoint. Expects an error
-func TestStopRecordingFluke(t *testing.T) {
+// TestStopRecordingTelemetry tests the gRPC StopRecording API endpoint. Expects an error
+func TestStopRecordingTelemetry(t *testing.T) {
 	cleanUp := Init(t)
 	defer cleanUp()
 	ctx := context.Background()
@@ -123,8 +145,12 @@ func TestStopRecordingFluke(t *testing.T) {
 	defer conn.Close()
 	client := fmtrpc.NewDataCollectorClient(conn)
 	_, err = client.StopRecording(ctx, &fmtrpc.StopRecRequest{Type: fmtrpc.RecordService_TELEMETRY})
-	if err == nil {
-		t.Fatalf("Expected error and none were raised")
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("Error is not a gRPC status error")
+	}
+	if st.Message() != ErrServiceNotRegistered.Error() {
+		t.Errorf("Unexpected error when stopping telemetry recording: %v", st.Message())
 	}
 }
 
@@ -141,10 +167,14 @@ func TestStartRecordingRga(t *testing.T) {
 	client := fmtrpc.NewDataCollectorClient(conn)
 	_, err = client.StartRecording(ctx, &fmtrpc.RecordRequest{
 		PollingInterval: polling_interval,
-		Type: fmtrpc.RecordService_RGA,
+		Type:            fmtrpc.RecordService_RGA,
 	})
-	if err == nil {
-		t.Fatalf("Expected error and none were raised")
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("Error is not a gRPC status error")
+	}
+	if st.Message() != ErrServiceNotRegistered.Error() {
+		t.Errorf("Unexpected error when starting rga recording: %v", st.Message())
 	}
 }
 
@@ -160,8 +190,12 @@ func TestStopRecordingRga(t *testing.T) {
 	defer conn.Close()
 	client := fmtrpc.NewDataCollectorClient(conn)
 	_, err = client.StopRecording(ctx, &fmtrpc.StopRecRequest{Type: fmtrpc.RecordService_RGA})
-	if err == nil {
-		t.Fatalf("Expected error and none were raised")
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("Error is not a gRPC status error")
+	}
+	if st.Message() != ErrServiceNotRegistered.Error() {
+		t.Errorf("Unexpected error when stopping rga recording: %v", st.Message())
 	}
 }
 

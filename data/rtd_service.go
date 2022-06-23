@@ -21,7 +21,6 @@ import (
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -147,7 +146,7 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Telemetry or RGA
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, status.Error(codes.Aborted, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type]).Error())
+		return nil, status.Error(codes.Aborted, ErrServiceNotRegistered.Error())
 	}
 	switch req.Type {
 	case fmtrpc.RecordService_TELEMETRY:
@@ -163,7 +162,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		if !s.ServiceRecStates[TelemetryName] {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
-			}, status.Error(codes.FailedPrecondition, e.Wrapf(ErrServiceNotRecording, "Could not start %s data recording", rpcEnumMap[req.Type]).Error())
+			}, status.Error(codes.FailedPrecondition, ErrServiceNotRecording.Error())
 		}
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.OrgName)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
@@ -182,7 +181,7 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, status.Error(codes.Aborted, e.Wrapf(ErrServiceNotRegistered, "Could not start %s data recording", rpcEnumMap[req.Type]).Error())
+		return nil, status.Error(codes.Aborted, ErrServiceNotRegistered.Error())
 	}
 	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
 	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
