@@ -319,7 +319,6 @@ func TestControllerAPI(t *testing.T) {
 				t.Log(resp)
 			}
 		}()
-		time.Sleep(1 * time.Millisecond) // may need to play with this sleep time
 		stream, err := client.SetTemperature(ctx, &demorpc.SetTempRequest{TempSetPoint: 40.0})
 		st, ok := status.FromError(err)
 		if !ok {
@@ -437,7 +436,6 @@ func TestControllerAPI(t *testing.T) {
 				t.Log(resp)
 			}
 		}()
-		time.Sleep(1 * time.Millisecond) // may need to play with this sleep time
 		stream, err := client.SetPressure(ctx, &demorpc.SetPresRequest{PressureSetPoint: 850.0})
 		st, ok := status.FromError(err)
 		if !ok {
