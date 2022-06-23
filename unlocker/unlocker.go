@@ -215,7 +215,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 		if closeErr != nil {
 			return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service").Error())
 		}
-		return nil, status.Error(codes.Internal, e.Wrap(err, "could not create unlock").Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	err = macaroonService.ChangePassword(req.CurrentPassword, req.NewPassword)
 	if err != nil {
@@ -223,7 +223,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 		if closeErr != nil {
 			return nil, status.Error(codes.Internal, e.Wrap(closeErr, "error when closing macaroon service").Error())
 		}
-		return nil, status.Error(codes.Internal, e.Wrap(err, "could not change password").Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	err = macaroonService.Close()
 	if err != nil {
