@@ -23,6 +23,7 @@ import (
 	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOCPaulCote/gux"
 	"github.com/rs/zerolog"
@@ -103,7 +104,7 @@ func (s *TelemetryService) Stop() error {
 // StartRecording starts the recording process by creating a csv file and inserting the header row into the file and returns a quit channel and error message
 func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName string) error {
 	if atomic.LoadInt32(&s.Recording) == 1 {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	if pol_int < drivers.MinTelemetryPollingInterval && pol_int != 0 {
 		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", drivers.MinTelemetryPollingInterval)
@@ -111,7 +112,7 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 		pol_int = drivers.TelemetryDefaultPollingInterval
 	}
 	// start connection
-	err = s.connection.StartScanning()
+	err := s.connection.StartScanning()
 	if err != nil {
 		return err
 	}
@@ -142,7 +143,7 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 	writeAPI := s.idb.WriteAPI(orgName, bucketName)
 	ticker := time.NewTicker(time.Duration(pol_int) * time.Second)
 	// Write polling interval to state
-	err := s.rtdStateStore.Dispatch(
+	err = s.rtdStateStore.Dispatch(
 		gux.Action{
 			Type: 	 "telemetry/polling_interval/update",
 			Payload: pol_int,
@@ -153,7 +154,7 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 	}
 	// the actual data
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
-		return ErrAlreadyRecording
+		return errors.ErrAlreadyRecording
 	}
 	s.Logger.Info().Msg("Starting data recording...")
 	s.wgRecord.Add(1)
@@ -289,7 +290,7 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 // stopRecording sends an empty struct down the CancelChan to innitiate the stop recording process
 func (s *TelemetryService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
-		return ErrAlreadyStoppedRecording
+		return errors.ErrAlreadyStoppedRecording
 	}
 	s.CancelChan<-struct{}{}
 	// Stop scanning

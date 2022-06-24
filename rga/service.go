@@ -123,7 +123,7 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 		pol_int = drivers.RGAMinPollingInterval
 	}
 	// InitMsg
-	err = s.connection.InitMsg()
+	err := s.connection.InitMsg()
 	if err != nil {
 		return fmt.Errorf("Unable to communicate with RGA: %v", err)
 	}
@@ -297,7 +297,7 @@ func (s *RGAService) ListenForRTDSignal() {
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil, Msg: s.filepath}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
 					}
 				} else {
 					s.Logger.Info().Msg("Stopping data recording...")
@@ -320,6 +320,9 @@ func (s *RGAService) ListenForRTDSignal() {
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
 				}
+			}
+			if cState.RealTimeData.Data == nil {
+				continue
 			}
 			s.currentPressure = cState.RealTimeData.Data[drivers.TelemetryPressureChannel].Value
 			if s.currentPressure >= drivers.RGAMinimumPressure && atomic.LoadInt32(&s.Recording) == 1 {
