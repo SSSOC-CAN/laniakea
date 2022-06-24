@@ -17,7 +17,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/gux"
+	"github.com/SSSOCPaulCote/gux"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 )
