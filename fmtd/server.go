@@ -28,21 +28,23 @@ package fmtd
 import (
 	"fmt"
 	"sync/atomic"
+
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/rs/zerolog"
 )
 
 // Server is the object representing the state of the server
 type Server struct {
-	Active 		int32 // atomic
-	cfg			*Config
-	logger		*zerolog.Logger
+	Active int32 // atomic
+	cfg    *Config
+	logger *zerolog.Logger
 }
 
 // InitServer creates a new instance of the server and returns a pointer to it
 func InitServer(config *Config, logger *zerolog.Logger) (*Server, error) {
 	return &Server{
-		cfg: config,
+		cfg:    config,
 		logger: logger,
 	}, nil
 }
@@ -51,7 +53,7 @@ func InitServer(config *Config, logger *zerolog.Logger) (*Server, error) {
 func (s *Server) Start() error {
 	s.logger.Info().Msg("Starting Daemon...")
 	if ok := atomic.CompareAndSwapInt32(&s.Active, 0, 1); !ok {
-		return fmt.Errorf("Cannot start daemon: already active")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.logger.Info().Msg(fmt.Sprintf("Daemon succesfully started. Version: %s", utils.AppVersion))
 	return nil
@@ -61,7 +63,7 @@ func (s *Server) Start() error {
 func (s *Server) Stop() error {
 	s.logger.Info().Msg("Stopping Daemon...")
 	if ok := atomic.CompareAndSwapInt32(&s.Active, 1, 0); !ok {
-		return fmt.Errorf("Cannot stop daemon: already inactive")
+		return errors.ErrServiceAlreadyStopped
 	}
 	s.logger.Info().Msg("Daemon succesfully stopped.")
 	return nil

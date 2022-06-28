@@ -9,6 +9,7 @@ package intercept
 import (
 	"os"
 	"testing"
+
 	"github.com/rs/zerolog"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
@@ -17,7 +18,7 @@ var (
 	defaultTestingPermissions = map[string][]bakery.Op{
 		"/fmtrpc.Fmt/StopDaemon": {{
 			Entity: "fmtd",
-			Action:	"write",
+			Action: "write",
 		}},
 		"/fmtrpc.Fmt/AdminTest": {{
 			Entity: "fmtd",
@@ -25,14 +26,14 @@ var (
 		}},
 	}
 	duplicatePermissionMethod = "/fmtrpc.Fmt/StopDaemon"
-	duplicatePermission = []bakery.Op{
+	duplicatePermission       = []bakery.Op{
 		{
 			Entity: "uri",
 			Action: "test",
 		},
 	}
 	newPermissionMethod = "/fmtrpc.Fmt/TestCommand"
-	newPermission = []bakery.Op{
+	newPermission       = []bakery.Op{
 		{
 			Entity: "fmtd",
 			Action: "read",
@@ -54,15 +55,15 @@ func TestAddPermissions(t *testing.T) {
 	// invalid add permissions
 	t.Run("Invalid Add Permissions", func(t *testing.T) {
 		err := grpcInterceptor.AddPermissions(defaultTestingPermissions)
-		if err == nil {
-			t.Errorf("Expected an error and none is present")
+		if err != ErrDuplicateMacConstraints {
+			t.Errorf("Unexpected error when adding permissions: %v", err)
 		}
 	})
 	// invalid add permission
 	t.Run("Invalid Add Permission", func(t *testing.T) {
 		err := grpcInterceptor.AddPermission(duplicatePermissionMethod, duplicatePermission)
-		if err == nil {
-			t.Errorf("Expected an error and none is present")
+		if err != ErrDuplicateMacConstraints {
+			t.Errorf("Unexpected error when adding permissions: %v", err)
 		}
 	})
 	// valid add permission

@@ -8,64 +8,70 @@ package data
 
 import (
 	"context"
-	"errors"
+	er "errors"
 	"fmt"
 	"math/rand"
-	"reflect"
-	"time"
 	"sync/atomic"
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/rs/zerolog"
+	"time"
+
 	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var (
 	TelemetryName = "TEL"
-	RgaName = "RGA"
-	RtdName = "RTD"
-	rpcEnumMap = map[fmtrpc.RecordService]string{
+	RgaName       = "RGA"
+	RtdName       = "RTD"
+	rpcEnumMap    = map[fmtrpc.RecordService]string{
 		fmtrpc.RecordService_TELEMETRY: TelemetryName,
-		fmtrpc.RecordService_RGA: RgaName,
+		fmtrpc.RecordService_RGA:       RgaName,
 	}
 )
 
 type StateType int32
 
 const (
-	BROADCASTING StateType = 0
-	RECORDING StateType = 1
+	BROADCASTING            StateType = 0
+	RECORDING               StateType = 1
+	ErrServiceNotRegistered           = bg.Error("service not registered with RTD service")
+	ErrServiceNotRecording            = bg.Error("service not yet recording data")
 )
 
 type StateChangeMsg struct {
-	Type	StateType
-	State 	bool
-	ErrMsg	error
-	Msg		string
+	Type   StateType
+	State  bool
+	ErrMsg error
+	Msg    string
 }
 
 type RTDService struct {
 	fmtrpc.UnimplementedDataCollectorServer
-	Running				int32 // used atomically
-	Logger				*zerolog.Logger
-	StateChangeChans	map[string]chan *StateChangeMsg
-	ServiceRecStates	map[string]bool
-	name				string
-	stateStore			*gux.Store
+	Running          int32 // used atomically
+	Logger           *zerolog.Logger
+	StateChangeChans map[string]chan *StateChangeMsg
+	ServiceRecStates map[string]bool
+	name             string
+	stateStore       *gux.Store
 }
 
 type InitialRtdState struct {
-	AverageTemperature	float64
-	RealTimeData		fmtrpc.RealTimeData
-	TelPollingInterval	int64
+	AverageTemperature float64
+	RealTimeData       fmtrpc.RealTimeData
+	TelPollingInterval int64
 }
 
 type InitialCtrlState struct {
-	PressureSetPoint	float64
-	TemperatureSetPoint	float64
+	PressureSetPoint    float64
+	TemperatureSetPoint float64
 }
 
 // Compile time check to ensure RTDService implements api.RestProxyService
@@ -74,11 +80,11 @@ var _ api.RestProxyService = (*RTDService)(nil)
 //NewDataBuffer returns an instantiated DataBuffer struct
 func NewRTDService(log *zerolog.Logger, s *gux.Store) *RTDService {
 	return &RTDService{
-		ServiceRecStates: 	make(map[string]bool),
-		StateChangeChans: 	make(map[string]chan *StateChangeMsg),
-		Logger: log,
-		name: RtdName,
-		stateStore: s,
+		ServiceRecStates: make(map[string]bool),
+		StateChangeChans: make(map[string]chan *StateChangeMsg),
+		Logger:           log,
+		name:             RtdName,
+		stateStore:       s,
 	}
 }
 
@@ -89,7 +95,7 @@ func (s *RTDService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 }
 
 // RegisterWithRestProxy registers the RTDService with the REST proxy
-func(s *RTDService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+func (s *RTDService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
 	err := fmtrpc.RegisterDataCollectorHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
@@ -103,7 +109,7 @@ func(s *RTDService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeM
 func (s *RTDService) Start() error {
 	s.Logger.Info().Msg("Starting RTD Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start RTD service. Service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("RTD Service successfully started.")
 	return nil
@@ -113,7 +119,7 @@ func (s *RTDService) Start() error {
 func (s *RTDService) Stop() error {
 	s.Logger.Info().Msg("Stopping RTD Service ...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop RTD service. Service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	for _, channel := range s.StateChangeChans {
 		close(channel)
@@ -140,7 +146,7 @@ func (s *RTDService) RegisterDataProvider(serviceName string) {
 // StartRecording is called by gRPC client and CLI to begin the data recording process with Telemetry or RGA
 func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordRequest) (*fmtrpc.RecordResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+		return nil, status.Error(codes.Aborted, ErrServiceNotRegistered.Error())
 	}
 	switch req.Type {
 	case fmtrpc.RecordService_TELEMETRY:
@@ -149,21 +155,21 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
-			}, resp.ErrMsg
+			}, status.Error(codes.Internal, resp.ErrMsg.Error())
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	case fmtrpc.RecordService_RGA:
 		if !s.ServiceRecStates[TelemetryName] {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type]),
-			}, fmt.Errorf("Could not start %s data recording: telemetry service not yet recording data.", rpcEnumMap[req.Type])
+			}, status.Error(codes.FailedPrecondition, ErrServiceNotRecording.Error())
 		}
 		s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: true, ErrMsg: nil, Msg: fmt.Sprintf("%v", req.OrgName)}
 		resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 		if resp.ErrMsg != nil {
 			return &fmtrpc.RecordResponse{
 				Msg: fmt.Sprintf("Could not start %s data recording: %v", rpcEnumMap[req.Type], resp.ErrMsg),
-			}, resp.ErrMsg
+			}, status.Error(codes.Internal, resp.ErrMsg.Error())
 		}
 		s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	}
@@ -175,14 +181,14 @@ func (s *RTDService) StartRecording(ctx context.Context, req *fmtrpc.RecordReque
 // StopRecording is called by gRPC client and CLI to end data recording process
 func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecRequest) (*fmtrpc.StopRecResponse, error) {
 	if _, ok := s.StateChangeChans[rpcEnumMap[req.Type]]; !ok {
-		return nil, fmt.Errorf("Could not start %s data recording: %s service not registered with RTD service", rpcEnumMap[req.Type], rpcEnumMap[req.Type])
+		return nil, status.Error(codes.Aborted, ErrServiceNotRegistered.Error())
 	}
 	s.StateChangeChans[rpcEnumMap[req.Type]] <- &StateChangeMsg{Type: RECORDING, State: false, ErrMsg: nil}
 	resp := <-s.StateChangeChans[rpcEnumMap[req.Type]]
 	if resp.ErrMsg != nil {
 		return &fmtrpc.StopRecResponse{
-			Msg: "Could not stop data recording. Data recording already stopped.",
-		}, resp.ErrMsg
+			Msg: fmt.Sprintf("could not stop data recording: %v", resp.ErrMsg),
+		}, status.Error(codes.Internal, resp.ErrMsg.Error())
 	}
 	s.ServiceRecStates[rpcEnumMap[req.Type]] = resp.State
 	return &fmtrpc.StopRecResponse{
@@ -195,29 +201,29 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 	s.Logger.Info().Msg("Have a new data listener.")
 	lastSentRTDTimestamp := int64(0)
 	rand.Seed(time.Now().UnixNano())
-	subscriberName := s.name+utils.RandSeq(10)
+	subscriberName := s.name + utils.RandSeq(10)
 	updateChan, unsub := s.stateStore.Subscribe(subscriberName)
 	cleanUp := func() {
 		unsub(s.stateStore, subscriberName)
 	}
 	defer cleanUp()
 	for {
-		select {	
+		select {
 		case <-updateChan:
 			currentState := s.stateStore.GetState()
 			RTD, ok := currentState.(InitialRtdState)
 			if !ok {
-				return fmt.Errorf("Invalid type %v", reflect.TypeOf(currentState))
+				return status.Error(codes.Internal, errors.ErrInvalidType.Error())
 			}
 			if RTD.RealTimeData.Timestamp < lastSentRTDTimestamp {
 				continue
-			} 
+			}
 			if err := updateStream.Send(&RTD.RealTimeData); err != nil {
 				return err
 			}
 			lastSentRTDTimestamp = RTD.RealTimeData.Timestamp
 		case <-updateStream.Context().Done():
-			if errors.Is(updateStream.Context().Err(), context.Canceled) {
+			if er.Is(updateStream.Context().Err(), context.Canceled) {
 				return nil
 			}
 			return updateStream.Context().Err()

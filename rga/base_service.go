@@ -9,10 +9,15 @@ package rga
 import (
 	"sync"
 
+	"github.com/SSSOC-CAN/fmtd/data"
+	bg "github.com/SSSOCPaulCote/blunderguard"
+	"github.com/SSSOCPaulCote/gux"
 	influx "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/rs/zerolog"
-	"github.com/SSSOC-CAN/fmtd/data"
-	"github.com/SSSOCPaulCote/gux"
+)
+
+const (
+	ErrPressureTooHigh = bg.Error("current chamber pressure exceeds minimum pressure requirement")
 )
 
 var (
@@ -20,20 +25,20 @@ var (
 )
 
 type BaseRGAService struct {
-	Running				int32 //atomically
-	Recording			int32 //atomically
-	rtdStateStore		*gux.Store
-	ctrlStateStore		*gux.Store
-	Logger				*zerolog.Logger
-	PressureChan		chan float64 // RGAs can't operate above certain pressures and so must get pressure readings from outside sources to prevent damaging them
-	StateChangeChan		chan *data.StateChangeMsg
-	QuitChan			chan struct{}
-	CancelChan			chan struct{}
-	name 				string
-	currentPressure		float64
-	wgListen			sync.WaitGroup
-	wgRecord			sync.WaitGroup
-	idb 				influx.Client
+	Running         int32 //atomically
+	Recording       int32 //atomically
+	rtdStateStore   *gux.Store
+	ctrlStateStore  *gux.Store
+	Logger          *zerolog.Logger
+	PressureChan    chan float64 // RGAs can't operate above certain pressures and so must get pressure readings from outside sources to prevent damaging them
+	StateChangeChan chan *data.StateChangeMsg
+	QuitChan        chan struct{}
+	CancelChan      chan struct{}
+	name            string
+	currentPressure float64
+	wgListen        sync.WaitGroup
+	wgRecord        sync.WaitGroup
+	idb             influx.Client
 }
 
 // Name satisfies the data.Service interface
