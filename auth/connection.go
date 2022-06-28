@@ -37,7 +37,7 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 		// grab Macaroon data and load it into macaroon.Macaroon struct
 		adminMac, err := os.ReadFile(adminMacPath)
 		if err != nil {
-			return nil, e.Wrapf(err, "Could not read macaroon at %v", adminMacPath)
+			return nil, e.Wrapf(err, "could not read macaroon at %v", adminMacPath)
 		}
 		macHex := hex.EncodeToString(adminMac)
 		mac, err := LoadMacaroon(ReadPassword, macHex)

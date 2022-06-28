@@ -17,35 +17,42 @@ import (
 	"sync/atomic"
 	"time"
 
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/rs/zerolog"
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	e "github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+const (
+	ErrNoTestPlanExecuting    = bg.Error("no test plan currently being executed")
+	ErrTPEXNotStarted         = bg.Error("test plan executor not started")
+	ErrNoTestPlanLoaded       = bg.Error("no test plan has been loaded")
+	ErrTestPlanAlreadyStarted = bg.Error("execution already started")
+	ErrTestPlanAlreadyStopped = bg.Error("execution already stopped")
 )
 
 var (
 	testPlanExecName = "TPEX"
-	rptLvlMap = map[fmtrpc.ReportLvl]string {
-		fmtrpc.ReportLvl_INFO: "INFO",
+	rptLvlMap        = map[fmtrpc.ReportLvl]string{
+		fmtrpc.ReportLvl_INFO:  "INFO",
 		fmtrpc.ReportLvl_ERROR: "ERROR",
 		fmtrpc.ReportLvl_DEBUG: "DEBUG",
-		fmtrpc.ReportLvl_WARN: "WARN",
+		fmtrpc.ReportLvl_WARN:  "WARN",
 		fmtrpc.ReportLvl_FATAL: "FATAL",
 	}
 	minChamberPressure float64 = 0.00005
-	defaultAuthor = "FMT"
-	defaultGrpcAddr = "localhost"
-	ErrNoTestPlanExecuting = fmt.Errorf("No test plan currently being executed")
-	ErrTPEXNotStarted = fmt.Errorf("Test Plan Executor not started")
-	ErrNoTestPlanLoaded = fmt.Errorf("No test plan has been loaded")
-	ErrTestPlanAlreadyStarted = fmt.Errorf("Execution already started")
-	ErrTestPlanAlreadyStopped = fmt.Errorf("Execution already stopped")
+	defaultAuthor              = "FMT"
+	defaultGrpcAddr            = "localhost"
 )
 
 type goroutineSafeCSVWriter struct {
@@ -55,18 +62,18 @@ type goroutineSafeCSVWriter struct {
 
 type TestPlanService struct {
 	fmtrpc.UnimplementedTestPlanExecutorServer
-	Running				int32
-	Executing			int32
-	Logger				*zerolog.Logger
-	name				string
-	testPlan			*TestPlan
-	CancelChan			chan struct{}
-	testPlanCleanup		func()
-	stateWriter 		*json.Encoder
-	reportWriter 		goroutineSafeCSVWriter
-	collectorClient		func() (fmtrpc.DataCollectorClient, func(), error)
-	stateStore			*gux.Store
-	wg					sync.WaitGroup
+	Running         int32
+	Executing       int32
+	Logger          *zerolog.Logger
+	name            string
+	testPlan        *TestPlan
+	CancelChan      chan struct{}
+	testPlanCleanup func()
+	stateWriter     *json.Encoder
+	reportWriter    goroutineSafeCSVWriter
+	collectorClient func() (fmtrpc.DataCollectorClient, func(), error)
+	stateStore      *gux.Store
+	wg              sync.WaitGroup
 }
 
 // Compile time check to ensure TestPlanService implements api.RestProxyService
@@ -96,11 +103,11 @@ func writeMsgToReport(report goroutineSafeCSVWriter, lvl fmtrpc.ReportLvl, msg, 
 // NewTestPlanService instantiates the TestPlanService struct
 func NewTestPlanService(logger *zerolog.Logger, getConnection func() (fmtrpc.DataCollectorClient, func(), error), store *gux.Store) *TestPlanService {
 	return &TestPlanService{
-		Logger: logger,
-		name: testPlanExecName,
-		CancelChan: make(chan struct{}),
+		Logger:          logger,
+		name:            testPlanExecName,
+		CancelChan:      make(chan struct{}),
 		collectorClient: getConnection,
-		stateStore: store,
+		stateStore:      store,
 	}
 }
 
@@ -111,7 +118,7 @@ func (s *TestPlanService) RegisterWithGrpcServer(grpcServer *grpc.Server) error 
 }
 
 // RegisterWithRestProxy registers the TestPlanService with the REST proxy
-func(s *TestPlanService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+func (s *TestPlanService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
 	err := fmtrpc.RegisterTestPlanExecutorHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
@@ -125,7 +132,7 @@ func(s *TestPlanService) RegisterWithRestProxy(ctx context.Context, mux *proxy.S
 func (s *TestPlanService) Start() error {
 	s.Logger.Info().Msg("Starting Test Plan Executor...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start Test Plan Executor. Service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.Logger.Info().Msg("Test Plan Executor successfully started.")
 	return nil
@@ -135,7 +142,7 @@ func (s *TestPlanService) Start() error {
 func (s *TestPlanService) Stop() error {
 	s.Logger.Info().Msg("Stopping Test Plan Executor ...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop Test Plan Executor. Service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	if atomic.LoadInt32(&s.Executing) == 1 {
 		_ = s.stopTestPlan()
@@ -152,7 +159,7 @@ func (s *TestPlanService) Name() string {
 // LoadTestPlan is called by gRPC client and CLI to load a given testplan
 func (s *TestPlanService) LoadTestPlan(ctx context.Context, req *fmtrpc.LoadTestPlanRequest) (*fmtrpc.LoadTestPlanResponse, error) {
 	if atomic.LoadInt32(&s.Running) != 1 {
-		return nil, ErrTPEXNotStarted
+		return nil, status.Error(codes.Aborted, ErrTPEXNotStarted.Error())
 	}
 	s.Logger.Info().Msg(fmt.Sprintf("Loading test plan file at: %s", req.PathToFile))
 	tp, err := loadTestPlan(req.PathToFile)
@@ -160,7 +167,7 @@ func (s *TestPlanService) LoadTestPlan(ctx context.Context, req *fmtrpc.LoadTest
 		s.Logger.Error().Msg(fmt.Sprintf("Could not load test plan file: %v", err))
 		return &fmtrpc.LoadTestPlanResponse{
 			Msg: fmt.Sprintf("Could not load test plan: %v", err),
-		}, err
+		}, status.Error(codes.Internal, err.Error())
 	}
 	s.Logger.Info().Msg("Test plan successfully loaded.")
 	s.testPlan = tp
@@ -182,20 +189,20 @@ func (s *TestPlanService) startTestPlan() error {
 	//Open state file and json encoder
 	state_file, err := os.OpenFile(s.testPlan.TestStateFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) // write state to state file periodically for fault tolerance
 	if err != nil {
-		return fmt.Errorf("Could not open state file: %v", err)
+		return e.Wrap(err, "could not open state file")
 	}
 	stateWriter := json.NewEncoder(state_file)
 	// Open report file and csv encoder
 	report_file, err := os.OpenFile(s.testPlan.TestReportFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644) // write key events to report file
 	if err != nil {
-		return fmt.Errorf("Could not open report file: %v", err)
+		return e.Wrap(err, "could not open report file")
 	}
 	reportWriter := goroutineSafeCSVWriter{
 		Writer: csv.NewWriter(report_file),
 	}
 	err = writeHeaderToReport(reportWriter, s.testPlan.Name)
 	if err != nil {
-		return fmt.Errorf("Cannot write to report: %v", err)
+		return e.Wrap(err, "cannot write to report")
 	}
 	s.stateWriter = stateWriter
 	s.reportWriter = reportWriter
@@ -221,9 +228,9 @@ func (s *TestPlanService) executeTestPlan() {
 	stoppingTest := func() {
 		s.Logger.Info().Msg("Stopping test...")
 		err := writeMsgToReport(
-			s.reportWriter, 
-			fmtrpc.ReportLvl_INFO, 
-			"Stopping test...", 
+			s.reportWriter,
+			fmtrpc.ReportLvl_INFO,
+			"Stopping test...",
 			defaultAuthor,
 			time.Now(),
 		)
@@ -234,9 +241,9 @@ func (s *TestPlanService) executeTestPlan() {
 	defer func() {
 		s.Logger.Info().Msg("Test stopped")
 		err := writeMsgToReport(
-			s.reportWriter, 
-			fmtrpc.ReportLvl_INFO, 
-			"Test stopped", 
+			s.reportWriter,
+			fmtrpc.ReportLvl_INFO,
+			"Test stopped",
 			defaultAuthor,
 			time.Now(),
 		)
@@ -246,9 +253,9 @@ func (s *TestPlanService) executeTestPlan() {
 	}()
 	s.Logger.Info().Msg("Starting test...")
 	err := writeMsgToReport(
-		s.reportWriter, 
-		fmtrpc.ReportLvl_INFO, 
-		"Starting test...", 
+		s.reportWriter,
+		fmtrpc.ReportLvl_INFO,
+		"Starting test...",
 		defaultAuthor,
 		time.Now(),
 	)
@@ -277,7 +284,7 @@ func (s *TestPlanService) executeTestPlan() {
 	}
 	telemetryRecordReq := &fmtrpc.RecordRequest{
 		PollingInterval: int64(5),
-		Type: fmtrpc.RecordService_TELEMETRY,
+		Type:            fmtrpc.RecordService_TELEMETRY,
 	}
 	_, err = client.StartRecording(ctx, telemetryRecordReq)
 	if err != nil && err != errors.ErrAlreadyRecording {
@@ -313,23 +320,23 @@ func (s *TestPlanService) executeTestPlan() {
 	}()
 	ticker := time.NewTicker(time.Second) // going to check things every second
 	defer ticker.Stop()
-	type NewLine struct{
-		RptLvl	fmtrpc.ReportLvl
-		Text	string
-		Author	string
-		Time	time.Time
+	type NewLine struct {
+		RptLvl fmtrpc.ReportLvl
+		Text   string
+		Author string
+		Time   time.Time
 	}
 	var (
-		rtd 		 *fmtrpc.RealTimeData
+		rtd          *fmtrpc.RealTimeData
 		rgaRecording bool
 		readyAlerts  []*Alert
-		ticks 		 int
+		ticks        int
 	)
 	for {
 		newLines := make([]NewLine, 0)
 		select {
 		case <-ticker.C:
-			// First perform any ready Alerts 
+			// First perform any ready Alerts
 			for _, alert := range readyAlerts {
 				s.Logger.Info().Msg(fmt.Sprintf("Executing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg))
 				err = writeMsgToReport(
@@ -366,9 +373,9 @@ func (s *TestPlanService) executeTestPlan() {
 					s.Logger.Info().Msg(fmt.Sprintf("%s alert expired.", alert.Name))
 					newLines = append(newLines, NewLine{
 						RptLvl: fmtrpc.ReportLvl_ERROR,
-						Text: fmt.Sprintf("%s alert expired", alert.Name),
+						Text:   fmt.Sprintf("%s alert expired", alert.Name),
 						Author: defaultAuthor,
-						Time: time.Now(),
+						Time:   time.Now(),
 					})
 					alert.ExecutionState = ALERTSTATE_EXPIRED
 				}
@@ -382,25 +389,25 @@ func (s *TestPlanService) executeTestPlan() {
 						s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
 						newLines = append(newLines, NewLine{
 							RptLvl: fmtrpc.ReportLvl_ERROR,
-							Text: fmt.Sprintf("Cannot connect to Data Collector service: %v", err),
+							Text:   fmt.Sprintf("Cannot connect to Data Collector service: %v", err),
 							Author: defaultAuthor,
-							Time: time.Now(),
+							Time:   time.Now(),
 						})
 						// call write function
 						continue
 					}
 					rgaRecordReq := &fmtrpc.RecordRequest{
 						PollingInterval: int64(15),
-						Type: fmtrpc.RecordService_RGA,
+						Type:            fmtrpc.RecordService_RGA,
 					}
 					_, err = client.StartRecording(ctx, rgaRecordReq)
 					if err != nil && err != errors.ErrAlreadyRecording {
 						s.Logger.Error().Msg(fmt.Sprintf("Cannot start RGA data recording: %v", err))
 						newLines = append(newLines, NewLine{
 							RptLvl: fmtrpc.ReportLvl_ERROR,
-							Text: fmt.Sprintf("Cannot start RGA data recording: %v", err),
+							Text:   fmt.Sprintf("Cannot start RGA data recording: %v", err),
 							Author: defaultAuthor,
-							Time: time.Now(),
+							Time:   time.Now(),
 						})
 						// call write function
 						clientCleanup()
@@ -409,9 +416,9 @@ func (s *TestPlanService) executeTestPlan() {
 					clientCleanup()
 					newLines = append(newLines, NewLine{
 						RptLvl: fmtrpc.ReportLvl_INFO,
-						Text: "RGA data recording started",
+						Text:   "RGA data recording started",
 						Author: defaultAuthor,
-						Time: time.Now(),
+						Time:   time.Now(),
 					})
 					rgaRecording = true
 				}
@@ -424,14 +431,14 @@ func (s *TestPlanService) executeTestPlan() {
 				s.Logger.Error().Msg(fmt.Sprintf("Invalid type, expected fmtrpc.RealtimeData, received %v", reflect.TypeOf(currentRtd)))
 			}
 			rtd = &cRtd.RealTimeData
-		case <- s.CancelChan:
+		case <-s.CancelChan:
 			stoppingTest()
 			client, clientCleanup, err = s.collectorClient()
 			if err != nil {
 				s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
 				err = writeMsgToReport(
-					s.reportWriter, 
-					fmtrpc.ReportLvl_ERROR, 
+					s.reportWriter,
+					fmtrpc.ReportLvl_ERROR,
 					fmt.Sprintf("Cannot connect to Data Collector service: %v", err),
 					defaultAuthor,
 					time.Now(),
@@ -449,8 +456,8 @@ func (s *TestPlanService) executeTestPlan() {
 				if err != nil {
 					s.Logger.Error().Msg(fmt.Sprintf("Cannot stop RGA data recording: %v", err))
 					err = writeMsgToReport(
-						s.reportWriter, 
-						fmtrpc.ReportLvl_ERROR, 
+						s.reportWriter,
+						fmtrpc.ReportLvl_ERROR,
 						fmt.Sprintf("Cannot stop RGA data recording: %v", err),
 						defaultAuthor,
 						time.Now(),
@@ -469,8 +476,8 @@ func (s *TestPlanService) executeTestPlan() {
 			if err != nil {
 				s.Logger.Error().Msg(fmt.Sprintf("Cannot stop telemetry data recording: %v", err))
 				err = writeMsgToReport(
-					s.reportWriter, 
-					fmtrpc.ReportLvl_ERROR, 
+					s.reportWriter,
+					fmtrpc.ReportLvl_ERROR,
 					fmt.Sprintf("Cannot stop telemetry data recording: %v", err),
 					defaultAuthor,
 					time.Now(),
@@ -506,7 +513,11 @@ func (s *TestPlanService) StartTestPlan(ctx context.Context, req *fmtrpc.StartTe
 	err := s.startTestPlan()
 	if err != nil {
 		s.Logger.Error().Msg(fmt.Sprintf("Could not start execution of test plan: %v", err))
-		return nil, err
+	}
+	if err == ErrNoTestPlanLoaded || err == ErrTestPlanAlreadyStarted {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	} else if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	s.Logger.Info().Msg("Test plan execution successfully started.")
 	return &fmtrpc.StartTestPlanResponse{
@@ -534,7 +545,7 @@ func (s *TestPlanService) stopTestPlan() error {
 func (s *TestPlanService) StopTestPlan(ctx context.Context, req *fmtrpc.StopTestPlanRequest) (*fmtrpc.StopTestPlanResponse, error) {
 	err := s.stopTestPlan()
 	if err != nil {
-		return nil, err
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	return &fmtrpc.StopTestPlanResponse{
 		Msg: "Execution of test plan successfully stopped",
@@ -544,11 +555,11 @@ func (s *TestPlanService) StopTestPlan(ctx context.Context, req *fmtrpc.StopTest
 // InsertROIMarker creates a new entry in the rest report
 func (s *TestPlanService) InsertROIMarker(ctx context.Context, req *fmtrpc.InsertROIRequest) (*fmtrpc.InsertROIResponse, error) {
 	if atomic.LoadInt32(&s.Executing) != 1 {
-		return nil, ErrNoTestPlanExecuting
+		return nil, status.Error(codes.FailedPrecondition, ErrNoTestPlanExecuting.Error())
 	}
 	err := writeMsgToReport(s.reportWriter, req.ReportLvl, req.Text, req.Author, time.Now())
 	if err != nil {
-		return nil, fmt.Errorf("Cannot write to report: %v", err)
+		return nil, status.Error(codes.Internal, e.Wrap(err, "cannot write to report").Error())
 	}
 	return &fmtrpc.InsertROIResponse{
 		Msg: "Region of Interest marker inserted successfully.",

@@ -32,14 +32,27 @@ import (
 	"net"
 	"strconv"
 	"sync/atomic"
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
 	"github.com/SSSOC-CAN/fmtd/api"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	bg "github.com/SSSOCPaulCote/blunderguard"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/macaroon-bakery.v2/bakery"
+)
+
+const (
+	ErrGRPCMiddlewareNil    = bg.Error("gRPC middleware uninitialized")
+	ErrEmptyPermissionsList = bg.Error("empty permissions list")
+	ErrInvalidMacEntity     = bg.Error("invalid macaroon permission entity")
+	ErrInvalidMacAction     = bg.Error("invalid macaroon permission action")
 )
 
 var (
@@ -83,7 +96,7 @@ var (
 			Action: "write",
 		},
 	}
-	validActions = []string{"read", "write", "generate"}
+	validActions  = []string{"read", "write", "generate"}
 	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", macaroons.PermissionEntityCustomURI}
 )
 
@@ -92,7 +105,7 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 	return map[string][]bakery.Op{
 		"/fmtrpc.Fmt/StopDaemon": {{
 			Entity: "fmtd",
-			Action:	"write",
+			Action: "write",
 		}},
 		"/fmtrpc.Fmt/AdminTest": {{
 			Entity: "fmtd",
@@ -128,7 +141,7 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 		}},
 		"/fmtrpc.TestPlanExecutor/InsertROIMarker": {{
 			Entity: "tpex",
-			Action:	"write",
+			Action: "write",
 		}},
 		"/fmtrpc.Fmt/BakeMacaroon": {{
 			Entity: "macaroon",
@@ -147,16 +160,15 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 
 // RpcServer is a child of the fmtrpc.UnimplementedFmtServer struct. Meant to host all related attributes to the rpcserver
 type RpcServer struct {
-	started 						int32
-	shutdown 						int32
+	Active int32
 	fmtrpc.UnimplementedFmtServer
-	interceptor 					*intercept.Interceptor
-	grpcInterceptor					*intercept.GrpcInterceptor
-	cfg 							*Config
-	quit 							chan struct{}
-	SubLogger 						*zerolog.Logger
-	macSvc							*macaroons.Service
-	Listener						net.Listener
+	interceptor     *intercept.Interceptor
+	grpcInterceptor *intercept.GrpcInterceptor
+	cfg             *Config
+	quit            chan struct{}
+	SubLogger       *zerolog.Logger
+	macSvc          *macaroons.Service
+	Listener        net.Listener
 }
 
 // Compile time check to ensure RpcServer implements api.RestProxyService
@@ -172,10 +184,10 @@ func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerol
 	}
 	return &RpcServer{
 		interceptor: interceptor,
-		cfg: config,
-		quit: make(chan struct{}, 1),
-		SubLogger: logger,
-		Listener: listener,
+		cfg:         config,
+		quit:        make(chan struct{}, 1),
+		SubLogger:   logger,
+		Listener:    listener,
 	}, nil
 }
 
@@ -186,7 +198,7 @@ func (s *RpcServer) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
 }
 
 // RegisterWithRestProxy registers the RPC Server with the REST proxy
-func(s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
+func (s *RpcServer) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
 	err := fmtrpc.RegisterFmtHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
@@ -207,67 +219,68 @@ func (s *RpcServer) AddGrpcInterceptor(i *intercept.GrpcInterceptor) {
 }
 
 // Start starts the RpcServer subserver
-func (s *RpcServer) Start() (error) {
+func (s *RpcServer) Start() error {
 	s.SubLogger.Info().Msg("Starting RPC server...")
-	if atomic.AddInt32(&s.started, 1) != 1 {
-		return fmt.Errorf("Could not start RPC server: server already started")
+	if ok := atomic.CompareAndSwapInt32(&s.Active, 0, 1); !ok {
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.SubLogger.Info().Msg("RPC server started")
 	return nil
 }
 
 // Stop stops the rpc sub-server
-func (s *RpcServer) Stop() (error) {
-	if atomic.AddInt32(&s.shutdown, 1) != 1 {
-		return nil
+func (s *RpcServer) Stop() error {
+	if ok := atomic.CompareAndSwapInt32(&s.Active, 1, 0); !ok {
+		return errors.ErrServiceAlreadyStopped
 	}
 	close(s.quit)
 	err := s.Listener.Close()
 	if err != nil {
 		s.SubLogger.Error().Msg(fmt.Sprintf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close()))
+		return e.Wrapf(err, "could not stop listening at %v", s.Listener.Addr())
 	}
 	return nil
 }
 
 // StopDaemon will send a shutdown request to the interrupt handler, triggering a graceful shutdown
-func (s *RpcServer) StopDaemon(_ context.Context, _*fmtrpc.StopRequest) (*fmtrpc.StopResponse, error) {
+func (s *RpcServer) StopDaemon(_ context.Context, _ *fmtrpc.StopRequest) (*fmtrpc.StopResponse, error) {
 	s.interceptor.RequestShutdown()
 	return &fmtrpc.StopResponse{}, nil
 }
 
 // AdminTest will return a string only if the client has the admin macaroon
-func (s *RpcServer) AdminTest(_ context.Context, _*fmtrpc.AdminTestRequest) (*fmtrpc.AdminTestResponse, error) {
+func (s *RpcServer) AdminTest(_ context.Context, _ *fmtrpc.AdminTestRequest) (*fmtrpc.AdminTestResponse, error) {
 	return &fmtrpc.AdminTestResponse{Msg: "This is an admin test"}, nil
 }
 
 // TestCommand will return a string for any macaroon
-func (s *RpcServer) TestCommand(_ context.Context, _*fmtrpc.TestRequest) (*fmtrpc.TestResponse, error) {
+func (s *RpcServer) TestCommand(_ context.Context, _ *fmtrpc.TestRequest) (*fmtrpc.TestResponse, error) {
 	return &fmtrpc.TestResponse{Msg: "This is a regular test"}, nil
 }
 
 // BakeMacaroon bakes a new macaroon based on input permissions and constraints
 func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRequest) (*fmtrpc.BakeMacaroonResponse, error) {
 	if s.macSvc == nil {
-		return nil, fmt.Errorf("Could not bake macaroon: macaroon service not initialized")
+		return nil, status.Error(codes.Aborted, errors.ErrMacSvcNil.Error())
 	}
 	if s.grpcInterceptor == nil {
-		return nil, fmt.Errorf("Could not bake macaroon: gRPC middleware not initialized")
+		return nil, status.Error(codes.Aborted, ErrGRPCMiddlewareNil.Error())
 	}
 	if len(req.Permissions) == 0 {
-		return nil, fmt.Errorf("Could not bake macaroon: empty permissions list")
+		return nil, status.Error(codes.InvalidArgument, ErrEmptyPermissionsList.Error())
 	}
 	perms := make([]bakery.Op, len(req.Permissions))
 	for i, op := range req.Permissions {
 		if !stringInSlice(op.Entity, validEntities) {
-			return nil, fmt.Errorf("Could not bake macaroon: invalid permission entity")
+			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacEntity.Error())
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
 			allPermissions := s.grpcInterceptor.Permissions()
 			if _, ok := allPermissions[op.Action]; !ok {
-				return nil, fmt.Errorf("Could not bake macaroon: %s is not a valid action", op.Action)
+				return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 			}
 		} else if !stringInSlice(op.Action, validActions) {
-			return nil, fmt.Errorf("Could not bake macaroon: invalid permission action")
+			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 		}
 		perms[i] = bakery.Op{
 			Entity: op.Entity,
@@ -276,7 +289,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}
 	var (
 		timeoutSeconds int64
-		timeout		   bool
+		timeout        bool
 	)
 	if req.Timeout > 0 {
 		timeout = true
@@ -293,14 +306,14 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}
 	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeout, timeoutSeconds)
 	if err != nil {
-		return nil, fmt.Errorf("Could not bake macaroon: %v", err)
+		return nil, status.Error(codes.Internal, e.Wrap(err, "could not bake macaroon").Error())
 	}
 	return &fmtrpc.BakeMacaroonResponse{
 		Macaroon: hex.EncodeToString(macBytes),
 	}, nil
 }
 
-// stringInSlice checks if a string "a" is in the slice 
+// stringInSlice checks if a string "a" is in the slice
 func stringInSlice(a string, slice []string) bool {
 	for _, b := range slice {
 		if b == a {

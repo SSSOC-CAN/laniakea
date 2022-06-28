@@ -15,19 +15,23 @@ import (
 	"path"
 	"strconv"
 	"testing"
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/btcsuite/btcwallet/snacl"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var (
-	bufSize = 1 * 1024 * 1024
-	lis *bufconn.Listener
+	bufSize             = 1 * 1024 * 1024
+	lis                 *bufconn.Listener
 	defaultTestPassword = []byte("test")
 )
 
@@ -60,7 +64,7 @@ func initService(t *testing.T) (*UnlockerService, func(), string) {
 	return unlockerService, cleanUp, tempDir
 }
 
-// TestInitUnlockerService tests if initializing the Unlocker Service is possible 
+// TestInitUnlockerService tests if initializing the Unlocker Service is possible
 func TestInitUnlockerService(t *testing.T) {
 	_, cleanUp, _ := initService(t)
 	defer cleanUp()
@@ -79,7 +83,7 @@ func TestRegisterWithRestProxy(t *testing.T) {
 	customMarshalerOption := proxy.WithMarshalerOption(
 		proxy.MIMEWildcard, &proxy.JSONPb{
 			MarshalOptions: protojson.MarshalOptions{
-				UseProtoNames: true,
+				UseProtoNames:   true,
 				EmitUnpopulated: true,
 			},
 		},
@@ -157,20 +161,28 @@ func TestCommands(t *testing.T) {
 		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
 			Password: defaultTestPassword,
 		})
-		if err == nil {
-			t.Errorf("Expected error when calling Login command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrPasswordNotSet.Error() {
+			t.Errorf("Unexpected error when calling Login command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
 	// ChangePassword before setting password
 	t.Run("fmtcli changepassword pre-pwd-set", func(t *testing.T) {
 		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
-			CurrentPassword: defaultTestPassword,
-			NewPassword: []byte("password123"),
+			CurrentPassword:    defaultTestPassword,
+			NewPassword:        []byte("password123"),
 			NewMacaroonRootKey: false,
 		})
-		if err == nil {
-			t.Errorf("Expected error when calling ChangePassword command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrPasswordNotSet.Error() {
+			t.Errorf("Unexpected error when calling ChangePassword command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
@@ -189,8 +201,12 @@ func TestCommands(t *testing.T) {
 		resp, err := client.SetPassword(ctx, &fmtrpc.SetPwdRequest{
 			Password: defaultTestPassword,
 		})
-		if err == nil {
-			t.Errorf("Expected error when calling SetPassword command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrPasswordAlreadySet.Error() {
+			t.Errorf("Unexpected error when calling SetPassword command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
@@ -199,8 +215,12 @@ func TestCommands(t *testing.T) {
 		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
 			Password: []byte("wrongpassword"),
 		})
-		if err == nil {
-			t.Errorf("Expected error when calling Login command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrWrongPassword.Error() {
+			t.Errorf("Unexpected error when calling Login command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
@@ -217,13 +237,17 @@ func TestCommands(t *testing.T) {
 	// ChangePassword don't remove macaroons
 	t.Run("fmtcli changepassword keep-macs", func(t *testing.T) {
 		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
-			CurrentPassword: defaultTestPassword,
-			NewPassword: []byte("password123"),
+			CurrentPassword:    defaultTestPassword,
+			NewPassword:        []byte("password123"),
 			NewMacaroonRootKey: false,
 		})
 		// err = macaroon encryption key not found
-		if err == nil {
-			t.Errorf("Expected error when calling ChangePassword command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != macaroons.ErrEncKeyNotFound.Error() {
+			t.Errorf("Unexpected error when calling ChangePassword command: %v", st.Message())
 		}
 		t.Log(resp)
 		if !utils.FileExists(path.Join(tempDir, "admin.macaroon")) {
@@ -235,8 +259,12 @@ func TestCommands(t *testing.T) {
 		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
 			Password: defaultTestPassword,
 		})
-		if err == nil {
-			t.Errorf("Expected error when calling Login command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrWrongPassword.Error() {
+			t.Errorf("Unexpected error when calling Login command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
@@ -253,25 +281,33 @@ func TestCommands(t *testing.T) {
 	// Changepassword wrong password
 	t.Run("fmtcli changepassword wrong password", func(t *testing.T) {
 		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
-			CurrentPassword: defaultTestPassword,
-			NewPassword: []byte("password123"),
+			CurrentPassword:    defaultTestPassword,
+			NewPassword:        []byte("password123"),
 			NewMacaroonRootKey: false,
 		})
-		if err == nil {
-			t.Errorf("Expected error when calling ChangePassword command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrWrongPassword.Error() {
+			t.Errorf("Unexpected error when calling ChangePassword command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
 	// Changepassword erase macs
 	t.Run("fmtcli changepassword yeet-macs", func(t *testing.T) {
 		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
-			CurrentPassword: []byte("password123"),
-			NewPassword: defaultTestPassword,
+			CurrentPassword:    []byte("password123"),
+			NewPassword:        defaultTestPassword,
 			NewMacaroonRootKey: true,
 		})
 		// err = invalid password
-		if err == nil {
-			t.Errorf("Expected error when calling ChangePassword command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != snacl.ErrInvalidPassword.Error() {
+			t.Errorf("Unexpected error when calling ChangePassword command: %v", st.Message())
 		}
 		t.Log(resp)
 		if utils.FileExists(path.Join(tempDir, "admin.macaroon")) {

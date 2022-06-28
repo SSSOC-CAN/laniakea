@@ -16,22 +16,24 @@ import (
 	"strconv"
 	"testing"
 	"time"
-	
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
 	"github.com/SSSOC-CAN/fmtd/cert"
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var (
-	bufSize = 1 * 1024 * 1024
-	lis *bufconn.Listener
+	bufSize            = 1 * 1024 * 1024
+	lis                *bufconn.Listener
 	testMacPermissions = []*fmtrpc.MacaroonPermission{
 		&fmtrpc.MacaroonPermission{
 			Entity: "uri",
@@ -73,19 +75,35 @@ func initRpcServer(t *testing.T) (*RpcServer, func()) {
 func TestStartStopRpcServer(t *testing.T) {
 	rpcServer, cleanUp := initRpcServer(t)
 	defer cleanUp()
-	err := rpcServer.Start()
-	if err != nil {
-		t.Fatalf("Could not start RPC server: %v", err)
-	}
-	err = rpcServer.Stop()
-	if err != nil {
-		t.Fatalf("Could not stop RPC server: %v", err)
-	}
-}	
+	t.Run("Start RPC server", func(t *testing.T) {
+		err := rpcServer.Start()
+		if err != nil {
+			t.Fatalf("Could not start RPC server: %v", err)
+		}
+	})
+	t.Run("Start RPC server invalid", func(t *testing.T) {
+		err := rpcServer.Start()
+		if err != errors.ErrServiceAlreadyStarted {
+			t.Errorf("Unexpected error when starting RPC server: %v", err)
+		}
+	})
+	t.Run("Stop RPC server", func(t *testing.T) {
+		err := rpcServer.Stop()
+		if err != nil {
+			t.Fatalf("Could not stop RPC server: %v", err)
+		}
+	})
+	t.Run("Stop RPC server invalid", func(t *testing.T) {
+		err := rpcServer.Stop()
+		if err != errors.ErrServiceAlreadyStopped {
+			t.Errorf("Unexpected error when stopping RPC server: %v", err)
+		}
+	})
+}
 
 // TestRegisterWithRestProxy tests if we can successfully register with the REST proxy
 func TestRegisterWithRestProxy(t *testing.T) {
-	time.Sleep(1*time.Second) // gives enough time to shutdownInterceptor to shutdown
+	time.Sleep(1 * time.Second) // gives enough time to shutdownInterceptor to shutdown
 	rpcServer, cleanUp := initRpcServer(t)
 	defer cleanUp()
 	// context
@@ -96,7 +114,7 @@ func TestRegisterWithRestProxy(t *testing.T) {
 	customMarshalerOption := proxy.WithMarshalerOption(
 		proxy.MIMEWildcard, &proxy.JSONPb{
 			MarshalOptions: protojson.MarshalOptions{
-				UseProtoNames: true,
+				UseProtoNames:   true,
 				EmitUnpopulated: true,
 			},
 		},
@@ -149,7 +167,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 // TestCommands tests the all RPC endpoint for the Fmt Service
 func TestCommands(t *testing.T) {
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	cleanUp := initGrpcServer(t)
 	defer cleanUp()
 	ctx := context.Background()
@@ -178,7 +196,7 @@ func TestCommands(t *testing.T) {
 	// Bake Macaroon
 	t.Run("fmtcli bake-macaroon", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(0),
+			Timeout:     int64(0),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: testMacPermissions,
 		})
@@ -218,6 +236,23 @@ func initGrpcServerMac(t *testing.T) func() {
 	if err != nil {
 		t.Fatalf("Could not initialize kvdb: %v", err)
 	}
+	// client for init func
+	conn, err := grpc.DialContext(context.Background(), "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+	client := fmtrpc.NewFmtClient(conn)
+	t.Run("Macaroon Service is Nil", func(t *testing.T) {
+		_, err := client.BakeMacaroon(context.Background(), &fmtrpc.BakeMacaroonRequest{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != errors.ErrMacSvcNil.Error() {
+			t.Errorf("Unexpected error when calling Bake macaroon command: %v", st.Message())
+		}
+	})
 	// macaroon service
 	macaroonService, err := macaroons.InitService(*db, "fmtd")
 	if err != nil {
@@ -228,6 +263,16 @@ func initGrpcServerMac(t *testing.T) func() {
 		t.Errorf("Could not unlock macaroon store: %v", err)
 	}
 	rpcServer.AddMacaroonService(macaroonService)
+	t.Run("gRPC Middleware is Nil", func(t *testing.T) {
+		_, err := client.BakeMacaroon(context.Background(), &fmtrpc.BakeMacaroonRequest{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrGRPCMiddlewareNil.Error() {
+			t.Errorf("Unexpected error when calling Bake macaroon command: %v", st.Message())
+		}
+	})
 	// gRPC Middleware
 	grpcInterceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, true)
 	err = grpcInterceptor.AddPermissions(MainGrpcServerPermissions())
@@ -245,7 +290,7 @@ func initGrpcServerMac(t *testing.T) func() {
 
 // TestBakeMacaroon tests the bake macaroon command
 func TestBakeMacaroon(t *testing.T) {
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	cleanUp := initGrpcServerMac(t)
 	defer cleanUp()
 	ctx := context.Background()
@@ -258,19 +303,23 @@ func TestBakeMacaroon(t *testing.T) {
 	// With empty permissions array
 	t.Run("no permissions", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(0),
+			Timeout:     int64(0),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: make([]*fmtrpc.MacaroonPermission, 0),
 		})
-		if err == nil {
-			t.Fatalf("Expected error when calling Bake Macaroon command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrEmptyPermissionsList.Error() {
+			t.Fatalf("Unexpected error when calling Bake Macaroon command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
 	// With invalid permission entity
 	t.Run("invalid entity", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(0),
+			Timeout:     int64(0),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -279,15 +328,19 @@ func TestBakeMacaroon(t *testing.T) {
 				},
 			},
 		})
-		if err == nil {
-			t.Fatalf("Expected error when calling Bake Macaroon command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrInvalidMacEntity.Error() {
+			t.Errorf("Unexpected error when calling Bake Macaroon command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
 	// With invalid permission action
 	t.Run("invalid action", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(0),
+			Timeout:     int64(0),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -296,15 +349,19 @@ func TestBakeMacaroon(t *testing.T) {
 				},
 			},
 		})
-		if err == nil {
-			t.Fatalf("Expected error when calling Bake Macaroon command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrInvalidMacAction.Error() {
+			t.Errorf("Unexpected error when calling Bake Macaroon command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
 	// With invalid permission action, uri entity
 	t.Run("invalid action custom uri", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(0),
+			Timeout:     int64(0),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -313,15 +370,19 @@ func TestBakeMacaroon(t *testing.T) {
 				},
 			},
 		})
-		if err == nil {
-			t.Fatalf("Expected error when calling Bake Macaroon command")
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Error is not a gRPC status error")
+		}
+		if st.Message() != ErrInvalidMacAction.Error() {
+			t.Errorf("Unexpected error when calling Bake Macaroon command: %v", st.Message())
 		}
 		t.Log(resp)
 	})
 	// Valid call custom uri
 	t.Run("valid call custom uri", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(60),
+			Timeout:     int64(60),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -338,7 +399,7 @@ func TestBakeMacaroon(t *testing.T) {
 	// valid call fmtd
 	t.Run("valid call uri", func(t *testing.T) {
 		resp, err := client.BakeMacaroon(ctx, &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(60),
+			Timeout:     int64(60),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{

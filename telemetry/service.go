@@ -1,3 +1,4 @@
+//go:build !demo
 // +build !demo
 
 /*
@@ -18,14 +19,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	influx "github.com/influxdata/influxdb-client-go/v2"
-	"github.com/influxdata/influxdb-client-go/v2/api"
-	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOCPaulCote/gux"
+	influx "github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api"
+	"github.com/influxdata/influxdb-client-go/v2/domain"
+	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
 )
 
@@ -36,8 +38,7 @@ type TelemetryService struct {
 }
 
 // A compile time check to make sure that TelemetryService fully implements the data.Service interface
-var _ data.Service = (*TelemetryService) (nil)
-
+var _ data.Service = (*TelemetryService)(nil)
 
 // NewTelemetryService creates a new Telemetry Service object which will use the appropriate drivers
 func NewTelemetryService(
@@ -52,19 +53,19 @@ func NewTelemetryService(
 		wgL sync.WaitGroup
 		wgR sync.WaitGroup
 	)
-	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify : true}))
+	client := influx.NewClientWithOptions(influxUrl, influxToken, influx.DefaultOptions().SetTLSConfig(&tls.Config{InsecureSkipVerify: true}))
 	return &TelemetryService{
 		BaseTelemetryService: BaseTelemetryService{
-			rtdStateStore:    store,
-			Logger:       	  logger,
-			QuitChan:     	  make(chan struct{}),
-			CancelChan:   	  make(chan struct{}),
-			name: 	      	  data.TelemetryName,
-			wgListen:		  wgL,
-			wgRecord:		  wgR,
-			idb: 			  client,
+			rtdStateStore: store,
+			Logger:        logger,
+			QuitChan:      make(chan struct{}),
+			CancelChan:    make(chan struct{}),
+			name:          data.TelemetryName,
+			wgListen:      wgL,
+			wgRecord:      wgR,
+			idb:           client,
 		},
-		connection:		  connection,
+		connection: connection,
 	}
 }
 
@@ -72,7 +73,7 @@ func NewTelemetryService(
 func (s *TelemetryService) Start() error {
 	s.Logger.Info().Msg("Starting Telemetry Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 0, 1); !ok {
-		return fmt.Errorf("Could not start Telemetry service: service already started.")
+		return errors.ErrServiceAlreadyStarted
 	}
 	s.wgListen.Add(1)
 	go s.ListenForRTDSignal()
@@ -84,12 +85,12 @@ func (s *TelemetryService) Start() error {
 func (s *TelemetryService) Stop() error {
 	s.Logger.Info().Msg("Stopping Telemetry Service...")
 	if ok := atomic.CompareAndSwapInt32(&s.Running, 1, 0); !ok {
-		return fmt.Errorf("Could not stop Telemetry service: service already stopped.")
+		return errors.ErrServiceAlreadyStopped
 	}
 	if atomic.LoadInt32(&s.Recording) == 1 {
 		err := s.stopRecording()
 		if err != nil {
-			return fmt.Errorf("Could not stop Telemetry service: %v", err)
+			return e.Wrap(err, "could not stop telemetry service")
 		}
 	}
 	close(s.CancelChan)
@@ -107,14 +108,14 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 		return errors.ErrAlreadyRecording
 	}
 	if pol_int < drivers.MinTelemetryPollingInterval && pol_int != 0 {
-		return fmt.Errorf("Inputted polling interval smaller than minimum value: %v", drivers.MinTelemetryPollingInterval)
+		return errors.ErrPollingIntervalTooSmall
 	} else if pol_int == 0 { //No polling interval provided
 		pol_int = drivers.TelemetryDefaultPollingInterval
 	}
 	// start connection
 	err := s.connection.StartScanning()
 	if err != nil {
-		return err
+		return e.Wrap(err, "could not start DAQ scanning")
 	}
 	// Get bucket, create it if it doesn't exist
 	orgAPI := s.idb.OrganizationsAPI()
@@ -145,12 +146,12 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 	// Write polling interval to state
 	err = s.rtdStateStore.Dispatch(
 		gux.Action{
-			Type: 	 "telemetry/polling_interval/update",
+			Type:    "telemetry/polling_interval/update",
 			Payload: pol_int,
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("Could not update state: %v", err)
+		return e.Wrap(err, "could not update state")
 	}
 	// the actual data
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 0, 1); !ok {
@@ -192,13 +193,13 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 	readings := s.connection.ReadItems()
 	var (
 		cumSum float64
-		cnt	   int64
+		cnt    int64
 	)
 	for i, reading := range readings {
 		switch v := reading.Item.Value.(type) {
 		case float64:
-			dataField[int64(i)]= &fmtrpc.DataField{
-				Name: reading.Name,
+			dataField[int64(i)] = &fmtrpc.DataField{
+				Name:  reading.Name,
 				Value: v,
 			}
 			if i != int(drivers.TelemetryPressureChannel) {
@@ -231,8 +232,8 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 				writer.WritePoint(p)
 			}
 		case float32:
-			dataField[int64(i)]= &fmtrpc.DataField{
-				Name: reading.Name,
+			dataField[int64(i)] = &fmtrpc.DataField{
+				Name:  reading.Name,
 				Value: float64(v),
 			}
 			if i != int(drivers.TelemetryPressureChannel) {
@@ -269,20 +270,20 @@ func (s *TelemetryService) record(writer api.WriteAPI) error {
 	}
 	err := s.rtdStateStore.Dispatch(
 		gux.Action{
-			Type: 	 "telemetry/update",
+			Type: "telemetry/update",
 			Payload: data.InitialRtdState{
 				RealTimeData: fmtrpc.RealTimeData{
-					Source: s.name,
+					Source:     s.name,
 					IsScanning: true,
-					Timestamp: current_time.UnixMilli(),
-					Data: dataField,
+					Timestamp:  current_time.UnixMilli(),
+					Data:       dataField,
 				},
-				AverageTemperature: cumSum/float64(cnt),
+				AverageTemperature: cumSum / float64(cnt),
 			},
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("Could not update state: %v", err)
+		return e.Wrap(err, "could not update state")
 	}
 	return nil
 }
@@ -292,7 +293,7 @@ func (s *TelemetryService) stopRecording() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Recording, 1, 0); !ok {
 		return errors.ErrAlreadyStoppedRecording
 	}
-	s.CancelChan<-struct{}{}
+	s.CancelChan <- struct{}{}
 	// Stop scanning
 	err := s.connection.StopScanning()
 	if err != nil {
@@ -318,7 +319,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 					err = s.startRecording(n, split[1], split[2])
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: fmt.Errorf("Could not start recording: %v", err)}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: e.Wrap(err, "could not start recording")}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: nil}
@@ -328,7 +329,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 					err := s.stopRecording()
 					if err != nil {
 						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
-						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: fmt.Errorf("Could not stop recording: %v", err)}
+						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: e.Wrap(err, "could not stop recording")}
 					} else {
 						s.Logger.Info().Msg("Stopped recording.")
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: nil}

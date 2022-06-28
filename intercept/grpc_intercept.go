@@ -29,11 +29,16 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	bg "github.com/SSSOCPaulCote/blunderguard"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
@@ -44,18 +49,20 @@ const (
 	daemonLocked
 	daemonUnlocked
 	rpcActive
+	ErrWaitingToStart          = bg.Error("waiting to start, RPC services not available")
+	ErrDaemonLocked            = bg.Error("daemon locked, unlock it to enable full RPC access")
+	ErrDaemonUnlocked          = bg.Error("daemon already unlocked, unlocker service is no longer available")
+	ErrRPCStarting             = bg.Error("the RPC server is in the process of starting up, but not yet ready to accept calls")
+	ErrInvalidRPCState         = bg.Error("invalid RPC state")
+	ErrDuplicateMacConstraints = bg.Error("duplicate macaroon constraints for given path")
+	ErrUnknownPermission       = bg.Error("unknown permission for given method")
 )
 
 var (
-	ErrWaitingToStart = fmt.Errorf("waiting to start, RPC services not available")
-	ErrDaemonLocked = fmt.Errorf("daemon locked, unlock it to enable full RPC access")
-	ErrDaemonUnlocked = fmt.Errorf("daemon already unlocked, Unlocker service is no longer available")
-	ErrRPCStarting = fmt.Errorf("the RPC server is in the process of starting up, but not yet ready to accept calls")
-
 	// List of commands that don't need macaroons
 	macaroonWhitelist = map[string]struct{}{
-		"/fmtrpc.Fmt/TestCommand":		   {},
-		"/fmtrpc.Unlocker/Login":		   {}, //don't need a macaroon to login because succesful login will create macaroons
+		"/fmtrpc.Fmt/TestCommand":         {},
+		"/fmtrpc.Unlocker/Login":          {}, //don't need a macaroon to login because succesful login will create macaroons
 		"/fmtrpc.Unlocker/SetPassword":    {},
 		"/fmtrpc.Unlocker/ChangePassword": {},
 	}
@@ -63,21 +70,21 @@ var (
 
 // GrpcInteceptor struct is a data structure with attributes relevant to creating the gRPC interceptor
 type GrpcInterceptor struct {
-	state 		rpcState
-	noMacaroons bool
-	log *zerolog.Logger
+	state         rpcState
+	noMacaroons   bool
+	log           *zerolog.Logger
 	permissionMap map[string][]bakery.Op
-	svc *macaroons.Service
+	svc           *macaroons.Service
 	sync.RWMutex
 }
 
 // NewGrpcInterceptor instantiates a new GrpcInterceptor struct
 func NewGrpcInterceptor(log *zerolog.Logger, noMacaroons bool) *GrpcInterceptor {
 	return &GrpcInterceptor{
-		state: 		 waitingToStart,
-		noMacaroons: noMacaroons,
+		state:         waitingToStart,
+		noMacaroons:   noMacaroons,
 		permissionMap: make(map[string][]bakery.Op),
-		log: log,
+		log:           log,
 	}
 }
 
@@ -155,7 +162,7 @@ func (i *GrpcInterceptor) checkRPCState(srv interface{}) error {
 	switch state {
 	case waitingToStart:
 		return ErrWaitingToStart
-	case daemonLocked: 
+	case daemonLocked:
 		_, ok := srv.(fmtrpc.UnlockerServer)
 		if !ok {
 			return ErrDaemonLocked
@@ -166,7 +173,7 @@ func (i *GrpcInterceptor) checkRPCState(srv interface{}) error {
 			return ErrDaemonUnlocked
 		}
 	default:
-		return fmt.Errorf("unknown RPC state: %v", state)
+		return ErrInvalidRPCState
 	}
 	return nil
 }
@@ -176,9 +183,11 @@ func (i *GrpcInterceptor) checkRPCState(srv interface{}) error {
 func (i *GrpcInterceptor) rpcStateUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler) (interface{}, error) {
-
-		if err := i.checkRPCState(info.Server); err != nil {
-			return nil, err
+		err := i.checkRPCState(info.Server)
+		if err != nil && err != ErrInvalidRPCState {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		} else if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		return handler(ctx, req)
@@ -190,9 +199,11 @@ func (i *GrpcInterceptor) rpcStateUnaryServerInterceptor() grpc.UnaryServerInter
 func (i *GrpcInterceptor) rpcStateStreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream,
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-
-		if err := i.checkRPCState(srv); err != nil {
-			return err
+		err := i.checkRPCState(srv)
+		if err != nil && err != ErrInvalidRPCState {
+			return status.Error(codes.FailedPrecondition, err.Error())
+		} else if err != nil {
+			return status.Error(codes.Internal, err.Error())
 		}
 
 		return handler(srv, ss)
@@ -213,7 +224,7 @@ func (i *GrpcInterceptor) AddPermissions(perms map[string][]bakery.Op) error {
 // AddPermission adds a new macaroon rule for the given method
 func (i *GrpcInterceptor) AddPermission(method string, ops []bakery.Op) error {
 	if _, ok := i.permissionMap[method]; ok {
-		return fmt.Errorf("Detected duplicate macaroon constraints for path: %v", method)
+		return ErrDuplicateMacConstraints
 	}
 	i.permissionMap[method] = ops
 	return nil
@@ -251,13 +262,12 @@ func (i *GrpcInterceptor) checkMacaroon(ctx context.Context,
 	// If the macaroon service is not yet active, we cannot allow
 	// the call.
 	if svc == nil {
-		return fmt.Errorf("Unable to determine macaroon permissions")
+		return errors.ErrMacSvcNil
 	}
 
 	uriPermissions, ok := i.permissionMap[fullMethod]
 	if !ok {
-		return fmt.Errorf("%s: unknown permissions required for method",
-			fullMethod)
+		return ErrUnknownPermission
 	}
 
 	// Find out if there is an external validator registered for
@@ -307,7 +317,7 @@ func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInter
 		handler grpc.UnaryHandler) (interface{}, error) {
 		// Check macaroons.
 		if err := i.checkMacaroon(ctx, info.FullMethod); err != nil {
-			return nil, err
+			return nil, status.Error(codes.PermissionDenied, err.Error())
 		}
 		return handler(ctx, req)
 	}
@@ -321,7 +331,7 @@ func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInt
 		// Check macaroons.
 		err := i.checkMacaroon(ss.Context(), info.FullMethod)
 		if err != nil {
-			return err
+			return status.Error(codes.PermissionDenied, err.Error())
 		}
 		return handler(srv, ss)
 	}

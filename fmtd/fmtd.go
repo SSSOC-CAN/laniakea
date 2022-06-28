@@ -35,7 +35,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
@@ -52,22 +52,28 @@ import (
 	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
+	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 )
 
+const (
+	ErrShutdown = bg.Error("shutting down")
+)
+
 var (
-	tempPwd = []byte("abcdefgh")
-	defaultMacTimeout int64 = 60
-	RtdInitialState = data.InitialRtdState{}
-	RtdReducer gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
+	tempPwd                       = []byte("abcdefgh")
+	defaultMacTimeout int64       = 60
+	RtdInitialState               = data.InitialRtdState{}
+	RtdReducer        gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
 		// assert type of s
 		oldState, ok := s.(data.InitialRtdState)
 		if !ok {
-			return nil, errors.ErrInvalidType
+			return nil, gux.ErrInvalidStateType
 		}
 		// switch case action
 		switch a.Type {
@@ -75,7 +81,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(data.InitialRtdState)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.RealTimeData = newState.RealTimeData
 			oldState.AverageTemperature = newState.AverageTemperature
@@ -84,7 +90,7 @@ var (
 			// assert type of payload
 			newState, ok := a.Payload.(fmtrpc.RealTimeData)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.RealTimeData = newState
 			return oldState, nil
@@ -92,13 +98,13 @@ var (
 			// assert type of payload
 			newPol, ok := a.Payload.(int64)
 			if !ok {
-				return nil, errors.ErrInvalidType
+				return nil, gux.ErrInvalidPayloadType
 			}
 			oldState.TelPollingInterval = newPol
 			return oldState, nil
 		default:
-			return nil, errors.ErrInvalidAction
-		} 
+			return nil, gux.ErrInvalidAction
+		}
 	}
 )
 
@@ -119,7 +125,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		server.logger.Fatal().Msg("Could not start server")
 		return err
 	}
-	// server.logger.Debug().Msg(fmt.Sprintf("Server active: %v\tServer stopping: %v", server.Active, server.Stopping))
 	defer server.Stop()
 
 	// Get TLS config
@@ -291,7 +296,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		return err
 	}
 	defer rpcServer.Stop()
-	
+
 	// Start gRPC listening
 	err = startGrpcListen(grpc_server, rpcServer.Listener)
 	if err != nil {
@@ -303,14 +308,14 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Starting REST proxy
 	stopProxy, err := startRestProxy(
 		server.cfg,
-		rpcServer, 
+		rpcServer,
 		[]api.RestProxyService{
 			rpcServer,
 			rtdService,
 			testPlanExecutor,
 			unlockerService,
 			controllerService,
-		}, 
+		},
 		restDialOpts,
 		restListen,
 	)
@@ -322,8 +327,8 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Wait for password
 	grpc_interceptor.SetDaemonLocked()
 	server.logger.Info().Msg("Waiting for password. Use `fmtcli setpassword` to set a password for the first time, " +
-	"`fmtcli login` to unlock the daemon with an existing password, or `fmtcli changepassword` to change the " +
-	"existing password and unlock the daemon.")
+		"`fmtcli login` to unlock the daemon with an existing password, or `fmtcli changepassword` to change the " +
+		"existing password and unlock the daemon.")
 	pwd, err := waitForPassword(unlockerService, interceptor.ShutdownChannel())
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
@@ -385,7 +390,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 
 	cleanUpServices := func() {
-		for i := len(services)-1; i > -1; i-- {
+		for i := len(services) - 1; i > -1; i-- {
 			err := services[i].Stop()
 			if err != nil {
 				server.logger.Error().Msg(fmt.Sprintf("Unable to stop %s service: %v", services[i].Name(), err))
@@ -396,7 +401,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Change RPC state to active
 	grpc_interceptor.SetRPCActive()
-	
+
 	<-interceptor.ShutdownChannel()
 	return nil
 }
@@ -447,7 +452,7 @@ func waitForPassword(u *unlocker.UnlockerService, shutdownChan <-chan struct{}) 
 		}
 		return msg.Password, nil
 	case <-shutdownChan:
-		return nil, fmt.Errorf("Shutting Down")
+		return nil, ErrShutdown
 	}
 }
 
@@ -489,7 +494,7 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyS
 	customMarshalerOption := proxy.WithMarshalerOption(
 		proxy.MIMEWildcard, &proxy.JSONPb{
 			MarshalOptions: protojson.MarshalOptions{
-				UseProtoNames: true,
+				UseProtoNames:   true,
 				EmitUnpopulated: true,
 			},
 		},
