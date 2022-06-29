@@ -36,7 +36,7 @@ func (p *DatasourcePlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server)
 	return nil
 }
 
-// GRPCClient implements the ** intercace in the go-plugin package
+// GRPCClient implements the ** interface in the go-plugin package
 func (p *DatasourcePlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return &DatasourceGRPCClient{client: fmtrpc.NewDatasourceClient(c)}, nil
 }
@@ -47,7 +47,7 @@ func (p *ControllerPlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server)
 	return nil
 }
 
-// GRPCClient implements the ** intercace in the go-plugin package
+// GRPCClient implements the ** interface in the go-plugin package
 func (p *ControllerPlugin) GRPCClient(ctx context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
 	return &ControllerGRPCClient{client: fmtrpc.NewControllerClient(c)}, nil
 }

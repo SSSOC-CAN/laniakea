@@ -47,6 +47,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/plugins"
 	"github.com/SSSOC-CAN/fmtd/rga"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
@@ -158,6 +159,15 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	defer grpc_server.Stop()
 	rpcServer.RegisterWithGrpcServer(grpc_server)
 	rpcServer.AddGrpcInterceptor(grpc_interceptor)
+
+	// Initialize Plugin Manager
+	server.logger.Info().Msg("Initializing plugins...")
+	_, err = plugins.NewPluginManager(server.cfg.Plugins)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
+		return err
+	}
+	server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", server.cfg.Plugins))
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")

@@ -44,7 +44,7 @@ const (
 
 var (
 	letters     = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	pluginRegEx = `([a-zA-Z0-9_-]+)\:((?:datasource)|(?:controller))\:([a-zA-Z0-9_-]+\.[a-zA-Z0-9]+)$`
+	pluginRegEx = `([a-zA-Z0-9_-]+)\:((?:datasource)|(?:controller))\:([a-zA-Z0-9_-]+(\.[a-zA-Z0-9]+)?)$`
 )
 
 // FileExists reports whether the named file or directory exists.

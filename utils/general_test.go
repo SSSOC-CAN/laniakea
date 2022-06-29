@@ -112,6 +112,7 @@ func TestVerifyPluginStringFormat(t *testing.T) {
 		"myplugin:datasource:pLgste_sdaA-1234.ex_e":    false,
 		"myplugin:datasource:pLgste_sdaA-1234.ex-e":    false,
 		"myplugin:datasource:pLgste_sdaA-1234.ex231e4": true,
+		"myplugin:datasource:pLgste_sdaA-1234":         true,
 	}
 	for name, c := range cases {
 		t.Run(fmt.Sprintf("test %v", name), func(t *testing.T) {
