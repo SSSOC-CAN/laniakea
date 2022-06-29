@@ -28,6 +28,7 @@ type PluginManager struct {
 	pluginExecs map[string]string
 }
 
+// NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
 func NewPluginManager(listOfPlugins []string) (*PluginManager, error) {
 	plugins := make(map[string]plugin.Plugin)
 	execs := make(map[string]string)
