@@ -1,19 +1,18 @@
 package plugins
 
 import (
+	"strings"
+
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/hashicorp/go-plugin"
 )
 
-type PluginType int32
-
 const (
-	DATASOURCE_PLUGIN PluginType = iota
-	CONTROLLER_PLUGIN
-)
-
-const (
-	ErrInvalidPluginType = bg.Error("invalid plugin type")
+	DATASOURCE_STR         = "datasource"
+	CONTROLLER_STR         = "controller"
+	ErrInvalidPluginString = bg.Error("invalid plugin string")
+	ErrInvalidPluginType   = bg.Error("invalid plugin type")
+	ErrDuplicatePluginName = bg.Error("identical plugin names")
 )
 
 var (
@@ -25,30 +24,43 @@ var (
 )
 
 type PluginManager struct {
-	pluginMap map[string]plugin.Plugin
+	pluginMap   map[string]plugin.Plugin
+	pluginExecs map[string]string
 }
 
-func NewPluginManager(listOfPlugins map[string]PluginType) (*PluginManager, error) {
+func NewPluginManager(listOfPlugins []string) (*PluginManager, error) {
 	plugins := make(map[string]plugin.Plugin)
+	execs := make(map[string]string)
 	var err error
 loop:
-	for name, pluginType := range listOfPlugins {
-		var plug plugin.Plugin
-		switch pluginType {
-		case DATASOURCE_PLUGIN:
-			plug = &DatasourcePlugin{}
-		case CONTROLLER_PLUGIN:
-			plug = &ControllerPlugin{}
+	for _, pluginStr := range listOfPlugins {
+		split := strings.Split(pluginStr, ":")
+		if len(split) == 0 {
+			err = ErrInvalidPluginString
+			break loop
+		}
+		if _, ok := plugins[split[0]]; ok {
+			err = ErrDuplicatePluginName
+			break loop
+		}
+		var plugType plugin.Plugin
+		switch split[1] {
+		case DATASOURCE_STR:
+			plugType = &DatasourcePlugin{}
+		case CONTROLLER_STR:
+			plugType = &ControllerPlugin{}
 		default:
 			err = ErrInvalidPluginType
 			break loop
 		}
-		plugins[name] = plug
+		plugins[split[0]] = plugType
+		execs[split[0]] = split[2]
 	}
 	if err != nil {
 		return nil, err
 	}
 	return &PluginManager{
-		pluginMap: plugins,
+		pluginMap:   plugins,
+		pluginExecs: execs,
 	}, nil
 }

@@ -2,12 +2,18 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 )
 
 type DatasourceGRPCClient struct{ client fmtrpc.DatasourceClient }
+
+type DatasourceGRPCServer struct {
+	fmtrpc.UnimplementedDatasourceServer
+	Impl Datasource
+}
 
 // StartRecord implements the Datasource interface method StartRecord
 // TODO:SSSOCPaulCote - timeout context
@@ -41,4 +47,31 @@ func (c *DatasourceGRPCClient) StopRecord() error {
 		return err
 	}
 	return nil
+}
+
+// StartRecord implements the Datasource gRPC server interface
+func (s *DatasourceGRPCServer) StartRecord(_ *fmtrpc.Empty, stream fmtrpc.Datasource_StartRecordServer) error {
+	frameChan, err := s.Impl.StartRecord()
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case frame := <-frameChan:
+			if err := stream.Send(frame); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			if errors.Is(stream.Context().Err(), context.Canceled) {
+				return nil
+			}
+			return stream.Context().Err()
+		}
+	}
+}
+
+// StopRecord implements the Datasource gRPC server interface
+func (s *DatasourceGRPCServer) StopRecord(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.Empty, error) {
+	err := s.Impl.StopRecord()
+	return &fmtrpc.Empty{}, err
 }
