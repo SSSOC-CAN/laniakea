@@ -384,6 +384,14 @@ func (p *PluginManager) createPluginInstance(name string, plug plugin.Plugin) (*
 	return newInstance, nil
 }
 
+// Stop kills all plugin sub-processes safely
+func (p *PluginManager) Stop() error {
+	for _, instance := range p.pluginRegistry {
+		instance.cleanUp()
+	}
+	return nil
+}
+
 // StartRecord is the PluginAPI command which exposes the StartRecord method of all registered datasource plugins
 func (p *PluginManager) StartRecord(ctx context.Context, req *fmtrpc.PluginRequest) (*fmtrpc.Empty, error) {
 	// get the plugin instance from the registry
