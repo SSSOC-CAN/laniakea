@@ -13,6 +13,8 @@ http:
       put: "/v2/plugin/stop/record/{name}"
     - selector: fmtrpc.PluginAPI.Subscribe
       get: "/v2/plugin/subscribe/{name}"
+    - selector: fmtrpc.PluginAPI.StartPlugin
+      put: "/v2/plugin/start/{name}"
     - selector: fmtrpc.PluginAPI.StopPlugin
       put: "/v2/plugin/stop/{name}"
     - selector: fmtrpc.PluginAPI.Command
@@ -20,3 +22,6 @@ http:
       body: "*"
     - selector: fmtrpc.PluginAPI.ListPlugins
       get: "/v2/plugins"
+    - selector: fmtrpc.PluginAPI.AddPlugin
+      post: "/v2/plugin/add"
+      body: "*"

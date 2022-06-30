@@ -22,6 +22,39 @@
     "application/json"
   ],
   "paths": {
+    "/v2/plugin/add": {
+      "post": {
+        "summary": "fmtcli: `plugin-add`\nAddPlugin will add a plugin from given information.",
+        "operationId": "PluginAPI_AddPlugin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/fmtrpcAddPluginRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
     "/v2/plugin/command": {
       "post": {
         "summary": "fmtcli: `plugin-command`\nCommand will send any command to a controller service.",
@@ -68,6 +101,38 @@
       "put": {
         "summary": "fmtcli: `plugin-startrecord`\nStartRecording will begin recording data from specified datasource.",
         "operationId": "PluginAPI_StartRecord",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/start/{name}": {
+      "put": {
+        "summary": "fmtcli: `plugin-start`\nStartPlugin will start the specified existing plugin. Plugins added in this way will not be present upon fmtd restart",
+        "operationId": "PluginAPI_StartPlugin",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -246,6 +311,15 @@
         "CONTROLLER"
       ],
       "default": "DATASOURCE"
+    },
+    "fmtrpcAddPluginRequest": {
+      "type": "object",
+      "properties": {
+        "plugin_string": {
+          "type": "string",
+          "title": "The plugin information string in format unique_name:type(datasource or controller):executable_file_name.ext"
+        }
+      }
     },
     "fmtrpcControllerPluginRequest": {
       "type": "object",

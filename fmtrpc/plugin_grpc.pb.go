@@ -364,7 +364,7 @@ type PluginAPIClient interface {
 	//Subscribe returns a uni-directional stream of data from a specified datasource.
 	Subscribe(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (PluginAPI_SubscribeClient, error)
 	// fmtcli: `plugin-start`
-	//StartPlugin will start the specified existing plugin.
+	//StartPlugin will start the specified existing plugin. Plugins added in this way will not be present upon fmtd restart
 	StartPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
 	// fmtcli: `plugin-stop`
 	//StopPlugin will stop the specified plugin.
@@ -520,7 +520,7 @@ type PluginAPIServer interface {
 	//Subscribe returns a uni-directional stream of data from a specified datasource.
 	Subscribe(*PluginRequest, PluginAPI_SubscribeServer) error
 	// fmtcli: `plugin-start`
-	//StartPlugin will start the specified existing plugin.
+	//StartPlugin will start the specified existing plugin. Plugins added in this way will not be present upon fmtd restart
 	StartPlugin(context.Context, *PluginRequest) (*Empty, error)
 	// fmtcli: `plugin-stop`
 	//StopPlugin will stop the specified plugin.
