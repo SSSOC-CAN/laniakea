@@ -21,23 +21,31 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+type PluginConfig struct {
+	Name        string `yaml:"name"`
+	Type        string `yaml:"type"`
+	ExecName    string `yaml:"exec"`
+	Timeout     int64  `yaml:"timeout"`
+	MaxTimeouts int64  `yaml:"maxTimeouts"`
+}
+
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir  bool     `yaml:"DefaultLogDir"`
-	LogFileDir     string   `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
-	MaxLogFiles    int64    `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
-	MaxLogFileSize int64    `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
-	ConsoleOutput  bool     `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
-	GrpcPort       int64    `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
-	RestPort       int64    `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
-	TCPPort        int64    `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
-	TCPAddr        string   `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
-	DataOutputDir  string   `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
-	ExtraIPAddr    []string `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
-	InfluxURL      string   `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
-	InfluxAPIToken string   `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
-	PluginDir      string   `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
-	Plugins        []string `yaml:"Plugins" long:"plugin" description:"Adds a new plugin which will be spun up at runtime. Format: plugin_name:plugin_type(choose datasource|controller):executable_file_name(ex: myplugin.exe)"`
+	DefaultLogDir  bool            `yaml:"DefaultLogDir"`
+	LogFileDir     string          `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	MaxLogFiles    int64           `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
+	MaxLogFileSize int64           `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
+	ConsoleOutput  bool            `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
+	GrpcPort       int64           `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
+	RestPort       int64           `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
+	TCPPort        int64           `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
+	TCPAddr        string          `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
+	DataOutputDir  string          `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
+	ExtraIPAddr    []string        `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
+	InfluxURL      string          `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
+	InfluxAPIToken string          `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
+	PluginDir      string          `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
+	Plugins        []*PluginConfig `yaml:"Plugins"`
 	MacaroonDBPath string
 	TLSCertPath    string
 	TLSKeyPath     string
@@ -130,17 +138,18 @@ func InitConfig(isTesting bool) (Config, error) {
 			return Config{}, err
 		}
 	}
-	if len(config.Plugins) > 0 {
-		newPlugs := []string{}
-		for _, plug := range config.Plugins {
-			if utils.VerifyPluginStringFormat(plug) {
-				newPlugs = append(newPlugs, plug)
-				continue
-			}
-			log.Printf("Could not add %s plugin, check plugin string format\n", plug)
-		}
-		config.Plugins = newPlugs
-	}
+	// TODO:SSSOCPaulCote - A new config validation
+	// if len(config.Plugins) > 0 {
+	// 	newPlugs := []string{}
+	// 	for _, plug := range config.Plugins {
+	// 		if utils.VerifyPluginStringFormat(plug) {
+	// 			newPlugs = append(newPlugs, plug)
+	// 			continue
+	// 		}
+	// 		log.Printf("Could not add %s plugin, check plugin string format\n", plug)
+	// 	}
+	// 	config.Plugins = newPlugs
+	// }
 	return config, nil
 }
 
