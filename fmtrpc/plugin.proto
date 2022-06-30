@@ -53,7 +53,7 @@ service PluginAPI {
     /* fmtcli: `plugin-add`
     AddPlugin will add a plugin from given information.
     */
-    rpc AddPlugin(AddPluginRequest) returns (Empty);
+    rpc AddPlugin(AddPluginRequest) returns (Plugin);
 }
 
 message Empty {}
