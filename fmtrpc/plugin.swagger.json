@@ -130,7 +130,7 @@
     },
     "/v2/plugin/stop/{name}": {
       "put": {
-        "summary": "fmtcli: `plugin-stop`\nStop will stop the specified controller service.",
+        "summary": "fmtcli: `plugin-stop`\nStopPlugin will stop the specified plugin.",
         "operationId": "PluginAPI_StopPlugin",
         "responses": {
           "200": {
