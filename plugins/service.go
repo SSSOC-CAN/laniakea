@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/SSSOC-CAN/fmtd/api"
+	e "github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -161,6 +162,10 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 	if i.state != fmtrpc.Plugin_READY {
 		return ErrPluginNotReady
 	}
+	// check if we're already recording
+	if i.recordState == RECORDING {
+		return e.ErrAlreadyRecording
+	}
 	// set plugin as busy
 	i.setBusy()
 	defer i.setReady()
@@ -216,6 +221,10 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	// check if plugin is ready
 	if i.state != fmtrpc.Plugin_READY {
 		return ErrPluginNotReady
+	}
+	// check if plugin is recording
+	if i.recordState != RECORDING {
+		return e.ErrAlreadyStoppedRecording
 	}
 	// set plugin as busy
 	i.setBusy()
