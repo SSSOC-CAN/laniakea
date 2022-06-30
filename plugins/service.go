@@ -335,9 +335,8 @@ func NewPluginManager(pluginDir string, listOfPlugins []string, zl zerolog.Logge
 	var err error
 loop:
 	for _, pluginStr := range listOfPlugins {
-		split := strings.Split(pluginStr, ":")
-		if len(split) == 0 {
-			err = ErrInvalidPluginString
+		split, err := parsePluginString(pluginStr)
+		if err != nil {
 			break loop
 		}
 		if _, ok := plugins[split[0]]; ok {
@@ -367,6 +366,15 @@ loop:
 		logger:       NewPluginLogger("PLGN", zl),
 		queueManager: &queue.QueueManager{Logger: zl.With().Str("subsystem", "QMGR").Logger()},
 	}, nil
+}
+
+//parsePluginString parses a given plugin string and returns an error if there are any
+func parsePluginString(pluginStr string) ([]string, error) {
+	split := strings.Split(pluginStr, ":")
+	if len(split) == 0 {
+		return nil, ErrInvalidPluginString
+	}
+	return split, nil
 }
 
 // RegisterWithGrpcServer registers the PluginManager with the root gRPC server.
@@ -554,5 +562,34 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 	if err != nil {
 		return nil, status.New(codes.Internal, err)
 	}
+	return &fmtrpc.Empty{}, nil
+}
+
+// AddPlugin is the PluginAPI command to add a new plugin from a formatted plugin string
+func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequest) (*fmtrpc.Empty, error) {
+	split, err := parsePluginString(req.PluginString)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := p.pluginMap[split[0]]; ok {
+		return nil, ErrDuplicatePluginName
+	}
+	var plugType plugin.Plugin
+	switch split[1] {
+	case DATASOURCE_STR:
+		plugType = &DatasourcePlugin{}
+	case CONTROLLER_STR:
+		plugType = &ControllerPlugin{}
+	default:
+		return nil, ErrInvalidPluginType
+	}
+	p.pluginMap[split[0]] = plugType
+	p.pluginExecs[split[0]] = split[2]
+	// now create new instance and add to registry
+	newInstance, err := p.createPluginInstance(split[0], plugType)
+	if err != nil {
+		return nil, err
+	}
+	p.pluginRegistry[split[0]] = newInstance
 	return &fmtrpc.Empty{}, nil
 }
