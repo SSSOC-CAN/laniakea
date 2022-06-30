@@ -18,6 +18,7 @@ import (
 type Datasource interface {
 	StartRecord() (chan *fmtrpc.Frame, error)
 	StopRecord() error
+	Stop() error
 }
 
 // Controller interface describes an interface for plugins which produce data but also act as controllers

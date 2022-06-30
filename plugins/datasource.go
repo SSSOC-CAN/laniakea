@@ -55,6 +55,15 @@ func (c *DatasourceGRPCClient) StopRecord() error {
 	return nil
 }
 
+// Stop implements the Datasource interface method Stop
+func (c *DatasourceGRPCClient) Stop() error {
+	_, err := c.client.Stop(context.Background(), &fmtrpc.Empty{})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // StartRecord implements the Datasource gRPC server interface
 func (s *DatasourceGRPCServer) StartRecord(_ *fmtrpc.Empty, stream fmtrpc.Datasource_StartRecordServer) error {
 	frameChan, err := s.Impl.StartRecord()
@@ -79,5 +88,11 @@ func (s *DatasourceGRPCServer) StartRecord(_ *fmtrpc.Empty, stream fmtrpc.Dataso
 // StopRecord implements the Datasource gRPC server interface
 func (s *DatasourceGRPCServer) StopRecord(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.Empty, error) {
 	err := s.Impl.StopRecord()
+	return &fmtrpc.Empty{}, err
+}
+
+// Stop implements the Datasource gRPC server interface
+func (s *DatasourceGRPCServer) Stop(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.Empty, error) {
+	err := s.Impl.Stop()
 	return &fmtrpc.Empty{}, err
 }
