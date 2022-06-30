@@ -21,11 +21,11 @@ service Controller {
 }
 
 service PluginAPI {
-    /* fmtcli: `plugin-start`
+    /* fmtcli: `plugin-startrecord`
     StartRecording will begin recording data from specified datasource.
     */
     rpc StartRecord(PluginRequest) returns (Empty);
-    /* fmtcli: `plugin-stop`
+    /* fmtcli: `plugin-stoprecord`
     StopRecording will end the recording of data from specified datasource.
     */
     rpc StopRecord(PluginRequest) returns (Empty);
@@ -36,12 +36,12 @@ service PluginAPI {
     /* fmtcli: `plugin-stop`
     Stop will stop the specified controller service.
     */
-    rpc Stop(PluginRequest) returns (Empty);
+    rpc StopPlugin(PluginRequest) returns (Empty);
     /* fmtcli: `plugin-command`
     Command will send any command to a controller service.
     */
     rpc Command(Frame) returns (stream Frame);
-    /* fmtcli: `list plugins`
+    /* fmtcli: `plugin-list`
     ListPlugins will send a list of registered and running plugins.
     */
     rpc ListPlugins(Empty) returns(PluginsList);
