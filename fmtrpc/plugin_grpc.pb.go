@@ -318,10 +318,10 @@ var Controller_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PluginAPIClient interface {
-	// fmtcli: `plugin-start`
+	// fmtcli: `plugin-startrecord`
 	//StartRecording will begin recording data from specified datasource.
 	StartRecord(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
-	// fmtcli: `plugin-stop`
+	// fmtcli: `plugin-stoprecord`
 	//StopRecording will end the recording of data from specified datasource.
 	StopRecord(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
 	//
@@ -329,11 +329,11 @@ type PluginAPIClient interface {
 	Subscribe(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (PluginAPI_SubscribeClient, error)
 	// fmtcli: `plugin-stop`
 	//Stop will stop the specified controller service.
-	Stop(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
+	StopPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
 	// fmtcli: `plugin-command`
 	//Command will send any command to a controller service.
 	Command(ctx context.Context, in *Frame, opts ...grpc.CallOption) (PluginAPI_CommandClient, error)
-	// fmtcli: `list plugins`
+	// fmtcli: `plugin-list`
 	//ListPlugins will send a list of registered and running plugins.
 	ListPlugins(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PluginsList, error)
 }
@@ -396,9 +396,9 @@ func (x *pluginAPISubscribeClient) Recv() (*Frame, error) {
 	return m, nil
 }
 
-func (c *pluginAPIClient) Stop(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error) {
+func (c *pluginAPIClient) StopPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error) {
 	out := new(Empty)
-	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/Stop", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/StopPlugin", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -450,10 +450,10 @@ func (c *pluginAPIClient) ListPlugins(ctx context.Context, in *Empty, opts ...gr
 // All implementations must embed UnimplementedPluginAPIServer
 // for forward compatibility
 type PluginAPIServer interface {
-	// fmtcli: `plugin-start`
+	// fmtcli: `plugin-startrecord`
 	//StartRecording will begin recording data from specified datasource.
 	StartRecord(context.Context, *PluginRequest) (*Empty, error)
-	// fmtcli: `plugin-stop`
+	// fmtcli: `plugin-stoprecord`
 	//StopRecording will end the recording of data from specified datasource.
 	StopRecord(context.Context, *PluginRequest) (*Empty, error)
 	//
@@ -461,11 +461,11 @@ type PluginAPIServer interface {
 	Subscribe(*PluginRequest, PluginAPI_SubscribeServer) error
 	// fmtcli: `plugin-stop`
 	//Stop will stop the specified controller service.
-	Stop(context.Context, *PluginRequest) (*Empty, error)
+	StopPlugin(context.Context, *PluginRequest) (*Empty, error)
 	// fmtcli: `plugin-command`
 	//Command will send any command to a controller service.
 	Command(*Frame, PluginAPI_CommandServer) error
-	// fmtcli: `list plugins`
+	// fmtcli: `plugin-list`
 	//ListPlugins will send a list of registered and running plugins.
 	ListPlugins(context.Context, *Empty) (*PluginsList, error)
 	mustEmbedUnimplementedPluginAPIServer()
@@ -484,8 +484,8 @@ func (UnimplementedPluginAPIServer) StopRecord(context.Context, *PluginRequest) 
 func (UnimplementedPluginAPIServer) Subscribe(*PluginRequest, PluginAPI_SubscribeServer) error {
 	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
 }
-func (UnimplementedPluginAPIServer) Stop(context.Context, *PluginRequest) (*Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Stop not implemented")
+func (UnimplementedPluginAPIServer) StopPlugin(context.Context, *PluginRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StopPlugin not implemented")
 }
 func (UnimplementedPluginAPIServer) Command(*Frame, PluginAPI_CommandServer) error {
 	return status.Errorf(codes.Unimplemented, "method Command not implemented")
@@ -563,20 +563,20 @@ func (x *pluginAPISubscribeServer) Send(m *Frame) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _PluginAPI_Stop_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginAPI_StopPlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PluginRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginAPIServer).Stop(ctx, in)
+		return srv.(PluginAPIServer).StopPlugin(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/fmtrpc.PluginAPI/Stop",
+		FullMethod: "/fmtrpc.PluginAPI/StopPlugin",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginAPIServer).Stop(ctx, req.(*PluginRequest))
+		return srv.(PluginAPIServer).StopPlugin(ctx, req.(*PluginRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -636,8 +636,8 @@ var PluginAPI_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PluginAPI_StopRecord_Handler,
 		},
 		{
-			MethodName: "Stop",
-			Handler:    _PluginAPI_Stop_Handler,
+			MethodName: "StopPlugin",
+			Handler:    _PluginAPI_StopPlugin_Handler,
 		},
 		{
 			MethodName: "ListPlugins",

@@ -13,7 +13,7 @@ http:
       put: "/v2/plugin/stop/record/{name}"
     - selector: fmtrpc.PluginAPI.Subscribe
       get: "/v2/plugin/subscribe/{name}"
-    - selector: fmtrpc.PluginAPI.Stop
+    - selector: fmtrpc.PluginAPI.StopPlugin
       put: "/v2/plugin/stop/{name}"
     - selector: fmtrpc.PluginAPI.Command
       post: "/v2/plugin/command"

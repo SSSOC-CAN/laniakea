@@ -66,7 +66,7 @@
     },
     "/v2/plugin/start/record/{name}": {
       "put": {
-        "summary": "fmtcli: `plugin-start`\nStartRecording will begin recording data from specified datasource.",
+        "summary": "fmtcli: `plugin-startrecord`\nStartRecording will begin recording data from specified datasource.",
         "operationId": "PluginAPI_StartRecord",
         "responses": {
           "200": {
@@ -98,7 +98,7 @@
     },
     "/v2/plugin/stop/record/{name}": {
       "put": {
-        "summary": "fmtcli: `plugin-stop`\nStopRecording will end the recording of data from specified datasource.",
+        "summary": "fmtcli: `plugin-stoprecord`\nStopRecording will end the recording of data from specified datasource.",
         "operationId": "PluginAPI_StopRecord",
         "responses": {
           "200": {
@@ -131,7 +131,7 @@
     "/v2/plugin/stop/{name}": {
       "put": {
         "summary": "fmtcli: `plugin-stop`\nStop will stop the specified controller service.",
-        "operationId": "PluginAPI_Stop",
+        "operationId": "PluginAPI_StopPlugin",
         "responses": {
           "200": {
             "description": "A successful response.",
@@ -203,7 +203,7 @@
     },
     "/v2/plugins": {
       "get": {
-        "summary": "fmtcli: `list plugins`\nListPlugins will send a list of registered and running plugins.",
+        "summary": "fmtcli: `plugin-list`\nListPlugins will send a list of registered and running plugins.",
         "operationId": "PluginAPI_ListPlugins",
         "responses": {
           "200": {
