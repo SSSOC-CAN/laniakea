@@ -36,7 +36,7 @@ type Config struct {
 	ExtraIPAddr    []string `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
 	InfluxURL      string   `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
 	InfluxAPIToken string   `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
-	PluginDir      string   `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from"`
+	PluginDir      string   `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
 	Plugins        []string `yaml:"Plugins" long:"plugin" description:"Adds a new plugin which will be spun up at runtime. Format: plugin_name:plugin_type(choose datasource|controller):executable_file_name(ex: myplugin.exe)"`
 	MacaroonDBPath string
 	TLSCertPath    string
