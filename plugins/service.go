@@ -338,39 +338,50 @@ func (p *PluginManager) RegisterWithRestProxy(ctx context.Context, mux *proxy.Se
 
 // Start creates the connection to all registered plugins and establishes the connection to the API service
 func (p *PluginManager) Start() error {
-	// create clients
 	instances := make(map[string]*PluginInstance)
 	for name, plug := range p.pluginMap {
-		newClient := plugin.NewClient(&plugin.ClientConfig{
-			HandshakeConfig:  HandshakeConfig,
-			Plugins:          map[string]plugin.Plugin{name: plug},
-			Cmd:              exec.Command(fmt.Sprintf("%s/%s", p.pluginDir, p.pluginExecs[name])),
-			Logger:           NewPluginLogger(name, p.logger.zl.With().Str("plugin", name).Logger()),
-			AllowedProtocols: allowedPluginProtocols,
-		})
-		outQ, unregister, err := p.queueManager.RegisterSource(name)
+		newInstance, err := p.createPluginInstance(name, plug)
 		if err != nil {
 			return err
-		}
-		cleanUp := func() {
-			newClient.Kill()
-			unregister()
-		}
-		newInstance := &PluginInstance{
-			Name:          name,
-			client:        newClient,
-			timeout:       defaultPluginTimeout,
-			maxTimeouts:   defaultMaxTimeouts,
-			maxRestarts:   defaultMaxRestarts,
-			cleanUp:       cleanUp,
-			outgoingQueue: outQ,
-			incomingQueue: queue.NewQueue(),
-			logger:        p.logger.zl.With().Str("plugin", name).logger(),
 		}
 		instances[name] = newInstance
 	}
 	p.pluginRegistry = instances
 	return nil
+}
+
+// createPluginInstance creates a new plugin instance from the given plugin name and type
+func (p *PluginManager) createPluginInstance(name string, plug plugin.Plugin) (*PluginInstance, error) {
+	// create new plugin clients
+	newClient := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  HandshakeConfig,
+		Plugins:          map[string]plugin.Plugin{name: plug},
+		Cmd:              exec.Command(fmt.Sprintf("%s/%s", p.pluginDir, p.pluginExecs[name])),
+		Logger:           NewPluginLogger(name, p.logger.zl.With().Str("plugin", name).Logger()),
+		AllowedProtocols: allowedPluginProtocols,
+	})
+	// register the plugin with the queue manager
+	outQ, unregister, err := p.queueManager.RegisterSource(name)
+	if err != nil {
+		return nil, err
+	}
+	cleanUp := func() {
+		newClient.Kill()
+		unregister()
+	}
+	// create a new plugin instance object to handle plugin
+	newInstance := &PluginInstance{
+		Name:          name,
+		client:        newClient,
+		timeout:       defaultPluginTimeout,
+		maxTimeouts:   defaultMaxTimeouts,
+		maxRestarts:   defaultMaxRestarts,
+		cleanUp:       cleanUp,
+		outgoingQueue: outQ,
+		incomingQueue: queue.NewQueue(),
+		logger:        p.logger.zl.With().Str("plugin", name).logger(),
+	}
+	return newInstance, nil
 }
 
 // StartRecord is the PluginAPI command which exposes the StartRecord method of all registered datasource plugins
