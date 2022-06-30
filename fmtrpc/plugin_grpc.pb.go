@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 type DatasourceClient interface {
 	StartRecord(ctx context.Context, in *Empty, opts ...grpc.CallOption) (Datasource_StartRecordClient, error)
 	StopRecord(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
+	Stop(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
 }
 
 type datasourceClient struct {
@@ -71,12 +72,22 @@ func (c *datasourceClient) StopRecord(ctx context.Context, in *Empty, opts ...gr
 	return out, nil
 }
 
+func (c *datasourceClient) Stop(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Datasource/Stop", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DatasourceServer is the server API for Datasource service.
 // All implementations must embed UnimplementedDatasourceServer
 // for forward compatibility
 type DatasourceServer interface {
 	StartRecord(*Empty, Datasource_StartRecordServer) error
 	StopRecord(context.Context, *Empty) (*Empty, error)
+	Stop(context.Context, *Empty) (*Empty, error)
 	mustEmbedUnimplementedDatasourceServer()
 }
 
@@ -89,6 +100,9 @@ func (UnimplementedDatasourceServer) StartRecord(*Empty, Datasource_StartRecordS
 }
 func (UnimplementedDatasourceServer) StopRecord(context.Context, *Empty) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopRecord not implemented")
+}
+func (UnimplementedDatasourceServer) Stop(context.Context, *Empty) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Stop not implemented")
 }
 func (UnimplementedDatasourceServer) mustEmbedUnimplementedDatasourceServer() {}
 
@@ -142,6 +156,24 @@ func _Datasource_StopRecord_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Datasource_Stop_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatasourceServer).Stop(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Datasource/Stop",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatasourceServer).Stop(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Datasource_ServiceDesc is the grpc.ServiceDesc for Datasource service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,6 +184,10 @@ var Datasource_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "StopRecord",
 			Handler:    _Datasource_StopRecord_Handler,
+		},
+		{
+			MethodName: "Stop",
+			Handler:    _Datasource_Stop_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

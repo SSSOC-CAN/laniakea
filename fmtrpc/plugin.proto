@@ -13,6 +13,7 @@ option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 service Datasource {
     rpc StartRecord(Empty) returns (stream Frame);
     rpc StopRecord(Empty) returns (Empty);
+    rpc Stop(Empty) returns (Empty);
 }
 
 service Controller {
