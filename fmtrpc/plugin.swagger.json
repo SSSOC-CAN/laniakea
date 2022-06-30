@@ -55,7 +55,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/fmtrpcFrame"
+              "$ref": "#/definitions/fmtrpcControllerPluginRequest"
             }
           }
         ],
@@ -246,6 +246,19 @@
         "CONTROLLER"
       ],
       "default": "DATASOURCE"
+    },
+    "fmtrpcControllerPluginRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "the name of the plugin we wish to send the command to"
+        },
+        "frame": {
+          "$ref": "#/definitions/fmtrpcFrame",
+          "title": "the data we are sending to the plugin"
+        }
+      }
     },
     "fmtrpcEmpty": {
       "type": "object"

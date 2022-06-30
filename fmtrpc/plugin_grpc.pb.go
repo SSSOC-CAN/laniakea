@@ -368,7 +368,7 @@ type PluginAPIClient interface {
 	StopPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
 	// fmtcli: `plugin-command`
 	//Command will send any command to a controller service.
-	Command(ctx context.Context, in *Frame, opts ...grpc.CallOption) (PluginAPI_CommandClient, error)
+	Command(ctx context.Context, in *ControllerPluginRequest, opts ...grpc.CallOption) (PluginAPI_CommandClient, error)
 	// fmtcli: `plugin-list`
 	//ListPlugins will send a list of registered and running plugins.
 	ListPlugins(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PluginsList, error)
@@ -441,7 +441,7 @@ func (c *pluginAPIClient) StopPlugin(ctx context.Context, in *PluginRequest, opt
 	return out, nil
 }
 
-func (c *pluginAPIClient) Command(ctx context.Context, in *Frame, opts ...grpc.CallOption) (PluginAPI_CommandClient, error) {
+func (c *pluginAPIClient) Command(ctx context.Context, in *ControllerPluginRequest, opts ...grpc.CallOption) (PluginAPI_CommandClient, error) {
 	stream, err := c.cc.NewStream(ctx, &PluginAPI_ServiceDesc.Streams[1], "/fmtrpc.PluginAPI/Command", opts...)
 	if err != nil {
 		return nil, err
@@ -500,7 +500,7 @@ type PluginAPIServer interface {
 	StopPlugin(context.Context, *PluginRequest) (*Empty, error)
 	// fmtcli: `plugin-command`
 	//Command will send any command to a controller service.
-	Command(*Frame, PluginAPI_CommandServer) error
+	Command(*ControllerPluginRequest, PluginAPI_CommandServer) error
 	// fmtcli: `plugin-list`
 	//ListPlugins will send a list of registered and running plugins.
 	ListPlugins(context.Context, *Empty) (*PluginsList, error)
@@ -523,7 +523,7 @@ func (UnimplementedPluginAPIServer) Subscribe(*PluginRequest, PluginAPI_Subscrib
 func (UnimplementedPluginAPIServer) StopPlugin(context.Context, *PluginRequest) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopPlugin not implemented")
 }
-func (UnimplementedPluginAPIServer) Command(*Frame, PluginAPI_CommandServer) error {
+func (UnimplementedPluginAPIServer) Command(*ControllerPluginRequest, PluginAPI_CommandServer) error {
 	return status.Errorf(codes.Unimplemented, "method Command not implemented")
 }
 func (UnimplementedPluginAPIServer) ListPlugins(context.Context, *Empty) (*PluginsList, error) {
@@ -618,7 +618,7 @@ func _PluginAPI_StopPlugin_Handler(srv interface{}, ctx context.Context, dec fun
 }
 
 func _PluginAPI_Command_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(Frame)
+	m := new(ControllerPluginRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}

@@ -41,7 +41,7 @@ service PluginAPI {
     /* fmtcli: `plugin-command`
     Command will send any command to a controller service.
     */
-    rpc Command(Frame) returns (stream Frame);
+    rpc Command(ControllerPluginRequest) returns (stream Frame);
     /* fmtcli: `plugin-list`
     ListPlugins will send a list of registered and running plugins.
     */
@@ -97,4 +97,11 @@ message Plugin {
 message PluginsList {
     // List of all currently registered plugins
     repeated Plugin plugins = 1;
+}
+message ControllerPluginRequest {
+    // the name of the plugin we wish to send the command to
+    string name = 1;
+
+    // the data we are sending to the plugin
+    Frame frame = 2;
 }
