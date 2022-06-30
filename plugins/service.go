@@ -11,6 +11,7 @@ import (
 
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/hashicorp/go-plugin"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -32,10 +33,11 @@ var (
 type PluginManager struct {
 	pluginMap   map[string]plugin.Plugin
 	pluginExecs map[string]string
+	logger      *PluginLogger
 }
 
 // NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
-func NewPluginManager(listOfPlugins []string) (*PluginManager, error) {
+func NewPluginManager(listOfPlugins []string, zl zerolog.Logger) (*PluginManager, error) {
 	plugins := make(map[string]plugin.Plugin)
 	execs := make(map[string]string)
 	var err error
@@ -69,5 +71,6 @@ loop:
 	return &PluginManager{
 		pluginMap:   plugins,
 		pluginExecs: execs,
+		logger:      NewPluginLogger("PLGN", zl),
 	}, nil
 }
