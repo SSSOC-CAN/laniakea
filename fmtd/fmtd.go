@@ -47,7 +47,6 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/plugins"
 	"github.com/SSSOC-CAN/fmtd/rga"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
@@ -162,12 +161,15 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
-	_, err = plugins.NewPluginManager(server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
-	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
-		return err
-	}
-	server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", server.cfg.Plugins))
+	// _, err = plugins.NewPluginManager(server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
+	// if err != nil {
+	// 	server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
+	// 	return err
+	// }
+	server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *server.cfg.Plugins))
+	// for _, plug := range server.cfg.Plugins {
+	// 	server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *plug))
+	// }
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")

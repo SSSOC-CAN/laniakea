@@ -67,9 +67,7 @@ type PluginInstance struct {
 	state         fmtrpc.Plugin_PluginState
 	timeout       time.Duration
 	maxTimeouts   int
-	maxRestarts   int
 	timeoutCnt    int
-	restartCnt    int
 	outgoingQueue *queue.Queue
 	cleanUp       func()
 	logger        *zerolog.Logger
@@ -147,13 +145,6 @@ func (i *PluginInstance) resetTimeoutCount() {
 	i.Lock()
 	defer i.Unlock()
 	i.timeoutCnt = 0
-}
-
-// incremenetRestartCount incremenets the restart count by one
-func (i *PluginInstance) incremenetRestartCount() {
-	i.Lock()
-	defer i.Unlock()
-	i.restartCnt += 1
 }
 
 // startRecord is the method that starts the data recording process if this plugin is a datasource
