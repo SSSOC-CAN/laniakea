@@ -73,7 +73,7 @@ type PluginInstance struct {
 	incomingQueue *queue.Queue
 	outgoingQueue *queue.Queue
 	cleanUp       func()
-	logger        zerolog.Logger
+	logger        *zerolog.Logger
 	recordState   PluginRecordState
 	sync.RWMutex
 }
@@ -272,6 +272,8 @@ func (i *PluginInstance) kill() {
 	i.client.Kill()
 	i.client = nil
 	i.recordState = NOTRECORDING
+	noOpLog := i.logger.Nop()
+	i.logger = &noOpLog
 }
 
 // stop will send the signal to kill the plugin
@@ -298,6 +300,19 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 	}
 	i.kill()
 	return err
+}
+
+// setClient will set a new plugin client for the plugin instace
+func (i *PluginInstance) setClient(client *plugin.Client) {
+	i.Lock()
+	defer i.Unlock()
+	i.client = client
+}
+
+func (i *PluginInstance) setLogger(logger *zerolog.Logger) {
+	i.Lock()
+	defer i.Unlock()
+	i.logger = logger
 }
 
 type PluginManager struct {
@@ -388,21 +403,18 @@ func (p *PluginManager) Start() error {
 // createPluginInstance creates a new plugin instance from the given plugin name and type
 func (p *PluginManager) createPluginInstance(name string, plug plugin.Plugin) (*PluginInstance, error) {
 	// create new plugin clients
+	zLogger := p.logger.zl.With().Str("plugin", name).Logger()
 	newClient := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  HandshakeConfig,
 		Plugins:          map[string]plugin.Plugin{name: plug},
 		Cmd:              exec.Command(fmt.Sprintf("%s/%s", p.pluginDir, p.pluginExecs[name])),
-		Logger:           NewPluginLogger(name, p.logger.zl.With().Str("plugin", name).Logger()),
+		Logger:           NewPluginLogger(name, &zLogger),
 		AllowedProtocols: allowedPluginProtocols,
 	})
 	// register the plugin with the queue manager
 	outQ, unregister, err := p.queueManager.RegisterSource(name)
 	if err != nil {
 		return nil, err
-	}
-	cleanUp := func() {
-		newClient.Kill()
-		unregister()
 	}
 	// create a new plugin instance object to handle plugin
 	newInstance := &PluginInstance{
@@ -411,11 +423,17 @@ func (p *PluginManager) createPluginInstance(name string, plug plugin.Plugin) (*
 		timeout:       defaultPluginTimeout,
 		maxTimeouts:   defaultMaxTimeouts,
 		maxRestarts:   defaultMaxRestarts,
-		cleanUp:       cleanUp,
 		outgoingQueue: outQ,
 		incomingQueue: queue.NewQueue(),
-		logger:        p.logger.zl.With().Str("plugin", name).logger(),
+		logger:        &zLogger,
 	}
+	cleanUp := func() {
+		if newInstance.client != nil {
+			newInstance.client.Kill()
+		}
+		unregister()
+	}
+	newInstance.cleanUp = cleanUp
 	return newInstance, nil
 }
 
@@ -496,12 +514,41 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 	}
 }
 
+// StartPlugin is the PluginAPI command to start an existiing plugin
+func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*fmtrpc.Empty, error) {
+	// get the plugin instance from the registry
+	instance, ok := p.pluginRegistry[req.Name]
+	if !ok {
+		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+	}
+	// check if plugin is stopped or killed
+	if instance.state != fmtrpc.Plugin_STOPPED && instance.state != fmtrpc.Plugin_KILLED {
+		return nil, status.New(codes.FailedPrecondition, e.ErrServiceAlreadyStarted)
+	}
+	// create new plugin client
+	zLogger := p.logger.zl.With().Str("plugin", instance.Name).Logger()
+	newClient := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig:  HandshakeConfig,
+		Plugins:          map[string]plugin.Plugin{instance.Name: p.pluginMap[instance.Name]},
+		Cmd:              exec.Command(fmt.Sprintf("%s/%s", p.pluginDir, p.pluginExecs[instance.Name])),
+		Logger:           NewPluginLogger(instance.Name, &zLogger),
+		AllowedProtocols: allowedPluginProtocols,
+	})
+	instance.setClient(newClient)
+	instance.setLogger(zLogger)
+	return &fmtrpc.Empty{}, nil
+}
+
 // StopPlugin is the PluginAPI command to stop a given plugin gracefully
 func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*fmtrpc.Empty, error) {
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
 		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+	}
+	// check if plugin is already stopped, stopping or killed
+	if instance.state == fmtrpc.Plugin_STOPPING || instance.state == fmtrpc.Plugin_STOPPED || instance.state == fmtrpc.Plugin_KILLED {
+		return nil, status.New(codes.FailedPrecondition, e.ErrServiceAlreadyStopped)
 	}
 	err := instance.stop(ctx)
 	if err != nil {

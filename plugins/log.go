@@ -47,12 +47,12 @@ const (
 var logTimestampRegexp = regexp.MustCompile(`^[\d\s\:\/\.\+-TZ]*`)
 
 type PluginLogger struct {
-	zl zerolog.Logger
+	zl *zerolog.Logger
 	implied []interface{}
 	name string
 }
 
-func NewPluginLogger(name string, logger zerolog.Logger) hclog.Logger {
+func NewPluginLogger(name string, logger *zerolog.Logger) hclog.Logger {
 	return &PluginLogger{
 		zl: logger,
 		name: name,
