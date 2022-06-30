@@ -1,9 +1,40 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/06/30
+
+MIT License
+
+Copyright (c) 2017 HashiCorp
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 package plugins
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
+	"regexp"
+	"strings"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/rs/zerolog"
@@ -12,6 +43,8 @@ import (
 const (
 	MissingKey = "EXTRA_VALUE_AT_END"
 )
+
+var logTimestampRegexp = regexp.MustCompile(`^[\d\s\:\/\.\+-TZ]*`)
 
 type PluginLogger struct {
 	zl zerolog.Logger
@@ -29,17 +62,17 @@ func NewPluginLogger(name string, logger zerolog.Logger) hclog.Logger {
 func (l *PluginLogger) Log(level hclog.Level, msg string, args ...interface{}) {
 	switch level {
 	case hclog.NoLevel:
-		l.zl.Info().Msg(fmt.Sprintf(msg, args))
+		l.Info(msg, args)
 	case hclog.Trace:
-		l.zl.Trace().Msg(fmt.Sprintf(msg, args))
+		l.Trace(msg, args)
 	case hclog.Debug:
-		l.zl.Debug().Msg(fmt.Sprintf(msg, args))
+		l.Debug(msg, args)
 	case hclog.Info:
-		l.zl.Info().Msg(fmt.Sprintf(msg, args))
+		l.Info(msg, args)
 	case hclog.Warn:
-		l.zl.Warn().Msg(fmt.Sprintf(msg, args))
+		l.Warn(msg, args)
 	case hclog.Error:
-		l.zl.Error().Msg(fmt.Sprintf(msg, args))
+		l.Error(msg, args)
 	case hclog.Off:
 		return
 	default:
@@ -48,23 +81,78 @@ func (l *PluginLogger) Log(level hclog.Level, msg string, args ...interface{}) {
 }
 
 func (l *PluginLogger) Trace(msg string, args ...interface{}) {
-	l.zl.Trace().Msg(fmt.Sprintf(msg, args))
+	if len(args) == 0 {
+		l.zl.Trace().Msg(msg)
+	} else {
+		if len(args)%2 != 0 {
+			args = append(args, MissingKey)
+		}
+		newMsg := msg + ": "
+		for i := 0; i < len(args); i += 2 {
+			newMsg += fmt.Sprintf("%v=%v ", args[i], args[i+1])
+		}
+		l.zl.Trace().Msg(newMsg)
+	}
 }
 
 func (l *PluginLogger) Debug(msg string, args ...interface{}) {
-	l.zl.Debug().Msg(fmt.Sprintf(msg, args))
+	if len(args) == 0 {
+		l.zl.Debug().Msg(msg)
+	} else {
+		if len(args)%2 != 0 {
+			args = append(args, MissingKey)
+		}
+		newMsg := msg + ": "
+		for i := 0; i < len(args); i += 2 {
+			newMsg += fmt.Sprintf("%v=%v ", args[i], args[i+1])
+		}
+		l.zl.Debug().Msg(newMsg)
+	}
 }
 
 func (l *PluginLogger) Info(msg string, args ...interface{}) {
-	l.zl.Info().Msg(fmt.Sprintf(msg, args))
+	if len(args) == 0 {
+		l.zl.Info().Msg(msg)
+	} else {
+		if len(args)%2 != 0 {
+			args = append(args, MissingKey)
+		}
+		newMsg := msg + ": "
+		for i := 0; i < len(args); i += 2 {
+			newMsg += fmt.Sprintf("%v=%v ", args[i], args[i+1])
+		}
+		l.zl.Info().Msg(newMsg)
+	}
 }
 
 func (l *PluginLogger) Warn(msg string, args ...interface{}) {
-	l.zl.Warn().Msg(fmt.Sprintf(msg, args))
+	if len(args) == 0 {
+		l.zl.Warn().Msg(msg)
+	} else {
+		if len(args)%2 != 0 {
+			args = append(args, MissingKey)
+		}
+		newMsg := msg + ": "
+		for i := 0; i < len(args); i += 2 {
+			newMsg += fmt.Sprintf("%v=%v ", args[i], args[i+1])
+		}
+		l.zl.Warn().Msg(newMsg)
+	}
 }
 
 func (l *PluginLogger) Error(msg string, args ...interface{}) {
-	l.zl.Error().Msg(fmt.Sprintf(msg, args))
+	if len(args) == 0 {
+		l.zl.Error().Msg(msg)
+	} else {
+		if len(args)%2 != 0 {
+			args = append(args, MissingKey)
+		}
+		newMsg := msg + ": "
+		for i := 0; i < len(args); i += 2 {
+			newMsg += fmt.Sprintf("%v=%v ", args[i], args[i+1])
+		}
+		l.zl.Error().Msg(newMsg)
+	}
 }
 
 // IsTrace checks if the current logger level is set to Trace
@@ -122,10 +210,15 @@ func (l *PluginLogger) With(args ...interface{}) hclog.Logger {
 	for i := 0; i < len(args); i += 2 {
 		sl = sl.With().Str(args[i].(string), fmt.Sprintf("%v", args[i+1])).Logger()
 	}
+	newImplied := l.implied[:]
+	newImplied = append(newImplied, args)
+	if extra != nil {
+		newImplied = append(newImplied, MissingKey, extra)
+	}
 	return &PluginLogger{
-		zl: sl,
-		implied: l.implied[:],
-		name: l.name,
+		zl:      sl,
+		implied: newImplied,
+		name:    l.name,
 	}
 }
 
@@ -154,7 +247,7 @@ func (l *PluginLogger) ResetNamed(name string) hclog.Logger {
 }
 
 // SetLevel doesn't do anything right now, just satisfies the interface
-func (l *PluginLogger) SetLevel(level hclog.Level) hclog.Logger {
+func (l *PluginLogger) SetLevel(level hclog.Level) {
 	//TODO:SSSOCPaulCote - Implement this 
 	return
 }
@@ -170,6 +263,80 @@ func (l *PluginLogger) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Lo
 
 // StandardWriter returns an io package standard writer
 func (l *PluginLogger) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
-	newLog := *l
-	return 
+	return &LogWriter{
+		log: &l.zl,
+		inferLevels: opts.InferLevels,
+		inferLevelsWithTimestamp: opts.inferLevelsWithTimestamp,
+		forceLevel: opts.ForceLevel,
+	}
+}
+
+type LogWriter struct {
+	log	zerolog.Logger
+	inferLevels bool
+	inferLevelsWithTimestamp bool
+	forceLevel hclog.Level
+}
+
+func (w *LogWriter) Write(data []byte) (int, error) {
+	str := string(bytes.TrimRight(data, "\n"))
+	if w.forceLevel != hclog.NoLevel {
+		_, str := w.pickLevel(str)
+		w.dispatch(str, w.forceLevel)
+	} else if w.inferLevels {
+		if w.inferLevelsWithTimestamp {
+			str = w.trimTimestamp(str)
+		}
+		lvl, str := w.pickLevel(str)
+		w.dispatch(str, lvl)
+	} else {
+		w.log.Info().Msg(str)
+	}
+	return len(data), nil
+}
+
+func (w *LogWriter) dispatch(str string, level hclog.Level) {
+	switch level {
+	case hclog.Trace:
+		w.log.Trace().Msg(str)
+	case hclog.Debug:
+		w.log.Debug().Msg(str)
+	case hclog.Info:
+		w.log.Info().Msg(str)
+	case hclog.Warn:
+		w.log.Warn().Msg(str)
+	case hclog.Error:
+		w.log.Error().Msg(str)
+	default:
+		w.log.Info().Msg(str)
+	}
+}
+
+// Detect, based on conventions, what log level this is.
+func (w *LogWriter) pickLevel(str string) (hclog.Level, string) {
+	switch {
+	case strings.HasPrefix(str, "[DEBUG]"):
+		return hclog.Debug, strings.TrimSpace(str[7:])
+	case strings.HasPrefix(str, "[TRACE]"):
+		return hclog.Trace, strings.TrimSpace(str[7:])
+	case strings.HasPrefix(str, "[INFO]"):
+		return hclog.Info, strings.TrimSpace(str[6:])
+	case strings.HasPrefix(str, "[WARN]"):
+		return hclog.Warn, strings.TrimSpace(str[6:])
+	case strings.HasPrefix(str, "[ERROR]"):
+		return hclog.Error, strings.TrimSpace(str[7:])
+	case strings.HasPrefix(str, "[ERR]"):
+		return hclog.Error, strings.TrimSpace(str[5:])
+	case strings.HasPrefix(str, "[FATAL]"):
+		return hclog.Error, strings.TrimSpace(str[7:])
+	case strings.HasPrefix(str, "[PANIC]"):
+		return hclog.Error, strings.TrimSpace(str[7:])
+	default:
+		return hclog.Info, str
+	}
+}
+
+func (w *LogWriter) trimTimestamp(str string) string {
+	idx := logTimestampRegexp.FindStringIndex(str)
+	return str[idx[1]:]
 }
