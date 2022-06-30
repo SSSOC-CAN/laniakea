@@ -70,7 +70,6 @@ type PluginInstance struct {
 	maxRestarts   int
 	timeoutCnt    int
 	restartCnt    int
-	incomingQueue *queue.Queue
 	outgoingQueue *queue.Queue
 	cleanUp       func()
 	logger        *zerolog.Logger
@@ -312,10 +311,64 @@ func (i *PluginInstance) setClient(client *plugin.Client) {
 	i.client = client
 }
 
+// setLogger will set the logger for the plugin instance
 func (i *PluginInstance) setLogger(logger *zerolog.Logger) {
 	i.Lock()
 	defer i.Unlock()
 	i.logger = logger
+}
+
+// command will pass along a command frame to a controller plugin and store the streamed data in the queue
+func (i *PluginInstance) command(ctx context.Context, frame *fmtrpc.Frame) error {
+	// check if plugin is ready
+	if i.state != fmtrpc.Plugin_READY {
+		return ErrPluginNotReady
+	}
+	// set plugin as busy
+	i.setBusy()
+	// check if plugin is a Datasource
+	gRPCClient, err := i.client.Client()
+	if err != nil {
+		return err
+	}
+	raw, err := gRPCClient.Dispense(i.Name)
+	if err != nil {
+		return err
+	}
+	ctrller, ok := raw.(Controller)
+	if !ok {
+		return ErrInvalidPluginType
+	}
+	// spin up go routine
+	go func() {
+		defer i.setReady()
+		dataChan, err := ctrller.Command(frame)
+		if err != nil {
+			i.logger.Error().Msg(fmt.Sprintf("could not send command: %v", err))
+			return
+		}
+		timer := time.NewTimer(i.timeout)
+	loop:
+		for {
+			select {
+			case <-timer.C:
+				i.logger.Error().Msg(ErrPluginTimeout.Error())
+				// only increment the timeout count if we didn't request to stop recording
+				if i.recordState != NOTRECORDING {
+					i.incremenetTimeoutCount()
+				}
+				break loop
+			case frame := <-dataChan:
+				if frame == nil {
+					i.logger.Info().Msg(PluginEOF)
+					break loop
+				}
+				i.outgoingQueue.Push(frame)
+				timer.Reset(i.timeout)
+			}
+		}
+	}()
+	return nil
 }
 
 type PluginManager struct {
@@ -435,7 +488,6 @@ func (p *PluginManager) createPluginInstance(name string, plug plugin.Plugin) (*
 		maxTimeouts:   defaultMaxTimeouts,
 		maxRestarts:   defaultMaxRestarts,
 		outgoingQueue: outQ,
-		incomingQueue: queue.NewQueue(),
 		logger:        &zLogger,
 		startedAt:     time.Now(),
 	}
@@ -635,6 +687,46 @@ func (p *PluginManager) ListPlugins(ctx context.Context, _ *fmtrpc.Empty) (*fmtr
 }
 
 // Command is the PluginAPI command for sending an arbitrary amount of data to a controller service
-func (p *PluginManager) Command(req *fmtrpc.AddPluginRequest, stream fmtrpc.PluginAPI_CommandServer) error {
-
+func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtrpc.PluginAPI_CommandServer) error {
+	// get the plugin instance from the registry
+	instance, ok := p.pluginRegistry[req.Name]
+	if !ok {
+		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+	}
+	err := instance.command(context.Background(), req.Frame)
+	if err != nil {
+		return nil, status.New(codes.Internal, err)
+	}
+	rand.Seed(time.Now().UnixNano())
+	subscriberName := req.Name + utils.RandSeq(10)
+	q, unregister, err := p.queueManager.RegisterListener(req.Name, subscriberName)
+	if err != nil {
+		return status.New(codes.Internal, err)
+	}
+	defer unregister()
+	// subscribe to queue
+	sigChan, unsub, err := q.Subscribe(subscriberName)
+	if err != nil {
+		return status.New(codes.Internal, err)
+	}
+	defer unsub()
+	for {
+		select {
+		case qLength := <-sigChan:
+			if qLength == 0 {
+				return bg.Error(PluginEOF)
+			}
+			for i := 0; i < qLength-2; i++ {
+				frame := q.Pop()
+				if err := stream.Send(frame); err != nil {
+					return err
+				}
+			}
+		case <-stream.Context().Done():
+			if errors.Is(stream.Context().Err(), context.Canceled) {
+				return nil
+			}
+			return stream.Context().Err()
+		}
+	}
 }
