@@ -162,7 +162,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
-	_, err = plugins.NewPluginManager(server.cfg.Plugins)
+	_, err = plugins.NewPluginManager(server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
 		return err
