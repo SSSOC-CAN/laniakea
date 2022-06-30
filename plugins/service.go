@@ -567,6 +567,10 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 
 // AddPlugin is the PluginAPI command to add a new plugin from a formatted plugin string
 func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequest) (*fmtrpc.Empty, error) {
+	// verify plugin string adheres to proper format
+	if !utils.VerifyPluginStringFormat(req.PluginString) {
+		return nil, ErrInvalidPluginString
+	}
 	split, err := parsePluginString(req.PluginString)
 	if err != nil {
 		return nil, err
@@ -592,4 +596,14 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequ
 	}
 	p.pluginRegistry[split[0]] = newInstance
 	return &fmtrpc.Empty{}, nil
+}
+
+// ListPlugins is the PluginAPI command for listing all plugins in the plugin registry along with pertinent information about each one
+func (p *PluginManager) ListPlugins(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.PluginsList, error) {
+
+}
+
+// Command is the PluginAPI command for sending an arbitrary amount of data to a controller service
+func (p *PluginManager) Command(req *fmtrpc.AddPluginRequest, stream fmtrpc.PluginAPI_CommandServer) error {
+
 }
