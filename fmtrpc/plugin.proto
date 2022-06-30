@@ -34,8 +34,12 @@ service PluginAPI {
     Subscribe returns a uni-directional stream of data from a specified datasource.
     */
     rpc Subscribe(PluginRequest) returns (stream Frame);
+    /* fmtcli: `plugin-start`
+    StartPlugin will start the specified existing plugin.
+    */
+    rpc StartPlugin(PluginRequest) returns (Empty);
     /* fmtcli: `plugin-stop`
-    Stop will stop the specified controller service.
+    StopPlugin will stop the specified plugin.
     */
     rpc StopPlugin(PluginRequest) returns (Empty);
     /* fmtcli: `plugin-command`
@@ -46,7 +50,10 @@ service PluginAPI {
     ListPlugins will send a list of registered and running plugins.
     */
     rpc ListPlugins(Empty) returns(PluginsList);
-
+    /* fmtcli: `plugin-add`
+    AddPlugin will add a plugin from given information.
+    */
+    rpc AddPlugin(AddPluginRequest) returns (Empty);
 }
 
 message Empty {}
@@ -104,4 +111,8 @@ message ControllerPluginRequest {
 
     // the data we are sending to the plugin
     Frame frame = 2;
+}
+message AddPluginRequest {
+    // The plugin information string in format unique_name:type(datasource or controller):executable_file_name.ext
+    string plugin_string = 1;
 }
