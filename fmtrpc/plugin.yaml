@@ -1,0 +1,22 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/06/30
+
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: fmtrpc.PluginAPI.StartRecord
+      put: "/v2/plugin/start/record/{name}"
+    - selector: fmtrpc.PluginAPI.StopRecord
+      put: "/v2/plugin/stop/record/{name}"
+    - selector: fmtrpc.PluginAPI.Subscribe
+      get: "/v2/plugin/subscribe/{name}"
+    - selector: fmtrpc.PluginAPI.Stop
+      put: "/v2/plugin/stop/{name}"
+    - selector: fmtrpc.PluginAPI.Command
+      post: "/v2/plugin/command"
+      body: "*"
+    - selector: fmtrpc.PluginAPI.ListPlugins
+      get: "/v2/plugins"

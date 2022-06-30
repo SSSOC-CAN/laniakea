@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/29
+Last Date Changed: 2022/06/30
 */
 
 syntax = "proto3";
@@ -20,6 +20,34 @@ service Controller {
     rpc Command(Frame) returns (stream Frame);
 }
 
+service PluginAPI {
+    /* fmtcli: `plugin-start`
+    StartRecording will begin recording data from specified datasource.
+    */
+    rpc StartRecord(PluginRequest) returns (Empty);
+    /* fmtcli: `plugin-stop`
+    StopRecording will end the recording of data from specified datasource.
+    */
+    rpc StopRecord(PluginRequest) returns (Empty);
+    /*
+    Subscribe returns a uni-directional stream of data from a specified datasource.
+    */
+    rpc Subscribe(PluginRequest) returns (stream Frame);
+    /* fmtcli: `plugin-stop`
+    Stop will stop the specified controller service.
+    */
+    rpc Stop(PluginRequest) returns (Empty);
+    /* fmtcli: `plugin-command`
+    Command will send any command to a controller service.
+    */
+    rpc Command(Frame) returns (stream Frame);
+    /* fmtcli: `list plugins`
+    ListPlugins will send a list of registered and running plugins.
+    */
+    rpc ListPlugins(Empty) returns(PluginsList);
+
+}
+
 message Empty {}
 message Frame {
     // The name of the source of this Frame
@@ -33,4 +61,39 @@ message Frame {
 
     // The actual payload data in bytes. Limit is 2^32
     bytes payload = 4;
+}
+
+message PluginRequest {
+    // The name of the plugin we want to interact with
+    string name = 1;
+}
+message Plugin {
+    // The name of the plugin
+    string name = 1;
+    enum PluginType {
+        DATASOURCE = 0;
+        CONTROLLER = 1;
+    }
+    // The plugin type (either Datasource or Controller)
+    PluginType type = 2;
+    enum PluginState {
+        READY = 0;
+        BUSY = 1;
+        STOPPING = 2;
+        STOPPED = 3;
+        UNKNOWN = 4;
+        UNRESPONSIVE = 5;
+        KILLED = 6;
+    }
+    // the current state of the plugin
+    PluginState state = 3;
+    // Unix milli timestamp of when the plugin was started
+    int64 started_at = 4;
+    // Unix milli timestamp of when the plugin was stopped or killed. Value is 0 if it's not stopped or killed 
+    int64 stopped_at = 5;
+
+}
+message PluginsList {
+    // List of all currently registered plugins
+    repeated Plugin plugins = 1;
 }
