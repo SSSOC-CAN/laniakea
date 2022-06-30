@@ -222,7 +222,7 @@ func local_request_PluginAPI_StopPlugin_0(ctx context.Context, marshaler runtime
 }
 
 func request_PluginAPI_Command_0(ctx context.Context, marshaler runtime.Marshaler, client PluginAPIClient, req *http.Request, pathParams map[string]string) (PluginAPI_CommandClient, runtime.ServerMetadata, error) {
-	var protoReq Frame
+	var protoReq ControllerPluginRequest
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
