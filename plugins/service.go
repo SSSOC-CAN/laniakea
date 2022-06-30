@@ -75,6 +75,8 @@ type PluginInstance struct {
 	cleanUp       func()
 	logger        *zerolog.Logger
 	recordState   PluginRecordState
+	startedAt     time.Time
+	stoppedAt     time.Time
 	sync.RWMutex
 }
 
@@ -274,6 +276,7 @@ func (i *PluginInstance) kill() {
 	i.recordState = NOTRECORDING
 	noOpLog := i.logger.Nop()
 	i.logger = &noOpLog
+	i.stoppedAt = time.Now()
 }
 
 // stop will send the signal to kill the plugin
@@ -434,6 +437,7 @@ func (p *PluginManager) createPluginInstance(name string, plug plugin.Plugin) (*
 		outgoingQueue: outQ,
 		incomingQueue: queue.NewQueue(),
 		logger:        &zLogger,
+		startedAt:     time.Now(),
 	}
 	cleanUp := func() {
 		if newInstance.client != nil {
@@ -566,7 +570,7 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 }
 
 // AddPlugin is the PluginAPI command to add a new plugin from a formatted plugin string
-func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequest) (*fmtrpc.Empty, error) {
+func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequest) (*fmtrpc.Plugin, error) {
 	// verify plugin string adheres to proper format
 	if !utils.VerifyPluginStringFormat(req.PluginString) {
 		return nil, ErrInvalidPluginString
@@ -578,12 +582,17 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequ
 	if _, ok := p.pluginMap[split[0]]; ok {
 		return nil, ErrDuplicatePluginName
 	}
-	var plugType plugin.Plugin
+	var (
+		plugType    plugin.Plugin
+		rpcPlugType fmtrpc.Plugin_PluginType
+	)
 	switch split[1] {
 	case DATASOURCE_STR:
 		plugType = &DatasourcePlugin{}
+		rpcPlugType = fmtrpc.Plugin_DATASOURCE
 	case CONTROLLER_STR:
 		plugType = &ControllerPlugin{}
+		rpcPlugType = fmtrpc.Plugin_CONTROLLER
 	default:
 		return nil, ErrInvalidPluginType
 	}
@@ -595,12 +604,34 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.AddPluginRequ
 		return nil, err
 	}
 	p.pluginRegistry[split[0]] = newInstance
-	return &fmtrpc.Empty{}, nil
+	return &fmtrpc.Plugin{
+		Name:      newInstance.Name,
+		Type:      rpcPlugType,
+		State:     newInstance.state,
+		StartedAt: newInstance.startedAt.UnixMilli(),
+	}, nil
 }
 
 // ListPlugins is the PluginAPI command for listing all plugins in the plugin registry along with pertinent information about each one
 func (p *PluginManager) ListPlugins(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.PluginsList, error) {
-
+	var plugins []*fmtrpc.Plugin
+	for _, plug := range p.pluginRegistry {
+		var plugType fmtrpc.Plugin_PluginType
+		switch p.pluginMap[plug.Name].(type) {
+		case *DatasourcePlugin:
+			plugType = fmtrpc.Plugin_DATASOURCE
+		case *ControllerPlugin:
+			plugType = fmtrpc.Plugin_CONTROLLER
+		}
+		plugins = append(plugins, &fmtrpc.Plugin{
+			Name:      plug.Name,
+			Type:      plugType,
+			State:     plug.state,
+			StartedAt: plug.startedAt.UnixMilli(),
+			StoppedAt: plug.stoppedAt.UnixMilli(),
+		})
+	}
+	return &fmtrpc.PluginsList{Plugins: plugins}, nil
 }
 
 // Command is the PluginAPI command for sending an arbitrary amount of data to a controller service
