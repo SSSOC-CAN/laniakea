@@ -73,7 +73,6 @@ type PluginInstance struct {
 	incomingQueue *queue.Queue
 	outgoingQueue *queue.Queue
 	cleanUp       func()
-	cancelFunc    context.CancelFunc
 	logger        zerolog.Logger
 	recordState   PluginRecordState
 	sync.RWMutex
@@ -263,6 +262,42 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	case err := <-errChan:
 		return err
 	}
+}
+
+// kill will kill the actual plugin and reset counter information
+func (i *PluginInstance) kill() {
+	i.resetTimeoutCount()
+	i.Lock()
+	defer i.Unlock()
+	i.client.Kill()
+	i.client = nil
+	i.recordState = NOTRECORDING
+}
+
+// stop will send the signal to kill the plugin
+func (i *PluginInstance) stop(ctx context.Context) error {
+	i.setStopping()
+	defer i.setStopped()
+	// try to gracefully stop recording if recording
+	var err error
+	if i.recordState == RECORDING {
+		errChan := make(chan error)
+		go func(ctx context.Context, errChan chan error) {
+			err := i.stopRecord(ctx)
+			errChan <- err
+		}(ctx, errChan)
+		select {
+		case err = <-errChan:
+			i.logger.Error().Msg(fmt.Sprintf("error when stopping %v plugin recording: %v", i.Name, err))
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				i.setUnresponsive()
+			} else if err != nil {
+				i.setUnknown()
+			}
+		}
+	}
+	i.kill()
+	return err
 }
 
 type PluginManager struct {
@@ -459,4 +494,18 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 			return stream.Context().Err()
 		}
 	}
+}
+
+// StopPlugin is the PluginAPI command to stop a given plugin gracefully
+func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*fmtrpc.Empty, error) {
+	// get the plugin instance from the registry
+	instance, ok := p.pluginRegistry[req.Name]
+	if !ok {
+		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+	}
+	err := instance.stop(ctx)
+	if err != nil {
+		return nil, status.New(codes.Internal, err)
+	}
+	return &fmtrpc.Empty{}, nil
 }
