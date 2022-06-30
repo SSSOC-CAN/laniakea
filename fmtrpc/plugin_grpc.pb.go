@@ -313,3 +313,348 @@ var Controller_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "plugin.proto",
 }
+
+// PluginAPIClient is the client API for PluginAPI service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type PluginAPIClient interface {
+	// fmtcli: `plugin-start`
+	//StartRecording will begin recording data from specified datasource.
+	StartRecord(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
+	// fmtcli: `plugin-stop`
+	//StopRecording will end the recording of data from specified datasource.
+	StopRecord(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
+	//
+	//Subscribe returns a uni-directional stream of data from a specified datasource.
+	Subscribe(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (PluginAPI_SubscribeClient, error)
+	// fmtcli: `plugin-stop`
+	//Stop will stop the specified controller service.
+	Stop(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error)
+	// fmtcli: `plugin-command`
+	//Command will send any command to a controller service.
+	Command(ctx context.Context, in *Frame, opts ...grpc.CallOption) (PluginAPI_CommandClient, error)
+	// fmtcli: `list plugins`
+	//ListPlugins will send a list of registered and running plugins.
+	ListPlugins(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PluginsList, error)
+}
+
+type pluginAPIClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewPluginAPIClient(cc grpc.ClientConnInterface) PluginAPIClient {
+	return &pluginAPIClient{cc}
+}
+
+func (c *pluginAPIClient) StartRecord(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/StartRecord", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginAPIClient) StopRecord(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/StopRecord", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginAPIClient) Subscribe(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (PluginAPI_SubscribeClient, error) {
+	stream, err := c.cc.NewStream(ctx, &PluginAPI_ServiceDesc.Streams[0], "/fmtrpc.PluginAPI/Subscribe", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pluginAPISubscribeClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type PluginAPI_SubscribeClient interface {
+	Recv() (*Frame, error)
+	grpc.ClientStream
+}
+
+type pluginAPISubscribeClient struct {
+	grpc.ClientStream
+}
+
+func (x *pluginAPISubscribeClient) Recv() (*Frame, error) {
+	m := new(Frame)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *pluginAPIClient) Stop(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/Stop", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pluginAPIClient) Command(ctx context.Context, in *Frame, opts ...grpc.CallOption) (PluginAPI_CommandClient, error) {
+	stream, err := c.cc.NewStream(ctx, &PluginAPI_ServiceDesc.Streams[1], "/fmtrpc.PluginAPI/Command", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pluginAPICommandClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type PluginAPI_CommandClient interface {
+	Recv() (*Frame, error)
+	grpc.ClientStream
+}
+
+type pluginAPICommandClient struct {
+	grpc.ClientStream
+}
+
+func (x *pluginAPICommandClient) Recv() (*Frame, error) {
+	m := new(Frame)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *pluginAPIClient) ListPlugins(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*PluginsList, error) {
+	out := new(PluginsList)
+	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/ListPlugins", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PluginAPIServer is the server API for PluginAPI service.
+// All implementations must embed UnimplementedPluginAPIServer
+// for forward compatibility
+type PluginAPIServer interface {
+	// fmtcli: `plugin-start`
+	//StartRecording will begin recording data from specified datasource.
+	StartRecord(context.Context, *PluginRequest) (*Empty, error)
+	// fmtcli: `plugin-stop`
+	//StopRecording will end the recording of data from specified datasource.
+	StopRecord(context.Context, *PluginRequest) (*Empty, error)
+	//
+	//Subscribe returns a uni-directional stream of data from a specified datasource.
+	Subscribe(*PluginRequest, PluginAPI_SubscribeServer) error
+	// fmtcli: `plugin-stop`
+	//Stop will stop the specified controller service.
+	Stop(context.Context, *PluginRequest) (*Empty, error)
+	// fmtcli: `plugin-command`
+	//Command will send any command to a controller service.
+	Command(*Frame, PluginAPI_CommandServer) error
+	// fmtcli: `list plugins`
+	//ListPlugins will send a list of registered and running plugins.
+	ListPlugins(context.Context, *Empty) (*PluginsList, error)
+	mustEmbedUnimplementedPluginAPIServer()
+}
+
+// UnimplementedPluginAPIServer must be embedded to have forward compatible implementations.
+type UnimplementedPluginAPIServer struct {
+}
+
+func (UnimplementedPluginAPIServer) StartRecord(context.Context, *PluginRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartRecord not implemented")
+}
+func (UnimplementedPluginAPIServer) StopRecord(context.Context, *PluginRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StopRecord not implemented")
+}
+func (UnimplementedPluginAPIServer) Subscribe(*PluginRequest, PluginAPI_SubscribeServer) error {
+	return status.Errorf(codes.Unimplemented, "method Subscribe not implemented")
+}
+func (UnimplementedPluginAPIServer) Stop(context.Context, *PluginRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Stop not implemented")
+}
+func (UnimplementedPluginAPIServer) Command(*Frame, PluginAPI_CommandServer) error {
+	return status.Errorf(codes.Unimplemented, "method Command not implemented")
+}
+func (UnimplementedPluginAPIServer) ListPlugins(context.Context, *Empty) (*PluginsList, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListPlugins not implemented")
+}
+func (UnimplementedPluginAPIServer) mustEmbedUnimplementedPluginAPIServer() {}
+
+// UnsafePluginAPIServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PluginAPIServer will
+// result in compilation errors.
+type UnsafePluginAPIServer interface {
+	mustEmbedUnimplementedPluginAPIServer()
+}
+
+func RegisterPluginAPIServer(s grpc.ServiceRegistrar, srv PluginAPIServer) {
+	s.RegisterService(&PluginAPI_ServiceDesc, srv)
+}
+
+func _PluginAPI_StartRecord_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginAPIServer).StartRecord(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.PluginAPI/StartRecord",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginAPIServer).StartRecord(ctx, req.(*PluginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginAPI_StopRecord_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginAPIServer).StopRecord(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.PluginAPI/StopRecord",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginAPIServer).StopRecord(ctx, req.(*PluginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginAPI_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(PluginRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginAPIServer).Subscribe(m, &pluginAPISubscribeServer{stream})
+}
+
+type PluginAPI_SubscribeServer interface {
+	Send(*Frame) error
+	grpc.ServerStream
+}
+
+type pluginAPISubscribeServer struct {
+	grpc.ServerStream
+}
+
+func (x *pluginAPISubscribeServer) Send(m *Frame) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _PluginAPI_Stop_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginAPIServer).Stop(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.PluginAPI/Stop",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginAPIServer).Stop(ctx, req.(*PluginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _PluginAPI_Command_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Frame)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginAPIServer).Command(m, &pluginAPICommandServer{stream})
+}
+
+type PluginAPI_CommandServer interface {
+	Send(*Frame) error
+	grpc.ServerStream
+}
+
+type pluginAPICommandServer struct {
+	grpc.ServerStream
+}
+
+func (x *pluginAPICommandServer) Send(m *Frame) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _PluginAPI_ListPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginAPIServer).ListPlugins(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.PluginAPI/ListPlugins",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginAPIServer).ListPlugins(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// PluginAPI_ServiceDesc is the grpc.ServiceDesc for PluginAPI service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var PluginAPI_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "fmtrpc.PluginAPI",
+	HandlerType: (*PluginAPIServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "StartRecord",
+			Handler:    _PluginAPI_StartRecord_Handler,
+		},
+		{
+			MethodName: "StopRecord",
+			Handler:    _PluginAPI_StopRecord_Handler,
+		},
+		{
+			MethodName: "Stop",
+			Handler:    _PluginAPI_Stop_Handler,
+		},
+		{
+			MethodName: "ListPlugins",
+			Handler:    _PluginAPI_ListPlugins_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Subscribe",
+			Handler:       _PluginAPI_Subscribe_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "Command",
+			Handler:       _PluginAPI_Command_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "plugin.proto",
+}
