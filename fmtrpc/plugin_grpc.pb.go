@@ -522,6 +522,9 @@ type PluginAPIClient interface {
 	// fmtcli: `plugin-add`
 	//AddPlugin will add a plugin from given information.
 	AddPlugin(ctx context.Context, in *PluginConfig, opts ...grpc.CallOption) (*Plugin, error)
+	// fmtcli: `plugin-info`
+	//GetPlugin will retrieve the information for the given plugin.
+	GetPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Plugin, error)
 }
 
 type pluginAPIClient struct {
@@ -650,6 +653,15 @@ func (c *pluginAPIClient) AddPlugin(ctx context.Context, in *PluginConfig, opts 
 	return out, nil
 }
 
+func (c *pluginAPIClient) GetPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Plugin, error) {
+	out := new(Plugin)
+	err := c.cc.Invoke(ctx, "/fmtrpc.PluginAPI/GetPlugin", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginAPIServer is the server API for PluginAPI service.
 // All implementations must embed UnimplementedPluginAPIServer
 // for forward compatibility
@@ -678,6 +690,9 @@ type PluginAPIServer interface {
 	// fmtcli: `plugin-add`
 	//AddPlugin will add a plugin from given information.
 	AddPlugin(context.Context, *PluginConfig) (*Plugin, error)
+	// fmtcli: `plugin-info`
+	//GetPlugin will retrieve the information for the given plugin.
+	GetPlugin(context.Context, *PluginRequest) (*Plugin, error)
 	mustEmbedUnimplementedPluginAPIServer()
 }
 
@@ -708,6 +723,9 @@ func (UnimplementedPluginAPIServer) ListPlugins(context.Context, *Empty) (*Plugi
 }
 func (UnimplementedPluginAPIServer) AddPlugin(context.Context, *PluginConfig) (*Plugin, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddPlugin not implemented")
+}
+func (UnimplementedPluginAPIServer) GetPlugin(context.Context, *PluginRequest) (*Plugin, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPlugin not implemented")
 }
 func (UnimplementedPluginAPIServer) mustEmbedUnimplementedPluginAPIServer() {}
 
@@ -872,6 +890,24 @@ func _PluginAPI_AddPlugin_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginAPI_GetPlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginAPIServer).GetPlugin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.PluginAPI/GetPlugin",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginAPIServer).GetPlugin(ctx, req.(*PluginRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginAPI_ServiceDesc is the grpc.ServiceDesc for PluginAPI service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -902,6 +938,10 @@ var PluginAPI_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddPlugin",
 			Handler:    _PluginAPI_AddPlugin_Handler,
+		},
+		{
+			MethodName: "GetPlugin",
+			Handler:    _PluginAPI_GetPlugin_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

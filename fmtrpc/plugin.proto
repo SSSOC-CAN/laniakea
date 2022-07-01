@@ -58,6 +58,10 @@ service PluginAPI {
     AddPlugin will add a plugin from given information.
     */
     rpc AddPlugin(PluginConfig) returns (Plugin);
+    /* fmtcli: `plugin-info`
+    GetPlugin will retrieve the information for the given plugin.
+    */
+    rpc GetPlugin(PluginRequest) returns (Plugin);
 }
 
 message Empty {}
