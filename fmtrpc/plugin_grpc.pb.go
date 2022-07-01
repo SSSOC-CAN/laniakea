@@ -22,6 +22,7 @@ type DatasourceClient interface {
 	StopRecord(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
 	Stop(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
 	PushVersion(ctx context.Context, in *VersionNumber, opts ...grpc.CallOption) (*Empty, error)
+	GetVersion(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionNumber, error)
 }
 
 type datasourceClient struct {
@@ -91,6 +92,15 @@ func (c *datasourceClient) PushVersion(ctx context.Context, in *VersionNumber, o
 	return out, nil
 }
 
+func (c *datasourceClient) GetVersion(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionNumber, error) {
+	out := new(VersionNumber)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Datasource/GetVersion", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DatasourceServer is the server API for Datasource service.
 // All implementations must embed UnimplementedDatasourceServer
 // for forward compatibility
@@ -99,6 +109,7 @@ type DatasourceServer interface {
 	StopRecord(context.Context, *Empty) (*Empty, error)
 	Stop(context.Context, *Empty) (*Empty, error)
 	PushVersion(context.Context, *VersionNumber) (*Empty, error)
+	GetVersion(context.Context, *Empty) (*VersionNumber, error)
 	mustEmbedUnimplementedDatasourceServer()
 }
 
@@ -117,6 +128,9 @@ func (UnimplementedDatasourceServer) Stop(context.Context, *Empty) (*Empty, erro
 }
 func (UnimplementedDatasourceServer) PushVersion(context.Context, *VersionNumber) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PushVersion not implemented")
+}
+func (UnimplementedDatasourceServer) GetVersion(context.Context, *Empty) (*VersionNumber, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
 }
 func (UnimplementedDatasourceServer) mustEmbedUnimplementedDatasourceServer() {}
 
@@ -206,6 +220,24 @@ func _Datasource_PushVersion_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Datasource_GetVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DatasourceServer).GetVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Datasource/GetVersion",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DatasourceServer).GetVersion(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Datasource_ServiceDesc is the grpc.ServiceDesc for Datasource service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -225,6 +257,10 @@ var Datasource_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "PushVersion",
 			Handler:    _Datasource_PushVersion_Handler,
 		},
+		{
+			MethodName: "GetVersion",
+			Handler:    _Datasource_GetVersion_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -243,6 +279,7 @@ type ControllerClient interface {
 	Stop(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
 	Command(ctx context.Context, in *Frame, opts ...grpc.CallOption) (Controller_CommandClient, error)
 	PushVersion(ctx context.Context, in *VersionNumber, opts ...grpc.CallOption) (*Empty, error)
+	GetVersion(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionNumber, error)
 }
 
 type controllerClient struct {
@@ -303,6 +340,15 @@ func (c *controllerClient) PushVersion(ctx context.Context, in *VersionNumber, o
 	return out, nil
 }
 
+func (c *controllerClient) GetVersion(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VersionNumber, error) {
+	out := new(VersionNumber)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Controller/GetVersion", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ControllerServer is the server API for Controller service.
 // All implementations must embed UnimplementedControllerServer
 // for forward compatibility
@@ -310,6 +356,7 @@ type ControllerServer interface {
 	Stop(context.Context, *Empty) (*Empty, error)
 	Command(*Frame, Controller_CommandServer) error
 	PushVersion(context.Context, *VersionNumber) (*Empty, error)
+	GetVersion(context.Context, *Empty) (*VersionNumber, error)
 	mustEmbedUnimplementedControllerServer()
 }
 
@@ -325,6 +372,9 @@ func (UnimplementedControllerServer) Command(*Frame, Controller_CommandServer) e
 }
 func (UnimplementedControllerServer) PushVersion(context.Context, *VersionNumber) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PushVersion not implemented")
+}
+func (UnimplementedControllerServer) GetVersion(context.Context, *Empty) (*VersionNumber, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
 }
 func (UnimplementedControllerServer) mustEmbedUnimplementedControllerServer() {}
 
@@ -396,6 +446,24 @@ func _Controller_PushVersion_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Controller_GetVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControllerServer).GetVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Controller/GetVersion",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControllerServer).GetVersion(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Controller_ServiceDesc is the grpc.ServiceDesc for Controller service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -410,6 +478,10 @@ var Controller_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PushVersion",
 			Handler:    _Controller_PushVersion_Handler,
+		},
+		{
+			MethodName: "GetVersion",
+			Handler:    _Controller_GetVersion_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

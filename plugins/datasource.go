@@ -64,6 +64,24 @@ func (c *DatasourceGRPCClient) Stop() error {
 	return nil
 }
 
+// PushVersion implements the Datasource interface method PushVersion
+func (c *DatasourceGRPCClient) PushVersion(versionNumber string) error {
+	_, err := c.client.PushVersion(context.Background(), &fmtrpc.VersionNumber{Version: versionNumber})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetVersion implements the Datasource interface method GetVersion
+func (c *DatasourceGRPCClient) GetVersion() string {
+	resp, err := c.client.GetVersion(context.Background(), &fmtrpc.Empty{})
+	if err != nil {
+		return ""
+	}
+	return resp.Version
+}
+
 // StartRecord implements the Datasource gRPC server interface
 func (s *DatasourceGRPCServer) StartRecord(_ *fmtrpc.Empty, stream fmtrpc.Datasource_StartRecordServer) error {
 	frameChan, err := s.Impl.StartRecord()
@@ -95,4 +113,16 @@ func (s *DatasourceGRPCServer) StopRecord(ctx context.Context, _ *fmtrpc.Empty) 
 func (s *DatasourceGRPCServer) Stop(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.Empty, error) {
 	err := s.Impl.Stop()
 	return &fmtrpc.Empty{}, err
+}
+
+// PushVersion implements the Datasource gRPC server interface
+func (s *DatasourceGRPCServer) PushVersion(ctx context.Context, req *fmtrpc.VersionNumber) (*fmtrpc.Empty, error) {
+	err := s.Impl.PushVersion(req.Version)
+	return &fmtrpc.Empty{}, err
+}
+
+// GetVersion implements the Datsource gRPC server interface
+func (s *DatasourceGRPCServer) GetVersion(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.VersionNumber, error) {
+	v := s.Impl.GetVersion()
+	return &fmtrpc.VersionNumber{Version: v}, nil
 }

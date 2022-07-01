@@ -20,6 +20,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	flags "github.com/jessevdk/go-flags"
+	e "github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -35,7 +36,6 @@ type PluginConfig struct {
 	ExecName    string `yaml:"exec"`
 	Timeout     int64  `yaml:"timeout"`
 	MaxTimeouts int64  `yaml:"maxTimeouts"`
-	Version     int64  `yaml:"version"`
 }
 
 // Config is the object which will hold all of the config parameters
@@ -90,7 +90,7 @@ var (
 	default_plugin_dir          string = default_log_dir()
 	default_plugin_timeout      int64  = 30
 	default_plugin_max_timeouts int64  = 3
-	default_plugin_version      int64  = 1
+	default_plugin_version      string = "1.0"
 	default_config                     = func() Config {
 		return Config{
 			DefaultLogDir:  true,
@@ -142,7 +142,10 @@ func InitConfig(isTesting bool) (Config, error) {
 			config = check_yaml_config(config)
 			if len(config.Plugins) > 0 {
 				for _, cfg := range config.Plugins {
-					validatePluginConfig(cfg, config.PluginDir)
+					err = validatePluginConfig(cfg, config.PluginDir)
+					if err != nil {
+						return Config{}, e.Wrapf(err, "Error validating %s plugin", cfg.Name)
+					}
 				}
 			}
 		}
@@ -159,20 +162,19 @@ func InitConfig(isTesting bool) (Config, error) {
 }
 
 // validatePluginConfig takes a PluginConfig and validates the parameters
-func validatePluginConfig(cfg *PluginConfig, pluginDir string) {
+func validatePluginConfig(cfg *PluginConfig, pluginDir string) error {
 	// checks that the plugin has a valid name and executable
 	if !utils.ValidatePluginName(cfg.Name) {
-		panic(ErrInvalidPluginName)
+		return ErrInvalidPluginName
 	} else if !utils.ValidatePluginExec(cfg.ExecName) {
-		panic(ErrInvalidPluginExec)
+		return ErrInvalidPluginExec
 	}
 	// check that the plugin type is either a datasource or controller
 	if cfg.Type != "datasource" && cfg.Type != "controller" {
-		panic(errors.ErrInvalidPluginType)
+		return errors.ErrInvalidPluginType
 	}
-	// TODO:check if this is OS agnostic
 	if !utils.FileExists(filepath.Join(pluginDir, cfg.ExecName)) {
-		panic(ErrPluginExecNotFound)
+		return ErrPluginExecNotFound
 	}
 	// if timeout or maxtimeout or version are 0 set to default values
 	if cfg.Timeout == int64(0) {
@@ -181,9 +183,7 @@ func validatePluginConfig(cfg *PluginConfig, pluginDir string) {
 	if cfg.MaxTimeouts == int64(0) {
 		cfg.MaxTimeouts = default_plugin_max_timeouts
 	}
-	if cfg.Version == int64(0) {
-		cfg.Version = default_plugin_version
-	}
+	return nil
 }
 
 // change_field changes the value of a specified field from the config struct

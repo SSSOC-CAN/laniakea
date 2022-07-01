@@ -34,7 +34,6 @@ const (
 	DATASOURCE_STR         = "datasource"
 	CONTROLLER_STR         = "controller"
 	ErrInvalidPluginString = bg.Error("invalid plugin string")
-	ErrInvalidPluginType   = bg.Error("invalid plugin type")
 	ErrDuplicatePluginName = bg.Error("identical plugin names")
 	ErrUnregsiteredPlugin  = bg.Error("given plugin not in plugin registry")
 	ErrPluginNotReady      = bg.Error("plugin not ready")
