@@ -36,7 +36,7 @@ const (
 	ErrInvalidPluginString = bg.Error("invalid plugin string")
 	ErrInvalidPluginType   = bg.Error("invalid plugin type")
 	ErrDuplicatePluginName = bg.Error("identical plugin names")
-	ErrInvalidPluginName   = bg.Error("given plugin not in plugin registry")
+	ErrUnregsiteredPlugin  = bg.Error("given plugin not in plugin registry")
 	ErrPluginNotReady      = bg.Error("plugin not ready")
 	ErrPluginTimeout       = bg.Error("plugin timed out")
 	PluginEOF              = "plugin EOF"
@@ -505,7 +505,7 @@ func (p *PluginManager) StartRecord(ctx context.Context, req *fmtrpc.PluginReque
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
-		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	err := instance.startRecord(ctx)
 	if err != nil {
@@ -519,7 +519,7 @@ func (p *PluginManager) StopRecord(ctx context.Context, req *fmtrpc.PluginReques
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
-		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	err := instance.stopRecord(ctx)
 	if err != nil {
@@ -533,7 +533,7 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 	// get the plugin instance from the registry
 	_, ok := p.pluginRegistry[req.Name]
 	if !ok {
-		return status.New(codes.InvalidArgument, ErrInvalidPluginName)
+		return status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	rand.Seed(time.Now().UnixNano())
 	subscriberName := req.Name + utils.RandSeq(10)
@@ -574,7 +574,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
-		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	// check if plugin is stopped or killed
 	if instance.state != fmtrpc.Plugin_STOPPED && instance.state != fmtrpc.Plugin_KILLED {
@@ -599,7 +599,7 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
-		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	// check if plugin is already stopped, stopping or killed
 	if instance.state == fmtrpc.Plugin_STOPPING || instance.state == fmtrpc.Plugin_STOPPED || instance.state == fmtrpc.Plugin_KILLED {
@@ -682,7 +682,7 @@ func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtr
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
-		return nil, status.New(codes.InvalidArgument, ErrInvalidPluginName)
+		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	err := instance.command(context.Background(), req.Frame)
 	if err != nil {
