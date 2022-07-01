@@ -74,12 +74,12 @@ func (c *DatasourceGRPCClient) PushVersion(versionNumber string) error {
 }
 
 // GetVersion implements the Datasource interface method GetVersion
-func (c *DatasourceGRPCClient) GetVersion() string {
+func (c *DatasourceGRPCClient) GetVersion() (string, error) {
 	resp, err := c.client.GetVersion(context.Background(), &fmtrpc.Empty{})
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return resp.Version
+	return resp.Version, nil
 }
 
 // StartRecord implements the Datasource gRPC server interface
@@ -123,6 +123,6 @@ func (s *DatasourceGRPCServer) PushVersion(ctx context.Context, req *fmtrpc.Vers
 
 // GetVersion implements the Datsource gRPC server interface
 func (s *DatasourceGRPCServer) GetVersion(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.VersionNumber, error) {
-	v := s.Impl.GetVersion()
-	return &fmtrpc.VersionNumber{Version: v}, nil
+	v, err := s.Impl.GetVersion()
+	return &fmtrpc.VersionNumber{Version: v}, err
 }
