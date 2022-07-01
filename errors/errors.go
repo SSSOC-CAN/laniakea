@@ -19,5 +19,4 @@ const (
 	ErrAlreadyStoppedRecording = bg.Error("already stopped recording")
 	ErrPollingIntervalTooSmall = bg.Error("inputted polling interval smaller than minimum required value")
 	ErrMacSvcNil               = bg.Error("macaroon service uninitialized")
-	ErrInvalidPluginType       = bg.Error("invalid plugin type")
 )

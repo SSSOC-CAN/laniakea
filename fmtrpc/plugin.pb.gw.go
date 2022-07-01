@@ -317,7 +317,7 @@ func local_request_PluginAPI_ListPlugins_0(ctx context.Context, marshaler runtim
 }
 
 func request_PluginAPI_AddPlugin_0(ctx context.Context, marshaler runtime.Marshaler, client PluginAPIClient, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq AddPluginRequest
+	var protoReq PluginConfig
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
@@ -334,7 +334,7 @@ func request_PluginAPI_AddPlugin_0(ctx context.Context, marshaler runtime.Marsha
 }
 
 func local_request_PluginAPI_AddPlugin_0(ctx context.Context, marshaler runtime.Marshaler, server PluginAPIServer, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
-	var protoReq AddPluginRequest
+	var protoReq PluginConfig
 	var metadata runtime.ServerMetadata
 
 	newReader, berr := utilities.IOReaderFactory(req.Body)
