@@ -46,7 +46,7 @@
             "in": "body",
             "required": true,
             "schema": {
-              "$ref": "#/definitions/fmtrpcAddPluginRequest"
+              "$ref": "#/definitions/fmtrpcPluginConfig"
             }
           }
         ],
@@ -312,15 +312,6 @@
       ],
       "default": "DATASOURCE"
     },
-    "fmtrpcAddPluginRequest": {
-      "type": "object",
-      "properties": {
-        "plugin_string": {
-          "type": "string",
-          "title": "The plugin information string in format unique_name:type(datasource or controller):executable_file_name.ext"
-        }
-      }
-    },
     "fmtrpcControllerPluginRequest": {
       "type": "object",
       "properties": {
@@ -388,6 +379,33 @@
         "version": {
           "type": "string",
           "title": "The version number of the plugin, specified in the plugin"
+        }
+      }
+    },
+    "fmtrpcPluginConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "the name of the plugin"
+        },
+        "type": {
+          "type": "string",
+          "title": "the type of the plugin, either datasource or controller"
+        },
+        "exec_name": {
+          "type": "string",
+          "title": "the name of the executable of the plugin"
+        },
+        "timeout": {
+          "type": "string",
+          "format": "int64",
+          "title": "the time in seconds to determine if a plugin has timed out"
+        },
+        "max_timeouts": {
+          "type": "string",
+          "format": "int64",
+          "title": "the maximum number of times a plugin can timeout"
         }
       }
     },

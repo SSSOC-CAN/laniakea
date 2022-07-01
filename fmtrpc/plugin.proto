@@ -57,7 +57,7 @@ service PluginAPI {
     /* fmtcli: `plugin-add`
     AddPlugin will add a plugin from given information.
     */
-    rpc AddPlugin(AddPluginRequest) returns (Plugin);
+    rpc AddPlugin(PluginConfig) returns (Plugin);
 }
 
 message Empty {}
@@ -117,6 +117,23 @@ message ControllerPluginRequest {
 
     // the data we are sending to the plugin
     Frame frame = 2;
+}
+message PluginConfig {
+    // the name of the plugin
+    string name = 1;
+
+    // the type of the plugin, either datasource or controller
+    string type = 2;
+    
+    // the name of the executable of the plugin
+    string exec_name  = 3;
+
+    // the time in seconds to determine if a plugin has timed out
+    int64 timeout = 4;
+
+    // the maximum number of times a plugin can timeout
+    int64 max_timeouts = 5;
+
 }
 message AddPluginRequest {
     // The plugin information string in format unique_name:type(datasource or controller):executable_file_name.ext

@@ -16,45 +16,31 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/plugins"
 	"github.com/SSSOC-CAN/fmtd/utils"
-	bg "github.com/SSSOCPaulCote/blunderguard"
 	flags "github.com/jessevdk/go-flags"
 	e "github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
 
-const (
-	ErrInvalidPluginName  = bg.Error("invalid plugin name")
-	ErrInvalidPluginExec  = bg.Error("invalid plugin executable")
-	ErrPluginExecNotFound = bg.Error("plugin executable not found")
-)
-
-type PluginConfig struct {
-	Name        string `yaml:"name"`
-	Type        string `yaml:"type"`
-	ExecName    string `yaml:"exec"`
-	Timeout     int64  `yaml:"timeout"`
-	MaxTimeouts int64  `yaml:"maxTimeouts"`
-}
-
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir  bool            `yaml:"DefaultLogDir"`
-	LogFileDir     string          `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
-	MaxLogFiles    int64           `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
-	MaxLogFileSize int64           `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
-	ConsoleOutput  bool            `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
-	GrpcPort       int64           `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
-	RestPort       int64           `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
-	TCPPort        int64           `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
-	TCPAddr        string          `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
-	DataOutputDir  string          `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
-	ExtraIPAddr    []string        `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
-	InfluxURL      string          `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
-	InfluxAPIToken string          `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
-	PluginDir      string          `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
-	Plugins        []*PluginConfig `yaml:"Plugins"`
+	DefaultLogDir  bool                   `yaml:"DefaultLogDir"`
+	LogFileDir     string                 `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	MaxLogFiles    int64                  `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
+	MaxLogFileSize int64                  `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
+	ConsoleOutput  bool                   `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
+	GrpcPort       int64                  `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
+	RestPort       int64                  `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
+	TCPPort        int64                  `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
+	TCPAddr        string                 `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
+	DataOutputDir  string                 `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
+	ExtraIPAddr    []string               `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
+	InfluxURL      string                 `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
+	InfluxAPIToken string                 `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
+	PluginDir      string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
+	Plugins        []*fmtrpc.PluginConfig `yaml:"Plugins"`
 	MacaroonDBPath string
 	TLSCertPath    string
 	TLSKeyPath     string
@@ -88,9 +74,6 @@ var (
 	default_log_file_size       int64  = 10
 	default_max_log_files       int64  = 0
 	default_plugin_dir          string = default_log_dir()
-	default_plugin_timeout      int64  = 30
-	default_plugin_max_timeouts int64  = 3
-	default_plugin_version      string = "1.0"
 	default_config                     = func() Config {
 		return Config{
 			DefaultLogDir:  true,
@@ -142,7 +125,7 @@ func InitConfig(isTesting bool) (Config, error) {
 			config = check_yaml_config(config)
 			if len(config.Plugins) > 0 {
 				for _, cfg := range config.Plugins {
-					err = validatePluginConfig(cfg, config.PluginDir)
+					err = plugins.ValidatePluginConfig(cfg, config.PluginDir)
 					if err != nil {
 						return Config{}, e.Wrapf(err, "Error validating %s plugin", cfg.Name)
 					}
@@ -159,31 +142,6 @@ func InitConfig(isTesting bool) (Config, error) {
 		}
 	}
 	return config, nil
-}
-
-// validatePluginConfig takes a PluginConfig and validates the parameters
-func validatePluginConfig(cfg *PluginConfig, pluginDir string) error {
-	// checks that the plugin has a valid name and executable
-	if !utils.ValidatePluginName(cfg.Name) {
-		return ErrInvalidPluginName
-	} else if !utils.ValidatePluginExec(cfg.ExecName) {
-		return ErrInvalidPluginExec
-	}
-	// check that the plugin type is either a datasource or controller
-	if cfg.Type != "datasource" && cfg.Type != "controller" {
-		return errors.ErrInvalidPluginType
-	}
-	if !utils.FileExists(filepath.Join(pluginDir, cfg.ExecName)) {
-		return ErrPluginExecNotFound
-	}
-	// if timeout or maxtimeout or version are 0 set to default values
-	if cfg.Timeout == int64(0) {
-		cfg.Timeout = default_plugin_timeout
-	}
-	if cfg.MaxTimeouts == int64(0) {
-		cfg.MaxTimeouts = default_plugin_max_timeouts
-	}
-	return nil
 }
 
 // change_field changes the value of a specified field from the config struct
