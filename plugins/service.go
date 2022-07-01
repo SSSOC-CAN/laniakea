@@ -47,7 +47,8 @@ var (
 		MagicCookieKey:   "LANIAKEA_PLUGIN_MAGIC_COOKIE",
 		MagicCookieValue: "a56e5daaa516e17d3d4b3d4685df9f8ca59c62c2d818cd5a7df13c039f134e16",
 	}
-	allowedPluginProtocols = []plugin.Protocol{plugin.ProtocolGRPC}
+	allowedPluginProtocols               = []plugin.Protocol{plugin.ProtocolGRPC}
+	timeoutChecker         time.Duration = 10 * time.Second // time for when to check if plugins are unresponsive
 )
 
 type PluginRecordState int32
@@ -68,6 +69,7 @@ type PluginInstance struct {
 	recordState   PluginRecordState
 	startedAt     time.Time
 	stoppedAt     time.Time
+	version       string
 	sync.RWMutex
 }
 
@@ -113,6 +115,13 @@ func (i *PluginInstance) setUnresponsive() {
 	i.state = fmtrpc.Plugin_UNRESPONSIVE
 }
 
+// setKilled changes the plugin instance state to killed
+func (i *PluginInstance) setKilled() {
+	i.Lock()
+	defer i.Unlock()
+	i.state = fmtrpc.Plugin_KILLED
+}
+
 // setRecording changes the plugin recording state to recording
 func (i *PluginInstance) setRecording() {
 	i.Lock()
@@ -127,8 +136,8 @@ func (i *PluginInstance) setNotRecording() {
 	i.recordState = NOTRECORDING
 }
 
-// incremenetTimeoutCount incremenets the timeout count by one
-func (i *PluginInstance) incremenetTimeoutCount() {
+// incrementTimeoutCount increments the timeout count by one
+func (i *PluginInstance) incrementTimeoutCount() {
 	i.Lock()
 	defer i.Unlock()
 	i.timeoutCnt += 1
@@ -144,27 +153,29 @@ func (i *PluginInstance) resetTimeoutCount() {
 // startRecord is the method that starts the data recording process if this plugin is a datasource
 func (i *PluginInstance) startRecord(ctx context.Context) error {
 	// check if plugin is ready
-	if i.state != fmtrpc.Plugin_READY {
+	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// check if we're already recording
-	if i.recordState == RECORDING {
+	if i.getRecordState() == RECORDING {
 		return e.ErrAlreadyRecording
 	}
 	// set plugin as busy
 	i.setBusy()
-	defer i.setReady()
 	// check if plugin is a Datasource
 	gRPCClient, err := i.client.Client()
 	if err != nil {
+		i.setUnknown()
 		return err
 	}
 	raw, err := gRPCClient.Dispense(i.cfg.Name)
 	if err != nil {
+		i.setUnknown()
 		return err
 	}
 	datasource, ok := raw.(Datasource)
 	if !ok {
+		i.setUnknown()
 		return ErrInvalidPluginType
 	}
 	// spin up go routine
@@ -172,20 +183,21 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 		dataChan, err := datasource.StartRecord()
 		if err != nil {
 			i.logger.Error().Msg(fmt.Sprintf("could not start recording: %v", err))
+			i.setUnknown()
 			return
 		}
 		// change recording state
 		i.setRecording()
 		defer i.setNotRecording()
-		timer := time.NewTimer(time.Duration(i.cfg.Timeout))
+		timer := time.NewTimer(time.Duration(i.cfg.Timeout) * time.Second)
 	loop:
 		for {
 			select {
 			case <-timer.C:
 				i.logger.Error().Msg(ErrPluginTimeout.Error())
-				// only increment the timeout count if we didn't request to stop recording
+				// only set state to unresponsive if we didn't request to stop recording
 				if i.recordState != NOTRECORDING {
-					i.incremenetTimeoutCount()
+					i.setUnresponsive()
 				}
 				break loop
 			case frame := <-dataChan:
@@ -194,47 +206,51 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
-				timer.Reset(time.Duration(i.cfg.Timeout))
+				timer.Reset(time.Duration(i.cfg.Timeout) * time.Second)
 			}
 		}
 	}()
+	i.setReady()
 	return nil
 }
 
 // stopRecord stops the recording process of the datasource plugin
 func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	// check if plugin is ready
-	if i.state != fmtrpc.Plugin_READY {
+	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// check if plugin is recording
-	if i.recordState != RECORDING {
+	if i.getRecordState() != RECORDING {
 		return e.ErrAlreadyStoppedRecording
 	}
 	// set plugin as busy
 	i.setBusy()
-	defer i.setReady()
 	// check if plugin is a Datasource
 	gRPCClient, err := i.client.Client()
 	if err != nil {
+		i.setUnknown()
 		return err
 	}
 	raw, err := gRPCClient.Dispense(i.cfg.Name)
 	if err != nil {
+		i.setUnknown()
 		return err
 	}
 	datasource, ok := raw.(Datasource)
 	if !ok {
+		i.setUnknown()
 		return ErrInvalidPluginType
 	}
 	// create timeout context
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout))
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
 	defer cancel()
 	errChan := make(chan error)
 	go func(ctx context.Context, errChan chan error) {
 		err := datasource.StopRecord()
 		if err != nil {
 			i.logger.Error().Msg(fmt.Sprintf("could not stop recording: %v", err))
+			i.setUnknown()
 		} else {
 			i.setNotRecording()
 		}
@@ -243,18 +259,23 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		i.logger.Error().Msg(ErrPluginTimeout.Error())
-		i.incremenetTimeoutCount()
+		i.setUnresponsive()
 		return ctx.Err()
 	case err := <-errChan:
+		if err == nil {
+			i.setReady()
+		}
 		return err
 	}
 }
 
-// kill will kill the actual plugin and reset counter information
+// kill will kill the actual plugin
 func (i *PluginInstance) kill() {
-	i.resetTimeoutCount()
 	i.Lock()
 	defer i.Unlock()
+	if i.client == nil {
+		return
+	}
 	i.client.Kill()
 	i.client = nil
 	i.recordState = NOTRECORDING
@@ -265,11 +286,14 @@ func (i *PluginInstance) kill() {
 
 // stop will send the signal to kill the plugin
 func (i *PluginInstance) stop(ctx context.Context) error {
+	if i.getState() == fmtrpc.Plugin_STOPPING || i.getState() == fmtrpc.Plugin_STOPPED || i.getState() == fmtrpc.Plugin_KILLED {
+		return e.ErrServiceAlreadyStopped
+	}
 	i.setStopping()
 	defer i.setStopped()
 	// try to gracefully stop recording if recording
 	var err error
-	if i.recordState == RECORDING {
+	if i.getRecordState() == RECORDING {
 		errChan := make(chan error)
 		go func(ctx context.Context, errChan chan error) {
 			err := i.stopRecord(ctx)
@@ -306,7 +330,7 @@ func (i *PluginInstance) setLogger(logger *zerolog.Logger) {
 // command will pass along a command frame to a controller plugin and store the streamed data in the queue
 func (i *PluginInstance) command(ctx context.Context, frame *fmtrpc.Frame) error {
 	// check if plugin is ready
-	if i.state != fmtrpc.Plugin_READY {
+	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// set plugin as busy
@@ -314,33 +338,36 @@ func (i *PluginInstance) command(ctx context.Context, frame *fmtrpc.Frame) error
 	// check if plugin is a Datasource
 	gRPCClient, err := i.client.Client()
 	if err != nil {
+		i.setUnknown()
 		return err
 	}
 	raw, err := gRPCClient.Dispense(i.cfg.Name)
 	if err != nil {
+		i.setUnknown()
 		return err
 	}
 	ctrller, ok := raw.(Controller)
 	if !ok {
+		i.setUnknown()
 		return ErrInvalidPluginType
 	}
 	// spin up go routine
 	go func() {
-		defer i.setReady()
 		dataChan, err := ctrller.Command(frame)
 		if err != nil {
 			i.logger.Error().Msg(fmt.Sprintf("could not send command: %v", err))
+			i.setUnknown()
 			return
 		}
-		timer := time.NewTimer(time.Duration(i.cfg.Timeout))
+		timer := time.NewTimer(time.Duration(i.cfg.Timeout) * time.Second)
 	loop:
 		for {
 			select {
 			case <-timer.C:
 				i.logger.Error().Msg(ErrPluginTimeout.Error())
-				// only increment the timeout count if we didn't request to stop recording
+				// only set to unresponsive if we didn't request to stop recording
 				if i.recordState != NOTRECORDING {
-					i.incremenetTimeoutCount()
+					i.setUnresponsive()
 				}
 				break loop
 			case frame := <-dataChan:
@@ -349,11 +376,177 @@ func (i *PluginInstance) command(ctx context.Context, frame *fmtrpc.Frame) error
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
-				timer.Reset(time.Duration(i.cfg.Timeout))
+				timer.Reset(time.Duration(i.cfg.Timeout) * time.Second)
 			}
 		}
 	}()
+	i.setReady()
 	return nil
+}
+
+// pushVersion will push the fmtd/laniakea version to the plugin for compatibility reasons
+func (i *PluginInstance) pushVersion(ctx context.Context) error {
+	// check if plugin is ready
+	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+		return ErrPluginNotReady
+	}
+	// set plugin as busy
+	i.setBusy()
+	// check if plugin is a Datasource
+	gRPCClient, err := i.client.Client()
+	if err != nil {
+		i.setUnknown()
+		return err
+	}
+	raw, err := gRPCClient.Dispense(i.cfg.Name)
+	if err != nil {
+		i.setUnknown()
+		return err
+	}
+	// setup timeout context
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
+	defer cancel()
+
+	// spin up go routine
+	errChan := make(chan error)
+	switch plug := raw.(type) {
+	case Datasource:
+		plug = plug.(Datasource)
+		go func(ctx context.Context, errChan chan error) {
+			errChan <- plug.PushVersion(utils.AppVersion)
+		}(ctx, errChan)
+	case Controller:
+		plug = plug.(Controller)
+		go func(ctx context.Context, errChan chan error) {
+			errChan <- plug.PushVersion(utils.AppVersion)
+		}(ctx, errChan)
+	default:
+		i.setUnknown()
+		return ErrInvalidPluginType
+	}
+
+	// wait for error response
+	select {
+	case err = <-errChan:
+		if err != nil {
+			i.setUnknown()
+			return err
+		} else {
+			i.setReady()
+			return nil
+		}
+	case <-ctx.Done():
+		i.setUnresponsive()
+		return context.Canceled
+	}
+}
+
+// setVersion sets the plugin version instance attribute
+func (i *PluginInstance) setVersion(v string) {
+	i.Lock()
+	defer i.Unlock()
+	i.version = v
+}
+
+// getVersion will get the plugin version for compatibility reasons
+func (i *PluginInstance) getVersion(ctx context.Context) error {
+	// check if plugin is ready
+	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+		return ErrPluginNotReady
+	}
+	// set plugin as busy
+	i.setBusy()
+	// check if plugin is a Datasource
+	gRPCClient, err := i.client.Client()
+	if err != nil {
+		i.setUnknown()
+		return err
+	}
+	raw, err := gRPCClient.Dispense(i.cfg.Name)
+	if err != nil {
+		i.setUnknown()
+		return err
+	}
+	// setup timeout context
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
+	defer cancel()
+	// spin up go routine
+	respChan := make(chan struct {
+		Version string
+		Err     error
+	})
+	switch plug := raw.(type) {
+	case Datasource:
+		plug = plug.(Datasource)
+		go func(ctx context.Context, respChan chan struct {
+			Version string
+			Err     error
+		}) {
+			version, err := plug.GetVersion()
+			respChan <- struct {
+				Version string
+				Err     error
+			}{
+				Version: version,
+				Err:     err,
+			}
+		}(ctx, respChan)
+	case Controller:
+		plug = plug.(Controller)
+		go func(ctx context.Context, respChan chan struct {
+			Version string
+			Err     error
+		}) {
+			version, err := plug.GetVersion()
+			respChan <- struct {
+				Version string
+				Err     error
+			}{
+				Version: version,
+				Err:     err,
+			}
+		}(ctx, respChan)
+	default:
+		i.setUnknown()
+		return ErrInvalidPluginType
+	}
+
+	// wait for error response
+	select {
+	case resp := <-respChan:
+		if resp.Err != nil {
+			i.setUnknown()
+			return resp.Err
+		} else {
+			i.setVersion(resp.Version)
+			i.setReady()
+			return nil
+		}
+	case <-ctx.Done():
+		i.setUnresponsive()
+		return context.Canceled
+	}
+}
+
+// getState is a goroutine safe way to read the current plugin state
+func (i *PluginInstance) getState() fmtrpc.Plugin_PluginState {
+	i.RLock()
+	defer i.RUnlock()
+	return i.state
+}
+
+// getRecordState is a goroutine safe way to read the current plugin record state
+func (i *PluginInstance) getRecordState() PluginRecordState {
+	i.RLock()
+	defer i.RUnlock()
+	return i.recordState
+}
+
+// getTimeoutCount returns the current plugin instance timeout count
+func (i *PluginInstance) getTimeoutCount() int {
+	i.RLock()
+	defer i.RUnlock()
+	return i.timeoutCnt
 }
 
 type PluginManager struct {
@@ -363,6 +556,8 @@ type PluginManager struct {
 	logger         *PluginLogger
 	pluginRegistry map[string]*PluginInstance
 	queueManager   *queue.QueueManager
+	quitChan       chan struct{}
+	sync.WaitGroup
 }
 
 // Compile time check to ensure RpcServer implements api.RestProxyService
@@ -375,6 +570,7 @@ func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl ze
 		pluginCfgs:   pluginCfgs,
 		logger:       NewPluginLogger("PLGN", zl),
 		queueManager: &queue.QueueManager{Logger: zl.With().Str("subsystem", "QMGR").Logger()},
+		quitChan:     make(chan struct{}),
 	}
 }
 
@@ -396,7 +592,7 @@ func (p *PluginManager) RegisterWithRestProxy(ctx context.Context, mux *proxy.Se
 }
 
 // Start creates the connection to all registered plugins and establishes the connection to the API service
-func (p *PluginManager) Start() error {
+func (p *PluginManager) Start(ctx context.Context) error {
 	instances := make(map[string]*PluginInstance)
 	for _, cfg := range p.pluginCfgs {
 		if _, ok := instances[cfg.Name]; ok {
@@ -406,14 +602,60 @@ func (p *PluginManager) Start() error {
 		if err != nil {
 			return err
 		}
-		newInstance, err := p.createPluginInstance(cfg, plug)
+		newInstance, err := p.createPluginInstance(ctx, cfg, plug)
 		if err != nil {
 			return err
 		}
 		instances[cfg.Name] = newInstance
 	}
 	p.pluginRegistry = instances
+	go p.monitorPlugins(ctx)
 	return nil
+}
+
+// monitorPlugins is a goroutine for monitoring the plugin instance unresponsive state.
+// If the plugin is in an unresponsive state, it will increment the timeout counter and restart the plugin.
+// If the plugin timeout counter reaches the maximum timeouts, it will kill the plugin and set its state to killed
+func (p *PluginManager) monitorPlugins(ctx context.Context) {
+	defer p.Done()
+	ticker := time.NewTicker(timeoutChecker)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			for _, i := range p.pluginRegistry {
+				// if the plugin is in the unresponsive state, we will try to restart
+				if i.getState() == fmtrpc.Plugin_UNRESPONSIVE {
+					// check if the plugin has exceeded the maximum number of times it can timeout
+					if int64(i.getTimeoutCount()) >= i.cfg.MaxTimeouts {
+						p.logger.zl.Error().Msg(fmt.Sprintf("Maximum timeouts reached for %v plugin, stopping plugin...: %v", i.cfg.Name))
+						err := i.stop(ctx)
+						if err != nil {
+							p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
+							i.kill()
+						}
+						i.setKilled()
+						continue
+					}
+					i.incrementTimeoutCount()
+					p.logger.zl.Error().Msg(fmt.Sprintf("%v plugin timeout, stopping plugin...: %v", i.cfg.Name))
+					err := i.stop(ctx)
+					if err != nil {
+						p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
+						i.kill()
+					}
+					p.logger.zl.Info().Msg(fmt.Sprintf("Restarting %v plugin...: %v", i.cfg.Name))
+					_, err = p.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: i.cfg.Name})
+					if err != nil {
+						p.logger.zl.Error().Msg(fmt.Sprintf("could not restart the %v plugin: %v", i.cfg.Name, err))
+						i.setUnresponsive()
+					}
+				}
+			}
+		case <-p.quitChan:
+			return
+		}
+	}
 }
 
 // getPluginFromType gets the plugin instance based on the type
@@ -451,7 +693,7 @@ func getPluginCodeFromType(typeStr string) (fmtrpc.Plugin_PluginType, error) {
 }
 
 // createPluginInstance creates a new plugin instance from the given plugin name and type
-func (p *PluginManager) createPluginInstance(cfg *fmtrpc.PluginConfig, plug plugin.Plugin) (*PluginInstance, error) {
+func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.PluginConfig, plug plugin.Plugin) (*PluginInstance, error) {
 	// create new plugin clients
 	zLogger := p.logger.zl.With().Str("plugin", cfg.Name).Logger()
 	newClient := plugin.NewClient(&plugin.ClientConfig{
@@ -474,9 +716,22 @@ func (p *PluginManager) createPluginInstance(cfg *fmtrpc.PluginConfig, plug plug
 		logger:        &zLogger,
 		startedAt:     time.Now(),
 	}
+	// push fmtd/laniakea version and get plugin version
+	err = newInstance.pushVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = newInstance.getVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
 	cleanUp := func() {
 		if newInstance.client != nil {
-			newInstance.client.Kill()
+			err = newInstance.stop(ctx)
+			if err != nil {
+				newInstance.logger.Error().Msg(fmt.Sprintf("could not safely stop %v plugin: %v", newInstance.cfg.Name, err))
+				newInstance.kill()
+			}
 		}
 		unregister()
 	}
@@ -489,6 +744,8 @@ func (p *PluginManager) Stop() error {
 	for _, instance := range p.pluginRegistry {
 		instance.cleanUp()
 	}
+	close(p.quitChan)
+	p.Wait()
 	return nil
 }
 
@@ -569,7 +826,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
 	// check if plugin is stopped or killed
-	if instance.state != fmtrpc.Plugin_STOPPED && instance.state != fmtrpc.Plugin_KILLED {
+	if instance.getState() != fmtrpc.Plugin_STOPPED && instance.getState() != fmtrpc.Plugin_KILLED {
 		return nil, status.New(codes.FailedPrecondition, e.ErrServiceAlreadyStarted)
 	}
 	// create new plugin client
@@ -587,6 +844,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 	})
 	instance.setClient(newClient)
 	instance.setLogger(zLogger)
+	instance.setReady()
 	return &fmtrpc.Empty{}, nil
 }
 
@@ -597,12 +855,10 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 	if !ok {
 		return nil, status.New(codes.InvalidArgument, ErrUnregsiteredPlugin)
 	}
-	// check if plugin is already stopped, stopping or killed
-	if instance.state == fmtrpc.Plugin_STOPPING || instance.state == fmtrpc.Plugin_STOPPED || instance.state == fmtrpc.Plugin_KILLED {
-		return nil, status.New(codes.FailedPrecondition, e.ErrServiceAlreadyStopped)
-	}
 	err := instance.stop(ctx)
-	if err != nil {
+	if err == e.ErrServiceAlreadyStopped {
+		return nil, status.New(codes.FailedPrecondition, e.ErrServiceAlreadyStopped)
+	} else if err != nil {
 		return nil, status.New(codes.Internal, err)
 	}
 	return &fmtrpc.Empty{}, nil
@@ -627,7 +883,7 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig)
 		return nil, err
 	}
 	// now create new instance and add to registry
-	newInstance, err := p.createPluginInstance(req, plugType)
+	newInstance, err := p.createPluginInstance(ctx, req, plugType)
 	if err != nil {
 		return nil, err
 	}
@@ -635,8 +891,9 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig)
 	return &fmtrpc.Plugin{
 		Name:      newInstance.cfg.Name,
 		Type:      rpcPlugType,
-		State:     newInstance.state,
+		State:     newInstance.getState(),
 		StartedAt: newInstance.startedAt.UnixMilli(),
+		Version:   newInstance.version,
 	}, nil
 }
 
@@ -651,9 +908,10 @@ func (p *PluginManager) ListPlugins(ctx context.Context, _ *fmtrpc.Empty) (*fmtr
 		plugins = append(plugins, &fmtrpc.Plugin{
 			Name:      plug.cfg.Name,
 			Type:      plugType,
-			State:     plug.state,
+			State:     plug.getState(),
 			StartedAt: plug.startedAt.UnixMilli(),
 			StoppedAt: plug.stoppedAt.UnixMilli(),
+			Version:   plug.version,
 		})
 	}
 	return &fmtrpc.PluginsList{Plugins: plugins}, nil
@@ -702,4 +960,24 @@ func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtr
 			return stream.Context().Err()
 		}
 	}
+}
+
+// GetPlugin will retrieve the plugin information for a given plugin if it exists
+func (p *PluginManager) GetPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*fmtrpc.Plugin, error) {
+	instance, ok := p.pluginRegistry[req.Name]
+	if !ok {
+		return nil, ErrUnregsiteredPlugin
+	}
+	plugType, err := getPluginCodeFromType(instance.cfg.Type)
+	if err != nil {
+		return nil, err
+	}
+	return &fmtrpc.Plugin{
+		Name:      instance.cfg.Name,
+		Type:      plugType,
+		State:     instance.getState(),
+		StartedAt: instance.startedAt.UnixMilli(),
+		StoppedAt: instance.stoppedAt.UnixMilli(),
+		Version:   instance.version,
+	}, nil
 }

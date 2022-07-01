@@ -139,10 +139,6 @@ message PluginConfig {
     int64 max_timeouts = 5;
 
 }
-message AddPluginRequest {
-    // The plugin information string in format unique_name:type(datasource or controller):executable_file_name.ext
-    string plugin_string = 1;
-}
 message VersionNumber {
     string version = 1;
 }

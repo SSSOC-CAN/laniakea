@@ -65,12 +65,12 @@ func (c *ControllerGRPCClient) PushVersion(versionNumber string) error {
 }
 
 // GetVersion implements the Controller interface method GetVersion
-func (c *ControllerGRPCClient) GetVersion() string {
+func (c *ControllerGRPCClient) GetVersion() (string, error) {
 	resp, err := c.client.GetVersion(context.Background(), &fmtrpc.Empty{})
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return resp.Version
+	return resp.Version, nil
 }
 
 // Stop implements the Controller gRPC server interface
@@ -108,6 +108,6 @@ func (s *ControllerGRPCServer) PushVersion(ctx context.Context, req *fmtrpc.Vers
 
 // GetVersion implements the Controller gRPC server interface
 func (s *ControllerGRPCServer) GetVersion(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.VersionNumber, error) {
-	v := s.Impl.GetVersion()
-	return &fmtrpc.VersionNumber{Version: v}, nil
+	v, err := s.Impl.GetVersion()
+	return &fmtrpc.VersionNumber{Version: v}, err
 }
