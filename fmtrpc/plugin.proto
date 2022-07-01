@@ -14,11 +14,13 @@ service Datasource {
     rpc StartRecord(Empty) returns (stream Frame);
     rpc StopRecord(Empty) returns (Empty);
     rpc Stop(Empty) returns (Empty);
+    rpc PushVersion(VersionNumber) returns (Empty);
 }
 
 service Controller {
     rpc Stop(Empty) returns (Empty);
     rpc Command(Frame) returns (stream Frame);
+    rpc PushVersion(VersionNumber) returns (Empty);
 }
 
 service PluginAPI {
@@ -115,4 +117,7 @@ message ControllerPluginRequest {
 message AddPluginRequest {
     // The plugin information string in format unique_name:type(datasource or controller):executable_file_name.ext
     string plugin_string = 1;
+}
+message VersionNumber {
+    string version = 1;
 }
