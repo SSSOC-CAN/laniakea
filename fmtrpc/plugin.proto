@@ -15,12 +15,14 @@ service Datasource {
     rpc StopRecord(Empty) returns (Empty);
     rpc Stop(Empty) returns (Empty);
     rpc PushVersion(VersionNumber) returns (Empty);
+    rpc GetVersion(Empty) returns (VersionNumber);
 }
 
 service Controller {
     rpc Stop(Empty) returns (Empty);
     rpc Command(Frame) returns (stream Frame);
     rpc PushVersion(VersionNumber) returns (Empty);
+    rpc GetVersion(Empty) returns (VersionNumber);
 }
 
 service PluginAPI {
@@ -101,6 +103,8 @@ message Plugin {
     int64 started_at = 4;
     // Unix milli timestamp of when the plugin was stopped or killed. Value is 0 if it's not stopped or killed 
     int64 stopped_at = 5;
+    // The version number of the plugin, specified in the plugin
+    string version = 6;
 
 }
 message PluginsList {

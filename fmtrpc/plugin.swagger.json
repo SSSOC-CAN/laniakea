@@ -384,6 +384,10 @@
           "type": "string",
           "format": "int64",
           "title": "Unix milli timestamp of when the plugin was stopped or killed. Value is 0 if it's not stopped or killed"
+        },
+        "version": {
+          "type": "string",
+          "title": "The version number of the plugin, specified in the plugin"
         }
       }
     },
@@ -396,6 +400,14 @@
             "$ref": "#/definitions/fmtrpcPlugin"
           },
           "title": "List of all currently registered plugins"
+        }
+      }
+    },
+    "fmtrpcVersionNumber": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
         }
       }
     },

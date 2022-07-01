@@ -19,12 +19,16 @@ type Datasource interface {
 	StartRecord() (chan *fmtrpc.Frame, error)
 	StopRecord() error
 	Stop() error
+	PushVersion(versionNumber string) error // This method pushes the version of Laniakea to the plugin. Plugin can then specify a minimum version of laniakea to run properly
+	GetVersion() string                     // This method gets the version number from the plugin. Needed if plugins rely on other plugins and specific versions are needed
 }
 
 // Controller interface describes an interface for plugins which produce data but also act as controllers
 type Controller interface {
 	Stop() error
 	Command(*fmtrpc.Frame) (chan *fmtrpc.Frame, error)
+	PushVersion(versionNumber string) error // This method pushes the version of Laniakea to the plugin. Plugin can then specify a minimum version of laniakea to run properly
+	GetVersion() string                     // This method gets the version number from the plugin. Needed if plugins rely on other plugins and specific versions are needed
 }
 
 type DatasourcePlugin struct {

@@ -166,10 +166,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// 	server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
 	// 	return err
 	// }
-	server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *server.cfg.Plugins))
-	// for _, plug := range server.cfg.Plugins {
-	// 	server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *plug))
-	// }
+	// server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *server.cfg.Plugins))
+	for _, plug := range server.cfg.Plugins {
+		server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *plug))
+	}
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")

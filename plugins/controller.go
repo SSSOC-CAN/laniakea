@@ -55,6 +55,24 @@ func (c *ControllerGRPCClient) Command(f *fmtrpc.Frame) (chan *fmtrpc.Frame, err
 	return frameChan, nil
 }
 
+// PushVersion implements the Controller interface method PushVersion
+func (c *ControllerGRPCClient) PushVersion(versionNumber string) error {
+	_, err := c.client.PushVersion(context.Background(), &fmtrpc.VersionNumber{Version: versionNumber})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetVersion implements the Controller interface method GetVersion
+func (c *ControllerGRPCClient) GetVersion() string {
+	resp, err := c.client.GetVersion(context.Background(), &fmtrpc.Empty{})
+	if err != nil {
+		return ""
+	}
+	return resp.Version
+}
+
 // Stop implements the Controller gRPC server interface
 func (s *ControllerGRPCServer) Stop(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.Empty, error) {
 	err := s.Impl.Stop()
@@ -80,4 +98,16 @@ func (s *ControllerGRPCServer) Command(req *fmtrpc.Frame, stream fmtrpc.Controll
 			return stream.Context().Err()
 		}
 	}
+}
+
+// PushVersion implements the Controller gRPC server interface
+func (s *ControllerGRPCServer) PushVersion(ctx context.Context, req *fmtrpc.VersionNumber) (*fmtrpc.Empty, error) {
+	err := s.Impl.PushVersion(req.Version)
+	return &fmtrpc.Empty{}, err
+}
+
+// GetVersion implements the Controller gRPC server interface
+func (s *ControllerGRPCServer) GetVersion(ctx context.Context, _ *fmtrpc.Empty) (*fmtrpc.VersionNumber, error) {
+	v := s.Impl.GetVersion()
+	return &fmtrpc.VersionNumber{Version: v}, nil
 }
