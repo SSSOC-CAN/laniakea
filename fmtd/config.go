@@ -16,9 +16,17 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	flags "github.com/jessevdk/go-flags"
 	yaml "gopkg.in/yaml.v2"
+)
+
+const (
+	ErrInvalidPluginName  = bg.Error("invalid plugin name")
+	ErrInvalidPluginExec  = bg.Error("invalid plugin executable")
+	ErrPluginExecNotFound = bg.Error("plugin executable not found")
 )
 
 type PluginConfig struct {
@@ -27,6 +35,7 @@ type PluginConfig struct {
 	ExecName    string `yaml:"exec"`
 	Timeout     int64  `yaml:"timeout"`
 	MaxTimeouts int64  `yaml:"maxTimeouts"`
+	Version     int64  `yaml:"version"`
 }
 
 // Config is the object which will hold all of the config parameters
@@ -79,6 +88,9 @@ var (
 	default_log_file_size       int64  = 10
 	default_max_log_files       int64  = 0
 	default_plugin_dir          string = default_log_dir()
+	default_plugin_timeout      int64  = 30
+	default_plugin_max_timeouts int64  = 3
+	default_plugin_version      int64  = 1
 	default_config                     = func() Config {
 		return Config{
 			DefaultLogDir:  true,
@@ -128,6 +140,11 @@ func InitConfig(isTesting bool) (Config, error) {
 		} else {
 			// Need to check if any config parameters aren't defined in `config.yaml` and assign them a default value
 			config = check_yaml_config(config)
+			if len(config.Plugins) > 0 {
+				for _, cfg := range config.Plugins {
+					validatePluginConfig(cfg, config.PluginDir)
+				}
+			}
 		}
 		config.WSPingInterval = default_ws_ping_interval
 		config.WSPongWait = default_ws_pong_wait
@@ -138,19 +155,35 @@ func InitConfig(isTesting bool) (Config, error) {
 			return Config{}, err
 		}
 	}
-	// TODO:SSSOCPaulCote - A new config validation
-	// if len(config.Plugins) > 0 {
-	// 	newPlugs := []string{}
-	// 	for _, plug := range config.Plugins {
-	// 		if utils.VerifyPluginStringFormat(plug) {
-	// 			newPlugs = append(newPlugs, plug)
-	// 			continue
-	// 		}
-	// 		log.Printf("Could not add %s plugin, check plugin string format\n", plug)
-	// 	}
-	// 	config.Plugins = newPlugs
-	// }
 	return config, nil
+}
+
+// validatePluginConfig takes a PluginConfig and validates the parameters
+func validatePluginConfig(cfg *PluginConfig, pluginDir string) {
+	// checks that the plugin has a valid name and executable
+	if !utils.ValidatePluginName(cfg.Name) {
+		panic(ErrInvalidPluginName)
+	} else if !utils.ValidatePluginExec(cfg.ExecName) {
+		panic(ErrInvalidPluginExec)
+	}
+	// check that the plugin type is either a datasource or controller
+	if cfg.Type != "datasource" && cfg.Type != "controller" {
+		panic(errors.ErrInvalidPluginType)
+	}
+	// TODO:check if this is OS agnostic
+	if !utils.FileExists(filepath.Join(pluginDir, cfg.ExecName)) {
+		panic(ErrPluginExecNotFound)
+	}
+	// if timeout or maxtimeout or version are 0 set to default values
+	if cfg.Timeout == int64(0) {
+		cfg.Timeout = default_plugin_timeout
+	}
+	if cfg.MaxTimeouts == int64(0) {
+		cfg.MaxTimeouts = default_plugin_max_timeouts
+	}
+	if cfg.Version == int64(0) {
+		cfg.Version = default_plugin_version
+	}
 }
 
 // change_field changes the value of a specified field from the config struct
