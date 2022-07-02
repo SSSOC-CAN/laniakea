@@ -264,6 +264,9 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 	if i.getState() == fmtrpc.Plugin_STOPPING || i.getState() == fmtrpc.Plugin_STOPPED || i.getState() == fmtrpc.Plugin_KILLED {
 		return e.ErrServiceAlreadyStopped
 	}
+	if i.client == nil {
+		return ErrPluginNotStarted
+	}
 	i.setStopping()
 	defer i.setStopped()
 	// try to gracefully stop recording if recording
@@ -284,8 +287,53 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 			}
 		}
 	}
-	i.kill()
-	return err
+	defer i.kill()
+	// we call the plugin Stop function to do a safe plugin stop if possible
+	// check plugin type
+	gRPCClient, err := i.client.Client()
+	if err != nil {
+		i.setUnknown()
+		return err
+	}
+	raw, err := gRPCClient.Dispense(i.cfg.Name)
+	if err != nil {
+		i.setUnknown()
+		return err
+	}
+	// create timeout context
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
+	defer cancel()
+	errChan := make(chan error)
+
+	switch plug := raw.(type) {
+	case Datasource:
+		plug = plug.(Datasource)
+		go func(ctx context.Context, errChan chan error) {
+			err := plug.Stop()
+			if err != nil {
+				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
+			}
+			errChan <- err
+		}(ctx, errChan)
+	case Controller:
+		plug = plug.(Controller)
+		go func(ctx context.Context, errChan chan error) {
+			err := plug.Stop()
+			if err != nil {
+				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
+			}
+			errChan <- err
+		}(ctx, errChan)
+	default:
+		return ErrInvalidPluginType
+	}
+	select {
+	case <-ctx.Done():
+		i.logger.Error().Msg(ErrPluginTimeout.Error())
+		return ctx.Err()
+	case err := <-errChan:
+		return err
+	}
 }
 
 // setClient will set a new plugin client for the plugin instace
