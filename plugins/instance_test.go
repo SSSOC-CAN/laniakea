@@ -178,24 +178,6 @@ func TestStopNoPlugin(t *testing.T) {
 			t.Errorf("Unexpected error when calling stop: %v", err)
 		}
 	})
-	t.Run("not recording", func(t *testing.T) {
-		defer instance.setReady()
-		defer func() {
-			instance.setLogger(&logger)
-		}()
-		err := instance.stop(context.Background())
-		if err != nil {
-			t.Errorf("Unexpected error when calling stop: %v", err)
-		}
-	})
-	t.Run("recording", func(t *testing.T) {
-		instance.setRecording()
-		defer instance.setNotRecording()
-		err := instance.stop(context.Background())
-		if err != ErrPluginNotReady {
-			t.Errorf("Unexpected error when calling stop: %v", err)
-		}
-	})
 }
 
 // TestCommandNoPlugin tests the plugin instance command function without a plugin started
