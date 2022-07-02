@@ -47,14 +47,14 @@ const (
 var logTimestampRegexp = regexp.MustCompile(`^[\d\s\:\/\.\+-TZ]*`)
 
 type PluginLogger struct {
-	zl *zerolog.Logger
+	zl      *zerolog.Logger
 	implied []interface{}
-	name string
+	name    string
 }
 
-func NewPluginLogger(name string, logger *zerolog.Logger) hclog.Logger {
+func NewPluginLogger(name string, logger *zerolog.Logger) *PluginLogger {
 	return &PluginLogger{
-		zl: logger,
+		zl:   logger,
 		name: name,
 	}
 }
@@ -186,7 +186,7 @@ func (l *PluginLogger) IsError() bool {
 }
 
 // ImpliedArgs returns the loggers implied args
-func (l *PluginLogger) ImpliedArgs() []interace{} {
+func (l *PluginLogger) ImpliedArgs() []interface{} {
 	return l.implied
 }
 
@@ -216,7 +216,7 @@ func (l *PluginLogger) With(args ...interface{}) hclog.Logger {
 		newImplied = append(newImplied, MissingKey, extra)
 	}
 	return &PluginLogger{
-		zl:      sl,
+		zl:      &sl,
 		implied: newImplied,
 		name:    l.name,
 	}
@@ -229,26 +229,28 @@ func (l *PluginLogger) Name() string {
 
 // Creates a new sub-logger with added name
 func (l *PluginLogger) Named(name string) hclog.Logger {
-	newName := l.name+"."+name
+	newName := l.name + "." + name
+	zl := l.zl.With().Logger()
 	return &PluginLogger{
-		zl: l.zl.With().Logger(),
+		zl:      &zl,
 		implied: l.implied[:],
-		name: newName,
+		name:    newName,
 	}
 }
 
 // ResetNamed returns a new sub-logger with the given name
 func (l *PluginLogger) ResetNamed(name string) hclog.Logger {
+	zl := l.zl.With().Logger()
 	return &PluginLogger{
-		zl: l.zl.With().Logger(),
+		zl:      &zl,
 		implied: l.implied[:],
-		name: name,
+		name:    name,
 	}
 }
 
 // SetLevel doesn't do anything right now, just satisfies the interface
 func (l *PluginLogger) SetLevel(level hclog.Level) {
-	//TODO:SSSOCPaulCote - Implement this 
+	//TODO:SSSOCPaulCote - Implement this
 	return
 }
 
@@ -264,18 +266,18 @@ func (l *PluginLogger) StandardLogger(opts *hclog.StandardLoggerOptions) *log.Lo
 // StandardWriter returns an io package standard writer
 func (l *PluginLogger) StandardWriter(opts *hclog.StandardLoggerOptions) io.Writer {
 	return &LogWriter{
-		log: &l.zl,
-		inferLevels: opts.InferLevels,
-		inferLevelsWithTimestamp: opts.inferLevelsWithTimestamp,
-		forceLevel: opts.ForceLevel,
+		log:                      l.zl,
+		inferLevels:              opts.InferLevels,
+		inferLevelsWithTimestamp: opts.InferLevelsWithTimestamp,
+		forceLevel:               opts.ForceLevel,
 	}
 }
 
 type LogWriter struct {
-	log	zerolog.Logger
-	inferLevels bool
+	log                      *zerolog.Logger
+	inferLevels              bool
 	inferLevelsWithTimestamp bool
-	forceLevel hclog.Level
+	forceLevel               hclog.Level
 }
 
 func (w *LogWriter) Write(data []byte) (int, error) {
