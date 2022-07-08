@@ -1,16 +1,10 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "plugin.proto",
+    "title": "pluginapi.proto",
     "version": "version not set"
   },
   "tags": [
-    {
-      "name": "Datasource"
-    },
-    {
-      "name": "Controller"
-    },
     {
       "name": "PluginAPI"
     }
@@ -66,13 +60,13 @@
               "type": "object",
               "properties": {
                 "result": {
-                  "$ref": "#/definitions/fmtrpcFrame"
+                  "$ref": "#/definitions/protoFrame"
                 },
                 "error": {
                   "$ref": "#/definitions/rpcStatus"
                 }
               },
-              "title": "Stream result of fmtrpcFrame"
+              "title": "Stream result of protoFrame"
             }
           },
           "default": {
@@ -105,7 +99,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcEmpty"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -137,7 +131,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcEmpty"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -169,7 +163,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcEmpty"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -201,7 +195,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcEmpty"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -236,13 +230,13 @@
               "type": "object",
               "properties": {
                 "result": {
-                  "$ref": "#/definitions/fmtrpcFrame"
+                  "$ref": "#/definitions/protoFrame"
                 },
                 "error": {
                   "$ref": "#/definitions/rpcStatus"
                 }
               },
-              "title": "Stream result of fmtrpcFrame"
+              "title": "Stream result of protoFrame"
             }
           },
           "default": {
@@ -320,34 +314,8 @@
           "title": "the name of the plugin we wish to send the command to"
         },
         "frame": {
-          "$ref": "#/definitions/fmtrpcFrame",
+          "$ref": "#/definitions/protoFrame",
           "title": "the data we are sending to the plugin"
-        }
-      }
-    },
-    "fmtrpcEmpty": {
-      "type": "object"
-    },
-    "fmtrpcFrame": {
-      "type": "object",
-      "properties": {
-        "source": {
-          "type": "string",
-          "title": "The name of the source of this Frame"
-        },
-        "type": {
-          "type": "string",
-          "title": "A MIME-like type indicating the kind of content within the payload field"
-        },
-        "timestamp": {
-          "type": "string",
-          "format": "int64",
-          "title": "The UNIX millisecond timestamp of this frame"
-        },
-        "payload": {
-          "type": "string",
-          "format": "byte",
-          "title": "The actual payload data in bytes. Limit is 2^32"
         }
       }
     },
@@ -421,11 +389,29 @@
         }
       }
     },
-    "fmtrpcVersionNumber": {
+    "protoEmpty": {
+      "type": "object"
+    },
+    "protoFrame": {
       "type": "object",
       "properties": {
-        "version": {
-          "type": "string"
+        "source": {
+          "type": "string",
+          "title": "The name of the source of this Frame"
+        },
+        "type": {
+          "type": "string",
+          "title": "A MIME-like type indicating the kind of content within the payload field"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "int64",
+          "title": "The UNIX millisecond timestamp of this frame"
+        },
+        "payload": {
+          "type": "string",
+          "format": "byte",
+          "title": "The actual payload data in bytes. Limit is 2^32"
         }
       }
     },

@@ -11,6 +11,8 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
@@ -145,7 +147,7 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 		i.setUnknown()
 		return err
 	}
-	datasource, ok := raw.(Datasource)
+	datasource, ok := raw.(sdk.Datasource)
 	if !ok {
 		i.setUnknown()
 		return ErrInvalidPluginType
@@ -212,7 +214,7 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 		i.setUnknown()
 		return err
 	}
-	datasource, ok := raw.(Datasource)
+	datasource, ok := raw.(sdk.Datasource)
 	if !ok {
 		i.setUnknown()
 		return ErrInvalidPluginType
@@ -306,8 +308,8 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 	errChan := make(chan error)
 
 	switch plug := raw.(type) {
-	case Datasource:
-		plug = plug.(Datasource)
+	case sdk.Datasource:
+		plug = plug.(sdk.Datasource)
 		go func(ctx context.Context, errChan chan error) {
 			err := plug.Stop()
 			if err != nil {
@@ -315,8 +317,8 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 			}
 			errChan <- err
 		}(ctx, errChan)
-	case Controller:
-		plug = plug.(Controller)
+	case sdk.Controller:
+		plug = plug.(sdk.Controller)
 		go func(ctx context.Context, errChan chan error) {
 			err := plug.Stop()
 			if err != nil {
@@ -351,7 +353,7 @@ func (i *PluginInstance) setLogger(logger *zerolog.Logger) {
 }
 
 // command will pass along a command frame to a controller plugin and store the streamed data in the queue
-func (i *PluginInstance) command(ctx context.Context, frame *fmtrpc.Frame) error {
+func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error {
 	// check if plugin is ready
 	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
 		return ErrPluginNotReady
@@ -372,7 +374,7 @@ func (i *PluginInstance) command(ctx context.Context, frame *fmtrpc.Frame) error
 		i.setUnknown()
 		return err
 	}
-	ctrller, ok := raw.(Controller)
+	ctrller, ok := raw.(sdk.Controller)
 	if !ok {
 		i.setUnknown()
 		return ErrInvalidPluginType
@@ -439,13 +441,13 @@ func (i *PluginInstance) pushVersion(ctx context.Context) error {
 	// spin up go routine
 	errChan := make(chan error)
 	switch plug := raw.(type) {
-	case Datasource:
-		plug = plug.(Datasource)
+	case sdk.Datasource:
+		plug = plug.(sdk.Datasource)
 		go func(ctx context.Context, errChan chan error) {
 			errChan <- plug.PushVersion(utils.AppVersion)
 		}(ctx, errChan)
-	case Controller:
-		plug = plug.(Controller)
+	case sdk.Controller:
+		plug = plug.(sdk.Controller)
 		go func(ctx context.Context, errChan chan error) {
 			errChan <- plug.PushVersion(utils.AppVersion)
 		}(ctx, errChan)
@@ -508,8 +510,8 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 		Err     error
 	})
 	switch plug := raw.(type) {
-	case Datasource:
-		plug = plug.(Datasource)
+	case sdk.Datasource:
+		plug = plug.(sdk.Datasource)
 		go func(ctx context.Context, respChan chan struct {
 			Version string
 			Err     error
@@ -523,8 +525,8 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 				Err:     err,
 			}
 		}(ctx, respChan)
-	case Controller:
-		plug = plug.(Controller)
+	case sdk.Controller:
+		plug = plug.(sdk.Controller)
 		go func(ctx context.Context, respChan chan struct {
 			Version string
 			Err     error
