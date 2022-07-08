@@ -65,11 +65,12 @@ var _ api.RestProxyService = (*PluginManager)(nil)
 // NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
 func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger) *PluginManager {
 	l := NewPluginLogger("PLGN", &zl)
+	ql := l.zl.With().Str("subsystem", "QMGR").Logger()
 	return &PluginManager{
 		pluginDir:    pluginDir,
 		pluginCfgs:   pluginCfgs,
 		logger:       l,
-		queueManager: &queue.QueueManager{Logger: zl.With().Str("subsystem", "QMGR").Logger()},
+		queueManager: queue.NewQueueManager(&ql),
 		quitChan:     make(chan struct{}),
 	}
 }
@@ -93,22 +94,17 @@ func (p *PluginManager) RegisterWithRestProxy(ctx context.Context, mux *proxy.Se
 
 // Start creates the connection to all registered plugins and establishes the connection to the API service
 func (p *PluginManager) Start(ctx context.Context) error {
-	instances := make(map[string]*PluginInstance)
+	p.pluginRegistry = make(map[string]*PluginInstance)
 	for _, cfg := range p.pluginCfgs {
-		if _, ok := instances[cfg.Name]; ok {
+		if _, ok := p.pluginRegistry[cfg.Name]; ok {
 			return ErrDuplicatePluginName
 		}
-		plug, err := getPluginFromType(cfg.Type)
+		newInstance, err := p.createPluginInstance(ctx, cfg)
 		if err != nil {
 			return err
 		}
-		newInstance, err := p.createPluginInstance(ctx, cfg, plug)
-		if err != nil {
-			return err
-		}
-		instances[cfg.Name] = newInstance
+		p.pluginRegistry[cfg.Name] = newInstance
 	}
-	p.pluginRegistry = instances
 	go p.monitorPlugins(ctx)
 	return nil
 }
@@ -158,23 +154,6 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 	}
 }
 
-// getPluginFromType gets the plugin instance based on the type
-func getPluginFromType(typeStr string) (plugin.Plugin, error) {
-	var (
-		plug plugin.Plugin
-		err  error
-	)
-	switch typeStr {
-	case DATASOURCE_STR:
-		plug = sdk.DatasourcePlugin{}
-	case CONTROLLER_STR:
-		plug = sdk.ControllerPlugin{}
-	default:
-		err = ErrInvalidPluginType
-	}
-	return plug, err
-}
-
 // getPluginCodeFromType gets the rpc plugin code from the type
 func getPluginCodeFromType(typeStr string) (fmtrpc.Plugin_PluginType, error) {
 	var (
@@ -193,19 +172,37 @@ func getPluginCodeFromType(typeStr string) (fmtrpc.Plugin_PluginType, error) {
 }
 
 // createPluginInstance creates a new plugin instance from the given plugin name and type
-func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.PluginConfig, plug plugin.Plugin) (*PluginInstance, error) {
+func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.PluginConfig) (*PluginInstance, error) {
 	// create new plugin clients
 	zLogger := p.logger.zl.With().Str("plugin", cfg.Name).Logger()
-	newClient := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig:  sdk.HandshakeConfig,
-		Plugins:          map[string]plugin.Plugin{cfg.Name: plug},
-		Cmd:              exec.Command(filepath.Join(p.pluginDir, cfg.ExecName)),
-		Logger:           NewPluginLogger(cfg.Name, &zLogger),
-		AllowedProtocols: allowedPluginProtocols,
-	})
+	// assert plugin type
+	var newClient *plugin.Client
+	switch cfg.Type {
+	case DATASOURCE_STR:
+		plug := &sdk.DatasourcePlugin{}
+		newClient = plugin.NewClient(&plugin.ClientConfig{
+			HandshakeConfig:  sdk.HandshakeConfig,
+			Plugins:          map[string]plugin.Plugin{cfg.Name: plug},
+			Cmd:              exec.Command(filepath.Join(p.pluginDir, cfg.ExecName)),
+			Logger:           NewPluginLogger(cfg.Name, &zLogger),
+			AllowedProtocols: allowedPluginProtocols,
+		})
+	case CONTROLLER_STR:
+		plug := &sdk.ControllerPlugin{}
+		newClient = plugin.NewClient(&plugin.ClientConfig{
+			HandshakeConfig:  sdk.HandshakeConfig,
+			Plugins:          map[string]plugin.Plugin{cfg.Name: plug},
+			Cmd:              exec.Command(filepath.Join(p.pluginDir, cfg.ExecName)),
+			Logger:           NewPluginLogger(cfg.Name, &zLogger),
+			AllowedProtocols: allowedPluginProtocols,
+		})
+	default:
+		return nil, ErrInvalidPluginType
+	}
 	// register the plugin with the queue manager
 	outQ, unregister, err := p.queueManager.RegisterSource(cfg.Name)
 	if err != nil {
+		newClient.Kill()
 		return nil, err
 	}
 	// create a new plugin instance object to handle plugin
@@ -219,10 +216,12 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 	// push fmtd/laniakea version and get plugin version
 	err = newInstance.pushVersion(ctx)
 	if err != nil {
+		newInstance.kill()
 		return nil, err
 	}
 	err = newInstance.getVersion(ctx)
 	if err != nil {
+		newInstance.kill()
 		return nil, err
 	}
 	cleanUp := func() {
@@ -331,17 +330,29 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 	}
 	// create new plugin client
 	zLogger := p.logger.zl.With().Str("plugin", instance.cfg.Name).Logger()
-	plug, err := getPluginFromType(instance.cfg.Type)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+	var newClient *plugin.Client
+	switch instance.cfg.Type {
+	case DATASOURCE_STR:
+		plug := &sdk.DatasourcePlugin{}
+		newClient = plugin.NewClient(&plugin.ClientConfig{
+			HandshakeConfig:  sdk.HandshakeConfig,
+			Plugins:          map[string]plugin.Plugin{instance.cfg.Name: plug},
+			Cmd:              exec.Command(filepath.Join(p.pluginDir, instance.cfg.ExecName)),
+			Logger:           NewPluginLogger(instance.cfg.Name, &zLogger),
+			AllowedProtocols: allowedPluginProtocols,
+		})
+	case CONTROLLER_STR:
+		plug := &sdk.ControllerPlugin{}
+		newClient = plugin.NewClient(&plugin.ClientConfig{
+			HandshakeConfig:  sdk.HandshakeConfig,
+			Plugins:          map[string]plugin.Plugin{instance.cfg.Name: plug},
+			Cmd:              exec.Command(filepath.Join(p.pluginDir, instance.cfg.ExecName)),
+			Logger:           NewPluginLogger(instance.cfg.Name, &zLogger),
+			AllowedProtocols: allowedPluginProtocols,
+		})
+	default:
+		return nil, status.Error(codes.InvalidArgument, ErrInvalidPluginType.Error())
 	}
-	newClient := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig:  sdk.HandshakeConfig,
-		Plugins:          map[string]plugin.Plugin{instance.cfg.Name: plug},
-		Cmd:              exec.Command(filepath.Join(p.pluginDir, instance.cfg.ExecName)),
-		Logger:           NewPluginLogger(instance.cfg.Name, &zLogger),
-		AllowedProtocols: allowedPluginProtocols,
-	})
 	instance.setClient(newClient)
 	instance.setLogger(&zLogger)
 	instance.setReady()
@@ -374,16 +385,12 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig)
 	if _, ok := p.pluginRegistry[req.Name]; ok {
 		return nil, status.Error(codes.AlreadyExists, ErrDuplicatePluginName.Error())
 	}
-	plugType, err := getPluginFromType(req.Type)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
 	rpcPlugType, err := getPluginCodeFromType(req.Type)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	// now create new instance and add to registry
-	newInstance, err := p.createPluginInstance(ctx, req, plugType)
+	newInstance, err := p.createPluginInstance(ctx, req)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
