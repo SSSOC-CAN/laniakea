@@ -6,13 +6,13 @@ require (
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 	github.com/rs/zerolog v1.24.0
 	github.com/urfave/cli v1.22.5
-	google.golang.org/grpc v1.45.0
+	google.golang.org/grpc v1.47.0
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
-	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220708030719-918d287a75dd // indirect
+	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220708051411-fceeb64f296b // indirect
 	github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a // indirect
 	github.com/SSSOCPaulCote/gux v0.0.0-20220611205314-b5a349054bc0 // indirect
 	github.com/beorn7/perks v1.0.0 // indirect
@@ -40,6 +40,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.6.0 // indirect
 	github.com/hashicorp/go-hclog v1.2.1 // indirect
 	github.com/hashicorp/go-plugin v1.4.4 // indirect
+	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb // indirect
 	github.com/influxdata/influxdb-client-go/v2 v2.8.1 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect

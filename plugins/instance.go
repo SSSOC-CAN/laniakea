@@ -16,6 +16,7 @@ import (
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
+	"google.golang.org/grpc/status"
 )
 
 type PluginRecordState int32
@@ -153,13 +154,21 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 		return ErrInvalidPluginType
 	}
 	// spin up go routine
-	go func() {
+	errChan := make(chan error)
+	defer close(errChan)
+	go func(errChan chan error) {
 		dataChan, err := datasource.StartRecord()
 		if err != nil {
+			st, ok := status.FromError(err)
+			if ok {
+				err = bg.Error(st.Message())
+			}
+			errChan <- err
 			i.logger.Error().Msg(fmt.Sprintf("could not start recording: %v", err))
 			i.setUnknown()
 			return
 		}
+		errChan <- err
 		// change recording state
 		i.setRecording()
 		defer i.setNotRecording()
@@ -183,9 +192,16 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 				timer.Reset(time.Duration(i.cfg.Timeout) * time.Second)
 			}
 		}
-	}()
-	i.setReady()
-	return nil
+	}(errChan)
+	select {
+	case err = <-errChan:
+		if err != nil {
+			i.setUnknown()
+		} else {
+			i.setReady()
+		}
+		return err
+	}
 }
 
 // stopRecord stops the recording process of the datasource plugin
@@ -223,9 +239,14 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
 	defer cancel()
 	errChan := make(chan error)
+	defer close(errChan)
 	go func(ctx context.Context, errChan chan error) {
 		err := datasource.StopRecord()
 		if err != nil {
+			st, ok := status.FromError(err)
+			if ok {
+				err = bg.Error(st.Message())
+			}
 			i.logger.Error().Msg(fmt.Sprintf("could not stop recording: %v", err))
 			i.setUnknown()
 		} else {
@@ -306,13 +327,17 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
 	defer cancel()
 	errChan := make(chan error)
-
+	defer close(errChan)
 	switch plug := raw.(type) {
 	case sdk.Datasource:
 		plug = plug.(sdk.Datasource)
 		go func(ctx context.Context, errChan chan error) {
 			err := plug.Stop()
 			if err != nil {
+				st, ok := status.FromError(err)
+				if ok {
+					err = bg.Error(st.Message())
+				}
 				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
 			}
 			errChan <- err
@@ -322,6 +347,10 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 		go func(ctx context.Context, errChan chan error) {
 			err := plug.Stop()
 			if err != nil {
+				st, ok := status.FromError(err)
+				if ok {
+					err = bg.Error(st.Message())
+				}
 				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
 			}
 			errChan <- err
@@ -380,13 +409,21 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 		return ErrInvalidPluginType
 	}
 	// spin up go routine
-	go func() {
+	errChan := make(chan error)
+	defer close(errChan)
+	go func(errChan chan error) {
 		dataChan, err := ctrller.Command(frame)
 		if err != nil {
+			st, ok := status.FromError(err)
+			if ok {
+				err = bg.Error(st.Message())
+			}
+			errChan <- err
 			i.logger.Error().Msg(fmt.Sprintf("could not send command: %v", err))
 			i.setUnknown()
 			return
 		}
+		errChan <- err
 		timer := time.NewTimer(time.Duration(i.cfg.Timeout) * time.Second)
 	loop:
 		for {
@@ -407,9 +444,16 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 				timer.Reset(time.Duration(i.cfg.Timeout) * time.Second)
 			}
 		}
-	}()
-	i.setReady()
-	return nil
+	}(errChan)
+	select {
+	case err = <-errChan:
+		if err != nil {
+			i.setUnknown()
+		} else {
+			i.setReady()
+		}
+		return err
+	}
 }
 
 // pushVersion will push the fmtd/laniakea version to the plugin for compatibility reasons
@@ -429,7 +473,8 @@ func (i *PluginInstance) pushVersion(ctx context.Context) error {
 		i.setUnknown()
 		return err
 	}
-	raw, err := gRPCClient.Dispense(i.cfg.Name)
+	b := gRPCClient.(*plugin.GRPCClient)
+	raw, err := b.Dispense(i.cfg.Name)
 	if err != nil {
 		i.setUnknown()
 		return err
@@ -440,6 +485,7 @@ func (i *PluginInstance) pushVersion(ctx context.Context) error {
 
 	// spin up go routine
 	errChan := make(chan error)
+	defer close(errChan)
 	switch plug := raw.(type) {
 	case sdk.Datasource:
 		plug = plug.(sdk.Datasource)
@@ -455,17 +501,19 @@ func (i *PluginInstance) pushVersion(ctx context.Context) error {
 		i.setUnknown()
 		return ErrInvalidPluginType
 	}
-
 	// wait for error response
 	select {
 	case err = <-errChan:
 		if err != nil {
 			i.setUnknown()
-			return err
+			st, ok := status.FromError(err)
+			if ok {
+				err = bg.Error(st.Message())
+			}
 		} else {
 			i.setReady()
-			return nil
 		}
+		return err
 	case <-ctx.Done():
 		i.setUnresponsive()
 		return context.Canceled
@@ -509,6 +557,7 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 		Version string
 		Err     error
 	})
+	defer close(respChan)
 	switch plug := raw.(type) {
 	case sdk.Datasource:
 		plug = plug.(sdk.Datasource)
@@ -548,14 +597,18 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 	// wait for error response
 	select {
 	case resp := <-respChan:
-		if resp.Err != nil {
+		err = resp.Err
+		if err != nil {
+			st, ok := status.FromError(err)
+			if ok {
+				err = bg.Error(st.Message())
+			}
 			i.setUnknown()
-			return resp.Err
 		} else {
 			i.setVersion(resp.Version)
 			i.setReady()
-			return nil
 		}
+		return err
 	case <-ctx.Done():
 		i.setUnresponsive()
 		return context.Canceled
