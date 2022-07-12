@@ -105,6 +105,7 @@ func (p *PluginManager) Start(ctx context.Context) error {
 		}
 		p.pluginRegistry[cfg.Name] = newInstance
 	}
+	p.Add(1)
 	go p.monitorPlugins(ctx)
 	return nil
 }
@@ -224,6 +225,7 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 		newInstance.kill()
 		return nil, err
 	}
+	p.logger.zl.Info().Msg(fmt.Sprintf("registered plugin %s version: %v", newInstance.cfg.Name, newInstance.version))
 	cleanUp := func() {
 		if newInstance.client != nil {
 			err = newInstance.stop(ctx)

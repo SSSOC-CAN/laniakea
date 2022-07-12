@@ -154,10 +154,11 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 		return ErrInvalidPluginType
 	}
 	// spin up go routine
-	errChan := make(chan error)
-	defer close(errChan)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
+	defer cancel()
+	errChan := make(chan error, 1) // set a buffer so that the goroutine doesn't hang if there's no one to receive from the channel
 	go func(errChan chan error) {
-		dataChan, err := datasource.StartRecord()
+		dataChan, err := datasource.StartRecord() // this can freeze, passing context would be nice
 		if err != nil {
 			st, ok := status.FromError(err)
 			if ok {
@@ -201,6 +202,10 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 			i.setReady()
 		}
 		return err
+	case <-ctx.Done():
+		i.logger.Error().Msg(ErrPluginTimeout.Error())
+		i.setUnresponsive()
+		return ctx.Err()
 	}
 }
 
@@ -238,9 +243,8 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	// create timeout context
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
 	defer cancel()
-	errChan := make(chan error)
-	defer close(errChan)
-	go func(ctx context.Context, errChan chan error) {
+	errChan := make(chan error, 1)
+	go func(errChan chan error) {
 		err := datasource.StopRecord()
 		if err != nil {
 			st, ok := status.FromError(err)
@@ -253,7 +257,7 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 			i.setNotRecording()
 		}
 		errChan <- err
-	}(ctx, errChan)
+	}(errChan)
 	select {
 	case <-ctx.Done():
 		i.logger.Error().Msg(ErrPluginTimeout.Error())
@@ -295,8 +299,9 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 	// try to gracefully stop recording if recording
 	var err error
 	if i.getRecordState() == RECORDING {
-		errChan := make(chan error)
+		errChan := make(chan error, 1)
 		go func(ctx context.Context, errChan chan error) {
+			defer close(errChan)
 			err := i.stopRecord(ctx)
 			errChan <- err
 		}(ctx, errChan)
@@ -326,12 +331,11 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 	// create timeout context
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
 	defer cancel()
-	errChan := make(chan error)
-	defer close(errChan)
+	errChan := make(chan error, 1)
 	switch plug := raw.(type) {
 	case sdk.Datasource:
 		plug = plug.(sdk.Datasource)
-		go func(ctx context.Context, errChan chan error) {
+		go func(errChan chan error) {
 			err := plug.Stop()
 			if err != nil {
 				st, ok := status.FromError(err)
@@ -341,10 +345,11 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
 			}
 			errChan <- err
-		}(ctx, errChan)
+		}(errChan)
 	case sdk.Controller:
 		plug = plug.(sdk.Controller)
-		go func(ctx context.Context, errChan chan error) {
+		go func(errChan chan error) {
+			defer close(errChan)
 			err := plug.Stop()
 			if err != nil {
 				st, ok := status.FromError(err)
@@ -354,7 +359,7 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
 			}
 			errChan <- err
-		}(ctx, errChan)
+		}(errChan)
 	default:
 		return ErrInvalidPluginType
 	}
@@ -409,8 +414,9 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 		return ErrInvalidPluginType
 	}
 	// spin up go routine
-	errChan := make(chan error)
-	defer close(errChan)
+	errChan := make(chan error, 1)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(i.cfg.Timeout)*time.Second)
+	defer cancel()
 	go func(errChan chan error) {
 		dataChan, err := ctrller.Command(frame)
 		if err != nil {
@@ -453,6 +459,10 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 			i.setReady()
 		}
 		return err
+	case <-ctx.Done():
+		i.logger.Error().Msg(ErrPluginTimeout.Error())
+		i.setUnresponsive()
+		return ctx.Err()
 	}
 }
 
@@ -484,19 +494,18 @@ func (i *PluginInstance) pushVersion(ctx context.Context) error {
 	defer cancel()
 
 	// spin up go routine
-	errChan := make(chan error)
-	defer close(errChan)
+	errChan := make(chan error, 1)
 	switch plug := raw.(type) {
 	case sdk.Datasource:
 		plug = plug.(sdk.Datasource)
-		go func(ctx context.Context, errChan chan error) {
+		go func(errChan chan error) {
 			errChan <- plug.PushVersion(utils.AppVersion)
-		}(ctx, errChan)
+		}(errChan)
 	case sdk.Controller:
 		plug = plug.(sdk.Controller)
-		go func(ctx context.Context, errChan chan error) {
+		go func(errChan chan error) {
 			errChan <- plug.PushVersion(utils.AppVersion)
-		}(ctx, errChan)
+		}(errChan)
 	default:
 		i.setUnknown()
 		return ErrInvalidPluginType
@@ -515,8 +524,9 @@ func (i *PluginInstance) pushVersion(ctx context.Context) error {
 		}
 		return err
 	case <-ctx.Done():
+		i.logger.Error().Msg(ErrPluginTimeout.Error())
 		i.setUnresponsive()
-		return context.Canceled
+		return ctx.Err()
 	}
 }
 
@@ -556,12 +566,11 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 	respChan := make(chan struct {
 		Version string
 		Err     error
-	})
-	defer close(respChan)
+	}, 1)
 	switch plug := raw.(type) {
 	case sdk.Datasource:
 		plug = plug.(sdk.Datasource)
-		go func(ctx context.Context, respChan chan struct {
+		go func(respChan chan struct {
 			Version string
 			Err     error
 		}) {
@@ -573,10 +582,10 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 				Version: version,
 				Err:     err,
 			}
-		}(ctx, respChan)
+		}(respChan)
 	case sdk.Controller:
 		plug = plug.(sdk.Controller)
-		go func(ctx context.Context, respChan chan struct {
+		go func(respChan chan struct {
 			Version string
 			Err     error
 		}) {
@@ -588,7 +597,7 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 				Version: version,
 				Err:     err,
 			}
-		}(ctx, respChan)
+		}(respChan)
 	default:
 		i.setUnknown()
 		return ErrInvalidPluginType
@@ -610,8 +619,9 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 		}
 		return err
 	case <-ctx.Done():
+		i.logger.Error().Msg(ErrPluginTimeout.Error())
 		i.setUnresponsive()
-		return context.Canceled
+		return ctx.Err()
 	}
 }
 
