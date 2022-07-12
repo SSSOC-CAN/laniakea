@@ -25,6 +25,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
@@ -94,6 +95,36 @@ func TestRegisterWithRestProxy(t *testing.T) {
 	if err != nil {
 		t.Errorf("Could not register with Rest Proxy: %v", err)
 	}
+}
+
+// initTestingSetup
+func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginConfig) (*PluginManager, fmtrpc.PluginAPIClient, func()) {
+	lis = bufconn.Listen(bufSize)
+	grpcServer := grpc.NewServer()
+	pluginDir := getPluginDir(t)
+	pluginManager := initPluginManager(t, pluginDir, cfgs)
+	_ = pluginManager.RegisterWithGrpcServer(grpcServer)
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			t.Fatalf("Server exited with error: %v", err)
+		}
+	}()
+	err := pluginManager.Start(ctx)
+	if err != nil {
+		t.Fatalf("Could not start plugin manager: %v", err)
+	}
+	// Now set up client connection
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	client := fmtrpc.NewPluginAPIClient(conn)
+	cleanUp := func() {
+		grpcServer.Stop()
+		pluginManager.Stop()
+		conn.Close()
+	}
+	return pluginManager, client, cleanUp
 }
 
 var (
@@ -229,28 +260,31 @@ var (
 	rngPluginName     = "test-rng-plugin"
 	timeoutPluginName = "test-timeout-plugin"
 	errorPluginName   = "test-error-plugin"
-	datasourceCfgs    = []*fmtrpc.PluginConfig{
-		{
-			Name:        rngPluginName,
-			Type:        DATASOURCE_STR,
-			ExecName:    "test_rng_plugin",
-			Timeout:     defaultPluginTimeout,
-			MaxTimeouts: defaultPluginMaxTimeouts,
-		},
-		{
-			Name:        timeoutPluginName,
-			Type:        DATASOURCE_STR,
-			ExecName:    "test_timeout_plugin",
-			Timeout:     15,
-			MaxTimeouts: defaultPluginMaxTimeouts,
-		},
-		{
-			Name:        errorPluginName,
-			Type:        DATASOURCE_STR,
-			ExecName:    "test_error_plugin",
-			Timeout:     15,
-			MaxTimeouts: defaultPluginMaxTimeouts,
-		},
+	rngPluginCfg      = &fmtrpc.PluginConfig{
+		Name:        rngPluginName,
+		Type:        DATASOURCE_STR,
+		ExecName:    "test_rng_plugin",
+		Timeout:     defaultPluginTimeout,
+		MaxTimeouts: defaultPluginMaxTimeouts,
+	}
+	timeoutPluginCfg = &fmtrpc.PluginConfig{
+		Name:        timeoutPluginName,
+		Type:        DATASOURCE_STR,
+		ExecName:    "test_timeout_plugin",
+		Timeout:     15,
+		MaxTimeouts: defaultPluginMaxTimeouts,
+	}
+	errPluginCfg = &fmtrpc.PluginConfig{
+		Name:        errorPluginName,
+		Type:        DATASOURCE_STR,
+		ExecName:    "test_error_plugin",
+		Timeout:     15,
+		MaxTimeouts: defaultPluginMaxTimeouts,
+	}
+	datasourceCfgs = []*fmtrpc.PluginConfig{
+		rngPluginCfg,
+		timeoutPluginCfg,
+		errPluginCfg,
 	}
 )
 
@@ -261,32 +295,9 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 // TestDatasourcePlugin tests a dummy datasource plugin to ensure PluginAPI functionality
 func TestDatasourcePlugin(t *testing.T) {
-	lis = bufconn.Listen(bufSize)
-	grpcServer := grpc.NewServer()
-	pluginDir := getPluginDir(t)
-	pluginManager := initPluginManager(t, pluginDir, datasourceCfgs)
-	_ = pluginManager.RegisterWithGrpcServer(grpcServer)
-	go func() {
-		if err := grpcServer.Serve(lis); err != nil {
-			t.Fatalf("Server exited with error: %v", err)
-		}
-	}()
-	defer grpcServer.Stop()
 	ctx := context.Background()
-	err := pluginManager.Start(ctx)
-	if err != nil {
-		t.Fatalf("Could not start plugin manager: %v", err)
-	}
-	defer pluginManager.Stop()
-
-	// Now set up client connection
-
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
-	client := fmtrpc.NewPluginAPIClient(conn)
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, datasourceCfgs)
+	defer cleanUp()
 	t.Run("start record-plugin not registered", func(t *testing.T) {
 		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
 		st, ok := status.FromError(err)
@@ -495,42 +506,206 @@ func TestDatasourcePlugin(t *testing.T) {
 }
 
 var (
-	invalidPluginCfg = &fmtrpc.PluginConfig{
-		Name:        "invalid-plugin",
-		Type:        "not-a-valid-type",
-		ExecName:    "invalid_plugin",
-		Timeout:     defaultPluginTimeout,
+	addPluginCfgs = []*fmtrpc.PluginConfig{
+		{
+			Name:        rngPluginName,
+			Type:        DATASOURCE_STR,
+			ExecName:    "test_rng_plugin",
+			Timeout:     defaultPluginTimeout,
+			MaxTimeouts: defaultPluginMaxTimeouts,
+		},
+		{
+			Name:        timeoutPluginName,
+			Type:        DATASOURCE_STR,
+			ExecName:    "test_timeout_plugin",
+			Timeout:     15,
+			MaxTimeouts: defaultPluginMaxTimeouts,
+		},
+	}
+	invalidPlugNameCfg = &fmtrpc.PluginConfig{
+		Name: "not.asd$vaslidplugin",
+	}
+	invalidPlugExecCfgs = []*fmtrpc.PluginConfig{
+		{
+			Name:     "test-plugin",
+			ExecName: "nasdnf$.exe",
+		},
+		{
+			Name:     "test-plugin",
+			ExecName: "nasdnf_asQfd123.ex_e",
+		},
+	}
+	invalidPlugTypeCfg = &fmtrpc.PluginConfig{
+		Name:     "test-plugin",
+		ExecName: "test_plugin",
+		Type:     "not-a-valid-plugin-type",
+	}
+	invalidPlugNoFileCfg = &fmtrpc.PluginConfig{
+		Name:     "test-plugin",
+		ExecName: "test_plugin",
+		Type:     DATASOURCE_STR,
+	}
+	invalidPlugAlreadyExistsCfg = &fmtrpc.PluginConfig{
+		Name:     rngPluginName,
+		ExecName: "test_rng_plugin",
+		Type:     DATASOURCE_STR,
+	}
+	validAddPlugin = &fmtrpc.PluginConfig{
+		Name:        errorPluginName,
+		Type:        DATASOURCE_STR,
+		ExecName:    "test_error_plugin",
+		Timeout:     15,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
 )
 
 // TestPluginAPI tests the AddPlugin, GetPlugin and ListPlugins gRPC methods
 func TestPluginAPI(t *testing.T) {
-	lis = bufconn.Listen(bufSize)
-	grpcServer := grpc.NewServer()
-	pluginDir := getPluginDir(t)
-	pluginManager := initPluginManager(t, pluginDir, datasourceCfgs)
-	_ = pluginManager.RegisterWithGrpcServer(grpcServer)
-	go func() {
-		if err := grpcServer.Serve(lis); err != nil {
-			t.Fatalf("Server exited with error: %v", err)
-		}
-	}()
-	defer grpcServer.Stop()
 	ctx := context.Background()
-	err := pluginManager.Start(ctx)
-	if err != nil {
-		t.Fatalf("Could not start plugin manager: %v", err)
-	}
-	defer pluginManager.Stop()
+	_, client, cleanUp := initTestingSetup(t, ctx, addPluginCfgs)
+	defer cleanUp()
+	t.Run("add plugin-invalid plugin name", func(t *testing.T) {
+		_, err := client.AddPlugin(ctx, invalidPlugNameCfg)
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
+		}
+		if st.Message() != ErrInvalidPluginName.Error() {
+			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
+		}
+	})
+	t.Run("add plugin-invalid plugin executables", func(t *testing.T) {
+		for _, cfg := range invalidPlugExecCfgs {
+			_, err := client.AddPlugin(ctx, cfg)
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
+			}
+			if st.Message() != ErrInvalidPluginExec.Error() {
+				t.Errorf("Unexpected error when calling AddPlugin: %v", err)
+			}
+		}
+	})
+	t.Run("add plugin-invalid plugin type", func(t *testing.T) {
+		_, err := client.AddPlugin(ctx, invalidPlugTypeCfg)
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
+		}
+		if st.Message() != ErrInvalidPluginType.Error() {
+			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
+		}
+	})
+	t.Run("add plugin-exec not found", func(t *testing.T) {
+		_, err := client.AddPlugin(ctx, invalidPlugNoFileCfg)
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
+		}
+		if st.Message() != ErrPluginExecNotFound.Error() {
+			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
+		}
+	})
+	t.Run("add plugin-plugin already registered", func(t *testing.T) {
+		_, err := client.AddPlugin(ctx, invalidPlugAlreadyExistsCfg)
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
+		}
+		if st.Message() != ErrDuplicatePluginName.Error() {
+			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
+		}
+	})
+	t.Run("add plugin-valid", func(t *testing.T) {
+		resp, err := client.AddPlugin(ctx, validAddPlugin)
+		if err != nil {
+			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
+		}
+		plugType, err := getPluginCodeFromType(validAddPlugin.Type)
+		if err != nil {
+			t.Errorf("Unexpected error when calling getPluginCodeFromType: %v", err)
+		}
+		if resp.Name != validAddPlugin.Name {
+			t.Errorf("Unexpected plugin name mismatch: expected %v got %v", validAddPlugin.Name, resp.Name)
+		} else if resp.Type != plugType {
+			t.Errorf("Unexpected plugin type mismatch: expected %v got %v", plugType, resp.Type)
+		} else if resp.State != fmtrpc.Plugin_READY {
+			t.Errorf("Unexpected plugin state mismatch: expected %v got %v", fmtrpc.Plugin_READY, resp.State)
+		}
+	})
+}
 
-	// Now set up client connection
-
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
+var (
+	getPluginCfgs         = datasourceCfgs
+	getPluginUnregistered = &fmtrpc.PluginRequest{
+		Name: "not-a-registered-plugin",
 	}
-	defer conn.Close()
-	client := fmtrpc.NewPluginAPIClient(conn)
-	t.Run("")
+	getPluginValid = &fmtrpc.PluginRequest{
+		Name: errorPluginName,
+	}
+)
+
+// TestGetPlugins will test the GetPlugin and ListPlugins gRPC methods
+func TestGetPlugins(t *testing.T) {
+	ctx := context.Background()
+	_, client, cleanUp := initTestingSetup(t, ctx, getPluginCfgs)
+	defer cleanUp()
+	t.Run("get plugin-unregistered plugin", func(t *testing.T) {
+		_, err := client.GetPlugin(ctx, getPluginUnregistered)
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from GetPlugin gRPC method: %v", err)
+		}
+		if st.Message() != ErrUnregsiteredPlugin.Error() {
+			t.Errorf("Unexpected error when calling GetPlugin: %v", err)
+		}
+	})
+	t.Run("get plugin-valid", func(t *testing.T) {
+		resp, err := client.GetPlugin(ctx, getPluginValid)
+		if err != nil {
+			t.Errorf("Unexpected error when calling GetPlugin: %v", err)
+		}
+		plugType, err := getPluginCodeFromType(errPluginCfg.Type)
+		if err != nil {
+			t.Errorf("Unexpected error when calling getPluginCodeFromType: %v", err)
+		}
+		if resp.Name != errPluginCfg.Name {
+			t.Errorf("Unexpected plugin name mismatch: expected %v got %v", errPluginCfg.Name, resp.Name)
+		}
+		if resp.Type != plugType {
+			t.Errorf("Unexpected plugin type mismatch: expected %v got %v", plugType, resp.Type)
+		}
+	})
+	t.Run("list plugins-valid", func(t *testing.T) {
+		resp, err := client.ListPlugins(ctx, &proto.Empty{})
+		if err != nil {
+			t.Errorf("Unexpected error when calling ListPlugins: %v", err)
+		}
+		plugCfgMap := map[string]*fmtrpc.PluginConfig{
+			rngPluginName:     rngPluginCfg,
+			errorPluginName:   errPluginCfg,
+			timeoutPluginName: timeoutPluginCfg,
+		}
+		for _, plug := range resp.Plugins {
+			cfg, ok := plugCfgMap[plug.Name]
+			if !ok {
+				t.Errorf("Unexpected plugin list mismatch: %s plugin not given to plugin manager", plug.Name)
+			}
+			plugType, err := getPluginCodeFromType(cfg.Type)
+			if err != nil {
+				t.Errorf("Unexpected error when calling getPluginCodeFromType: %v", err)
+			}
+			if plug.Name != cfg.Name {
+				t.Errorf("Unexpected plugin name mismatch: expected %v got %v", cfg.Name, plug.Name)
+			}
+			if plug.Type != plugType {
+				t.Errorf("Unexpected plugin type mismatch: expected %v got %v", plugType, plug.Type)
+			}
+		}
+	})
+}
+
+// TestControllerPlugin will use dummy controller plugins to test some controller plugin functionality
+func TestControllerPlugin(t *testing.T) {
+
 }
