@@ -12,7 +12,7 @@ require (
 )
 
 require (
-	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220708051411-fceeb64f296b // indirect
+	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220709131505-4751d116fc0b // indirect
 	github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a // indirect
 	github.com/SSSOCPaulCote/gux v0.0.0-20220611205314-b5a349054bc0 // indirect
 	github.com/beorn7/perks v1.0.0 // indirect
