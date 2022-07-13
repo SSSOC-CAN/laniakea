@@ -8,6 +8,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -705,7 +706,125 @@ func TestGetPlugins(t *testing.T) {
 	})
 }
 
+var (
+	ctrlPluginName = "test-ctrl-plugin"
+	ctrlPluginCfg  = &fmtrpc.PluginConfig{
+		Name:        ctrlPluginName,
+		Type:        CONTROLLER_STR,
+		ExecName:    "test_ctrl_plugin",
+		Timeout:     10,
+		MaxTimeouts: 3,
+	}
+	controllerCfgs = []*fmtrpc.PluginConfig{
+		ctrlPluginCfg,
+	}
+)
+
 // TestControllerPlugin will use dummy controller plugins to test some controller plugin functionality
 func TestControllerPlugin(t *testing.T) {
-
+	ctx := context.Background()
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, controllerCfgs)
+	defer cleanUp()
+	t.Run("command-unregistered plugin", func(t *testing.T) {
+		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "unregistered-plugin"})
+		if err == nil {
+			_, err = stream.Recv()
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+			}
+			if st.Message() != ErrUnregsiteredPlugin.Error() {
+				t.Errorf("Unexpected error when calling Command: %v", err)
+			}
+		} else {
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+			}
+			if st.Message() != ErrUnregsiteredPlugin.Error() {
+				t.Errorf("Unexpected error when calling Command: %v", err)
+			}
+		}
+	})
+	t.Run("command-invalid plugin state", func(t *testing.T) {
+		plug := pluginManager.pluginRegistry[ctrlPluginName]
+		plug.setBusy()
+		defer plug.setReady()
+		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName})
+		if err == nil {
+			_, err = stream.Recv()
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+			}
+			if st.Message() != ErrPluginNotReady.Error() {
+				t.Errorf("Unexpected error when calling Command: %v", err)
+			}
+		} else {
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+			}
+			if st.Message() != ErrPluginNotReady.Error() {
+				t.Errorf("Unexpected error when calling Command: %v", err)
+			}
+		}
+	})
+	t.Run("command-empty frame", func(t *testing.T) {
+		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{}})
+		if err == nil {
+			_, err = stream.Recv()
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+			}
+			if st.Message() != "invalid frame type" {
+				t.Errorf("Unexpected error when calling Command: %v", err)
+			}
+		} else {
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+			}
+			if st.Message() != "invalid frame type" {
+				t.Errorf("Unexpected error when calling Command: %v", err)
+			}
+		}
+	})
+	t.Run("command-single return frame", func(t *testing.T) {
+		type examplePayload struct {
+			Command string `json:"command"`
+			Arg     string `json:"arg"`
+		}
+		pay := examplePayload{
+			Command: "echo",
+			Arg:     "foo bar",
+		}
+		p, err := json.Marshal(pay)
+		if err != nil {
+			t.Errorf("Could not format request payload: %v", err)
+		}
+		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+			Source:    "client",
+			Type:      "application/json",
+			Timestamp: time.Now().UnixMilli(),
+			Payload:   p,
+		}})
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		resp, err := stream.Recv()
+		t.Log("WE HERE")
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		if resp == nil {
+			t.Errorf("Unexpected response from Command gRPC method: response is nil")
+		} else {
+			if string(resp.Payload) != "foo bar" {
+				t.Errorf("Unexpected response from Command gRPC method: %v", string(resp.Payload))
+			}
+			t.Logf("Echo response: %v", string(resp.Payload))
+		}
+	})
 }

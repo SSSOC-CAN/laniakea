@@ -190,6 +190,9 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
+				if !timer.Stop() {
+					<-timer.C
+				}
 				timer.Reset(time.Duration(i.cfg.Timeout) * time.Second)
 			}
 		}
@@ -436,17 +439,19 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 			select {
 			case <-timer.C:
 				i.logger.Error().Msg(ErrPluginTimeout.Error())
-				// only set to unresponsive if we didn't request to stop recording
-				if i.recordState != NOTRECORDING {
-					i.setUnresponsive()
-				}
+				i.setUnresponsive()
 				break loop
 			case frame := <-dataChan:
+				i.logger.Debug().Msg("RECIEVED FROM THE PLUGIN")
 				if frame == nil {
 					i.logger.Info().Msg(PluginEOF)
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
+				i.logger.Debug().Msg("Pushed into queue")
+				if !timer.Stop() {
+					<-timer.C
+				}
 				timer.Reset(time.Duration(i.cfg.Timeout) * time.Second)
 			}
 		}

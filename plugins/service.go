@@ -247,6 +247,7 @@ func (p *PluginManager) Stop() error {
 	}
 	close(p.quitChan)
 	p.Wait()
+	p.queueManager.Shutdown()
 	return nil
 }
 
@@ -302,7 +303,7 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 		select {
 		case qLength := <-sigChan:
 			if qLength == 0 {
-				return bg.Error(PluginEOF)
+				return status.Error(codes.OK, bg.Error(PluginEOF).Error())
 			}
 			for i := 0; i < qLength-2; i++ {
 				frame := q.Pop()
@@ -453,6 +454,7 @@ func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtr
 	for {
 		select {
 		case qLength := <-sigChan:
+			p.logger.zl.Debug().Msg(fmt.Sprintf("RECEIVED FROM THE %s QUEUE", subscriberName))
 			if qLength == 0 {
 				return status.Error(codes.OK, bg.Error(PluginEOF).Error())
 			}
