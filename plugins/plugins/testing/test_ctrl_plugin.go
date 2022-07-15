@@ -54,6 +54,7 @@ func (e *ControllerExample) Command(req *proto.Frame) (chan *proto.Frame, error)
 			e.Add(1)
 			go func() {
 				defer e.Done()
+				defer close(frameChan)
 				log.Println(string(cmd.Arg))
 				time.Sleep(1 * time.Second)
 				frameChan <- &proto.Frame{
