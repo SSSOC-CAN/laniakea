@@ -25,6 +25,7 @@ import (
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
+	"github.com/SSSOCPaulCote/gux"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
@@ -498,4 +499,144 @@ func (p *PluginManager) GetPlugin(ctx context.Context, req *fmtrpc.PluginRequest
 		StoppedAt: instance.stoppedAt.UnixMilli(),
 		Version:   instance.version,
 	}, nil
+}
+
+// SubscribePluginState implements the gRPC method of the same name. It subscribes a client to the given plugins state updates
+func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribePluginStateServer) error {
+	if req.Name == "all" {
+		stateQ := gux.NewQueue()
+		var wg sync.WaitGroup
+		quitChans := []chan struct{}{}
+		for name, instance := range p.pluginRegistry {
+			quitChan := make(chan struct{})
+			quitChans = append(quitChans, quitChan)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ticker := time.NewTicker(5 * time.Second)
+				lastState := instance.getState()
+				var cnt int
+				for {
+					select {
+					case <-ticker.C:
+						currentState := instance.getState()
+						if cnt == 0 {
+							stateQ.Push(&fmtrpc.PluginStateUpdate{
+								Name:  name,
+								State: currentState,
+							})
+							lastState = currentState
+						} else if lastState != currentState {
+							stateQ.Push(&fmtrpc.PluginStateUpdate{
+								Name:  name,
+								State: currentState,
+							})
+							lastState = currentState
+						}
+						cnt += 1
+					case <-quitChan:
+						return
+					}
+				}
+			}()
+		}
+		cleanUp := func() {
+			for _, quitChan := range quitChans {
+				close(quitChan)
+			}
+			wg.Wait()
+		}
+		defer cleanUp()
+		rand.Seed(time.Now().UnixNano())
+		subscriberName := req.Name + utils.RandSeq(10)
+		sigChan, unsub, err := stateQ.Subscribe(subscriberName)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		defer unsub()
+		for {
+			select {
+			case qLength := <-sigChan:
+				if qLength == 0 {
+					return status.Error(codes.OK, io.EOF.Error())
+				}
+				for i := 0; i < qLength-1; i++ {
+					inter := stateQ.Pop()
+					update := inter.(*fmtrpc.PluginStateUpdate)
+					if err := stream.Send(update); err != nil {
+						return err
+					}
+				}
+			case <-stream.Context().Done():
+				if errors.Is(stream.Context().Err(), context.Canceled) {
+					return nil
+				}
+				return stream.Context().Err()
+			}
+		}
+	}
+	instance, ok := p.pluginRegistry[req.Name]
+	if !ok {
+		return status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
+	}
+	stateQ := gux.NewQueue()
+	quitChan := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ticker := time.NewTicker(5 * time.Second)
+		lastState := instance.getState()
+		var cnt int
+		for {
+			select {
+			case <-ticker.C:
+				currentState := instance.getState()
+				if cnt == 0 {
+					stateQ.Push(&fmtrpc.PluginStateUpdate{
+						Name:  instance.cfg.Name,
+						State: currentState,
+					})
+					lastState = currentState
+				} else if lastState != currentState {
+					stateQ.Push(&fmtrpc.PluginStateUpdate{
+						Name:  instance.cfg.Name,
+						State: currentState,
+					})
+					lastState = currentState
+				}
+				cnt += 1
+			case <-quitChan:
+				return
+			}
+		}
+	}()
+	defer close(quitChan)
+	rand.Seed(time.Now().UnixNano())
+	subscriberName := req.Name + utils.RandSeq(10)
+	sigChan, unsub, err := stateQ.Subscribe(subscriberName)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	defer unsub()
+	for {
+		select {
+		case qLength := <-sigChan:
+			if qLength == 0 {
+				return status.Error(codes.OK, io.EOF.Error())
+			}
+			for i := 0; i < qLength-1; i++ {
+				inter := stateQ.Pop()
+				update := inter.(*fmtrpc.PluginStateUpdate)
+				if err := stream.Send(update); err != nil {
+					return err
+				}
+			}
+		case <-stream.Context().Done():
+			if errors.Is(stream.Context().Err(), context.Canceled) {
+				return nil
+			}
+			return stream.Context().Err()
+		}
+	}
 }
