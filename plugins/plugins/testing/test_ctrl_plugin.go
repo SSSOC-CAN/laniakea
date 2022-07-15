@@ -55,7 +55,6 @@ func (e *ControllerExample) Command(req *proto.Frame) (chan *proto.Frame, error)
 			go func() {
 				defer e.Done()
 				defer close(frameChan)
-				log.Println(string(cmd.Arg))
 				time.Sleep(1 * time.Second)
 				frameChan <- &proto.Frame{
 					Source:    pluginName,
@@ -69,7 +68,6 @@ func (e *ControllerExample) Command(req *proto.Frame) (chan *proto.Frame, error)
 					Timestamp: time.Now().UnixMilli(),
 					Payload:   []byte(string(cmd.Arg)),
 				}
-				log.Println("LEAVING PLUGIN GO ROUTINE")
 			}()
 			return frameChan, nil
 		case "rng":

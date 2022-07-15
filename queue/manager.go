@@ -62,11 +62,9 @@ func (m *QueueManager) RegisterSource(name string) (*Queue, func(), error) {
 					m.Logger.Info().Msg(fmt.Sprintf("closing %v queue manager", name))
 					return
 				}
-				for i := 0; i < qLength-2; i++ {
+				for i := 0; i < qLength-1; i++ {
 					frame := newQ.Pop()
-					m.Logger.Debug().Msg(fmt.Sprintf("m.outgoingQueues length=%v", len(m.outgoingQueues)))
-					for lis, outQ := range m.outgoingQueues[name] {
-						m.Logger.Debug().Msg(fmt.Sprintf("SENDING FRAME DOWN %s QUEUE", lis))
+					for _, outQ := range m.outgoingQueues[name] {
 						outQ.Push(frame)
 					}
 				}

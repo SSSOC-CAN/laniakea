@@ -814,7 +814,6 @@ func TestControllerPlugin(t *testing.T) {
 			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
 		}
 		resp, err := stream.Recv()
-		t.Log("WE HERE")
 		if err != nil {
 			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
 		}
