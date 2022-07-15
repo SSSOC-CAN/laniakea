@@ -10,7 +10,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -404,7 +406,7 @@ func TestDatasourcePlugin(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error when calling Susbcribe: %v", err)
 				}
-				for j := 0; j < 10; j++ {
+				for j := 0; j < rand.Intn(10-5)+5; j++ {
 					_, err := stream.Recv()
 					if err != nil {
 						if err.Error() == PluginEOF {
@@ -503,6 +505,64 @@ func TestDatasourcePlugin(t *testing.T) {
 		if st.Message() != ErrPluginNotStarted.Error() {
 			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
 		}
+	})
+	t.Run("start record-timeout while streaming", func(t *testing.T) {
+		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		stream, err := client.Subscribe(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling Susbcribe: %v", err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				resp, err := stream.Recv()
+				if resp == nil || err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Errorf("Unexpected error occured receiving stream from Command: %v", err)
+					return
+				}
+			}
+		}()
+		time.Sleep(5 * time.Second)
+		plug := pluginManager.pluginRegistry[rngPluginName]
+		plug.setUnresponsive()
+		wg.Wait()
+		time.Sleep(3 * time.Second)
+		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		stream, err = client.Subscribe(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling Susbcribe: %v", err)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				resp, err := stream.Recv()
+				if resp == nil || err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Errorf("Unexpected error occured receiving stream from Command: %v", err)
+					return
+				}
+			}
+		}()
+		time.Sleep(5 * time.Second)
+		_, err = client.StopRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StopRecord: %v", err)
+		}
+		wg.Wait()
 	})
 }
 
@@ -825,5 +885,119 @@ func TestControllerPlugin(t *testing.T) {
 			}
 			t.Logf("Echo response: %v", string(resp.Payload))
 		}
+	})
+	t.Run("command-stream of frames", func(t *testing.T) {
+		type examplePayload struct {
+			Command string `json:"command"`
+			Arg     string `json:"arg"`
+		}
+		pay := examplePayload{
+			Command: "rng",
+		}
+		p, err := json.Marshal(pay)
+		if err != nil {
+			t.Errorf("Could not format request payload: %v", err)
+		}
+		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+			Source:    "client",
+			Type:      "application/json",
+			Timestamp: time.Now().UnixMilli(),
+			Payload:   p,
+		}})
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				resp, err := stream.Recv()
+				if resp == nil || err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Errorf("Unexpected error occured receiving stream from Command: %v", err)
+					return
+				}
+			}
+		}()
+		time.Sleep(5 * time.Second)
+		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: ctrlPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
+		}
+		wg.Wait()
+	})
+	t.Run("command-timeout while streaming", func(t *testing.T) {
+		type examplePayload struct {
+			Command string `json:"command"`
+			Arg     string `json:"arg"`
+		}
+		pay := examplePayload{
+			Command: "rng",
+		}
+		p, err := json.Marshal(pay)
+		if err != nil {
+			t.Errorf("Could not format request payload: %v", err)
+		}
+		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+			Source:    "client",
+			Type:      "application/json",
+			Timestamp: time.Now().UnixMilli(),
+			Payload:   p,
+		}})
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				resp, err := stream.Recv()
+				if resp == nil || err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Errorf("Unexpected error occured receiving stream from Command: %v", err)
+					return
+				}
+			}
+		}()
+		time.Sleep(5 * time.Second)
+		plug := pluginManager.pluginRegistry[ctrlPluginName]
+		plug.setUnresponsive()
+		wg.Wait()
+		time.Sleep(10 * time.Second)
+		stream, err = client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+			Source:    "client",
+			Type:      "application/json",
+			Timestamp: time.Now().UnixMilli(),
+			Payload:   p,
+		}})
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				resp, err := stream.Recv()
+				if resp == nil || err == io.EOF {
+					return
+				}
+				if err != nil {
+					t.Errorf("Unexpected error occured receiving stream from Command: %v", err)
+					return
+				}
+			}
+		}()
+		time.Sleep(5 * time.Second)
+		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: ctrlPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error occured when calling StopPlugin gRPC function: %v", err)
+		}
+		wg.Wait()
 	})
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"os/exec"
 	"path/filepath"
@@ -140,6 +141,7 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 					if err != nil {
 						p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
 						i.kill()
+						i.setStopped()
 					}
 					p.logger.zl.Info().Msg(fmt.Sprintf("Restarting %v plugin...", i.cfg.Name))
 					_, err = p.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: i.cfg.Name})
@@ -307,6 +309,9 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 			}
 			for i := 0; i < qLength-1; i++ {
 				frame := q.Pop()
+				if frame.Type == io.EOF.Error() {
+					return status.Error(codes.OK, bg.Error(PluginEOF).Error())
+				}
 				if err := stream.Send(frame); err != nil {
 					return err
 				}
@@ -459,6 +464,9 @@ func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtr
 			}
 			for i := 0; i < qLength-1; i++ {
 				frame := q.Pop()
+				if frame.Type == io.EOF.Error() {
+					return status.Error(codes.OK, bg.Error(PluginEOF).Error())
+				}
 				if err := stream.Send(frame); err != nil {
 					return err
 				}
