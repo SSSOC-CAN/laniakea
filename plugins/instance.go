@@ -442,13 +442,11 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 				i.setUnresponsive()
 				break loop
 			case frame := <-dataChan:
-				i.logger.Debug().Msg("RECIEVED FROM THE PLUGIN")
 				if frame == nil {
 					i.logger.Info().Msg(PluginEOF)
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
-				i.logger.Debug().Msg("Pushed into queue")
 				if !timer.Stop() {
 					<-timer.C
 				}
