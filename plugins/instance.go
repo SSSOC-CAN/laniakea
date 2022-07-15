@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -187,6 +188,7 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 			case frame := <-dataChan:
 				if frame == nil {
 					i.logger.Info().Msg(PluginEOF)
+					i.outgoingQueue.Push(&proto.Frame{Source: i.cfg.Name, Type: io.EOF.Error(), Timestamp: time.Now().UnixMilli()})
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
@@ -444,6 +446,7 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 			case frame := <-dataChan:
 				if frame == nil {
 					i.logger.Info().Msg(PluginEOF)
+					i.outgoingQueue.Push(&proto.Frame{Source: i.cfg.Name, Type: io.EOF.Error(), Timestamp: time.Now().UnixMilli()})
 					break loop
 				}
 				i.outgoingQueue.Push(frame)
