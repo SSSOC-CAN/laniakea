@@ -283,6 +283,10 @@ func (p *PluginManager) StopRecord(ctx context.Context, req *fmtrpc.PluginReques
 
 // Subscribe is the PluginAPI command which exposes the data stream of any datasource plugin
 func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribeServer) error {
+	// if "all" is given as the Plugin name, then we create a stream which sends all active queue content
+	if req.Name == "all" {
+
+	}
 	// get the plugin instance from the registry
 	_, ok := p.pluginRegistry[req.Name]
 	if !ok {
