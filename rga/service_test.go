@@ -1,3 +1,4 @@
+//go:build !demo
 // +build !demo
 
 /*
@@ -12,10 +13,11 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
-	"github.com/rs/zerolog"
+
 	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/state"
+	"github.com/SSSOCPaulCote/gux"
+	"github.com/rs/zerolog"
 )
 
 // TestNewMessage tests if we can connect to MKSRGA server and create a new instance of the RGA Service struct
@@ -35,7 +37,7 @@ func TestNewMessage(t *testing.T) {
 		t.Fatalf("Could not connect to MKS RGA: %v", errors.ErrInvalidType)
 	}
 	defer rgaConn.Close()
-	stateStore := state.CreateStore(RGAInitialState, RGAReducer)
+	stateStore := gux.CreateStore(RGAInitialState, RGAReducer)
 	rgaService := NewRGAService(&log, stateStore, _, rgaConn, "", "")
 	if err != nil {
 		t.Errorf("Could not instantiate RGA service: %v", err)
@@ -52,7 +54,7 @@ func RGAServiceStart(t *testing.T, s *RGAService) {
 	if err != nil {
 		t.Errorf("Could not start RGA Service: %v", err)
 	}
-	
+
 }
 
 // RGAServiceStop tests whether we can successfully stop the rga service

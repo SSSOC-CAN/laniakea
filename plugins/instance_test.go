@@ -7,6 +7,7 @@ import (
 
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	"github.com/rs/zerolog"
 )
 
@@ -186,13 +187,13 @@ func TestCommandNoPlugin(t *testing.T) {
 	t.Run("state not ready or unknown", func(t *testing.T) {
 		instance.setBusy()
 		defer instance.setReady()
-		err := instance.command(context.Background(), &fmtrpc.Frame{})
+		err := instance.command(context.Background(), &proto.Frame{})
 		if err != ErrPluginNotReady {
 			t.Errorf("Unexpected error when calling command: %v", err)
 		}
 	})
 	t.Run("uninitialized client", func(t *testing.T) {
-		err := instance.command(context.Background(), &fmtrpc.Frame{})
+		err := instance.command(context.Background(), &proto.Frame{})
 		if err != ErrPluginNotStarted {
 			t.Errorf("Unexpected error when calling command: %v", err)
 		}

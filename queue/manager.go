@@ -18,9 +18,20 @@ type QueueManager struct {
 	incomingQueues map[string]*Queue
 	outgoingQueues map[string]map[string]*Queue
 	quitChans      map[string]chan struct{}
-	Logger         zerolog.Logger
+	Logger         *zerolog.Logger
 	wgs            map[string]*sync.WaitGroup
 	sync.RWMutex
+}
+
+// NewQueueManager initializes a new QueueManager instance
+func NewQueueManager(logger *zerolog.Logger) *QueueManager {
+	return &QueueManager{
+		incomingQueues: make(map[string]*Queue),
+		outgoingQueues: make(map[string]map[string]*Queue),
+		quitChans:      make(map[string]chan struct{}),
+		Logger:         logger,
+		wgs:            make(map[string]*sync.WaitGroup),
+	}
 }
 
 // RegisterSource adds a new entry in the incomingQueues map and returns a newly created queue as well as deregistering function
@@ -51,7 +62,7 @@ func (m *QueueManager) RegisterSource(name string) (*Queue, func(), error) {
 					m.Logger.Info().Msg(fmt.Sprintf("closing %v queue manager", name))
 					return
 				}
-				for i := 0; i < qLength-2; i++ {
+				for i := 0; i < qLength-1; i++ {
 					frame := newQ.Pop()
 					for _, outQ := range m.outgoingQueues[name] {
 						outQ.Push(frame)

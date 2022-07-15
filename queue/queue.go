@@ -3,7 +3,7 @@ package queue
 import (
 	"sync"
 
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 )
 
@@ -17,7 +17,7 @@ type (
 		Signal      chan int
 	}
 	Queue struct {
-		queue     []*fmtrpc.Frame
+		queue     []*proto.Frame
 		listeners map[string]*QueueListener
 		sync.RWMutex
 	}
@@ -26,27 +26,27 @@ type (
 // NewQueue instantiates a new Queue struct
 func NewQueue() *Queue {
 	return &Queue{
-		queue:     []*fmtrpc.Frame{},
+		queue:     []*proto.Frame{},
 		listeners: make(map[string]*QueueListener),
 	}
 }
 
 // Pop returns the first item in the queue and deletes it from the queue
-func (q *Queue) Pop() *fmtrpc.Frame {
+func (q *Queue) Pop() *proto.Frame {
 	q.Lock()
 	defer q.Unlock()
-	var item *fmtrpc.Frame
+	var item *proto.Frame
 	if len(q.queue) > 0 {
 		item = q.queue[0]
 		q.queue = q.queue[1:]
 	} else {
-		q.queue = []*fmtrpc.Frame{}
+		q.queue = []*proto.Frame{}
 	}
 	return item
 }
 
 // Push adds a new item to the back of the queue
-func (q *Queue) Push(v *fmtrpc.Frame) {
+func (q *Queue) Push(v *proto.Frame) {
 	q.Lock()
 	defer q.Unlock()
 	q.queue = append(q.queue, v)
