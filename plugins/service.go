@@ -124,7 +124,7 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 		case <-ticker.C:
 			for _, i := range p.pluginRegistry {
 				// if the plugin is in the unresponsive state, we will try to restart
-				if i.getState() == fmtrpc.Plugin_UNRESPONSIVE {
+				if i.getState() == fmtrpc.PluginState_UNRESPONSIVE {
 					// check if the plugin has exceeded the maximum number of times it can timeout
 					if int64(i.getTimeoutCount()) >= i.cfg.MaxTimeouts {
 						p.logger.zl.Error().Msg(fmt.Sprintf("Maximum timeouts reached for %v plugin, stopping plugin...", i.cfg.Name))
@@ -334,7 +334,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 		return nil, status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
 	}
 	// check if plugin is stopped or killed
-	if instance.getState() != fmtrpc.Plugin_STOPPED && instance.getState() != fmtrpc.Plugin_KILLED {
+	if instance.getState() != fmtrpc.PluginState_STOPPED && instance.getState() != fmtrpc.PluginState_KILLED {
 		return nil, status.Error(codes.FailedPrecondition, e.ErrServiceAlreadyStarted.Error())
 	}
 	// create new plugin client
@@ -513,7 +513,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ticker := time.NewTicker(5 * time.Second)
+				ticker := time.NewTicker(1 * time.Second)
 				lastState := instance.getState()
 				var cnt int
 				for {
@@ -585,7 +585,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		lastState := instance.getState()
 		var cnt int
 		for {
