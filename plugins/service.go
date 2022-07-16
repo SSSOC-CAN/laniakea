@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"os/exec"
 	"path/filepath"
@@ -216,6 +217,7 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 		outgoingQueue: outQ,
 		logger:        &zLogger,
 		startedAt:     time.Now(),
+		listeners:     make(map[string]*StateListener),
 	}
 	// push fmtd/laniakea version and get plugin version
 	err = newInstance.pushVersion(ctx)
@@ -501,44 +503,51 @@ func (p *PluginManager) GetPlugin(ctx context.Context, req *fmtrpc.PluginRequest
 	}, nil
 }
 
+// subscribeStateLoop is the go routine spun up for listening to state updates
+func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup, stateQ *gux.Queue, quitChan chan struct{}) {
+	defer wg.Done()
+	instance := p.pluginRegistry[pluginName]
+	subscriberName := pluginName + utils.RandSeq(10)
+	sigChan, unsub, err := instance.subscribeState(subscriberName)
+	if err != nil {
+		log.Printf("Unexpected error when subscribing to plugin %v state changes: %v", instance.cfg.Name, err)
+		instance.logger.Error().Msg(fmt.Sprintf("Unexpected error when subscribing to plugin state changes: %v", err))
+		return
+	}
+	defer unsub()
+	lastState := instance.getState()
+	stateQ.Push(&fmtrpc.PluginStateUpdate{
+		Name:  pluginName,
+		State: lastState,
+	})
+	for {
+		select {
+		case currentState := <-sigChan:
+			if currentState != lastState {
+				stateQ.Push(&fmtrpc.PluginStateUpdate{
+					Name:  pluginName,
+					State: currentState,
+				})
+				lastState = currentState
+			}
+		case <-quitChan:
+			return
+		}
+	}
+}
+
 // SubscribePluginState implements the gRPC method of the same name. It subscribes a client to the given plugins state updates
 func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribePluginStateServer) error {
+	rand.Seed(time.Now().UnixNano())
 	if req.Name == "all" {
 		stateQ := gux.NewQueue()
 		var wg sync.WaitGroup
 		quitChans := []chan struct{}{}
-		for name, instance := range p.pluginRegistry {
+		for name, _ := range p.pluginRegistry {
 			quitChan := make(chan struct{})
 			quitChans = append(quitChans, quitChan)
 			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				ticker := time.NewTicker(1 * time.Second)
-				lastState := instance.getState()
-				var cnt int
-				for {
-					select {
-					case <-ticker.C:
-						currentState := instance.getState()
-						if cnt == 0 {
-							stateQ.Push(&fmtrpc.PluginStateUpdate{
-								Name:  name,
-								State: currentState,
-							})
-							lastState = currentState
-						} else if lastState != currentState {
-							stateQ.Push(&fmtrpc.PluginStateUpdate{
-								Name:  name,
-								State: currentState,
-							})
-							lastState = currentState
-						}
-						cnt += 1
-					case <-quitChan:
-						return
-					}
-				}
-			}()
+			go p.subscribeStateLoop(name, wg, stateQ, quitChan)
 		}
 		cleanUp := func() {
 			for _, quitChan := range quitChans {
@@ -547,7 +556,6 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 			wg.Wait()
 		}
 		defer cleanUp()
-		rand.Seed(time.Now().UnixNano())
 		subscriberName := req.Name + utils.RandSeq(10)
 		sigChan, unsub, err := stateQ.Subscribe(subscriberName)
 		if err != nil {
@@ -562,9 +570,11 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 				}
 				for i := 0; i < qLength-1; i++ {
 					inter := stateQ.Pop()
-					update := inter.(*fmtrpc.PluginStateUpdate)
-					if err := stream.Send(update); err != nil {
-						return err
+					if inter != nil {
+						update := inter.(*fmtrpc.PluginStateUpdate)
+						if err := stream.Send(update); err != nil {
+							return err
+						}
 					}
 				}
 			case <-stream.Context().Done():
@@ -575,7 +585,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 			}
 		}
 	}
-	instance, ok := p.pluginRegistry[req.Name]
+	_, ok := p.pluginRegistry[req.Name]
 	if !ok {
 		return status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
 	}
@@ -583,36 +593,8 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 	quitChan := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(1 * time.Second)
-		lastState := instance.getState()
-		var cnt int
-		for {
-			select {
-			case <-ticker.C:
-				currentState := instance.getState()
-				if cnt == 0 {
-					stateQ.Push(&fmtrpc.PluginStateUpdate{
-						Name:  instance.cfg.Name,
-						State: currentState,
-					})
-					lastState = currentState
-				} else if lastState != currentState {
-					stateQ.Push(&fmtrpc.PluginStateUpdate{
-						Name:  instance.cfg.Name,
-						State: currentState,
-					})
-					lastState = currentState
-				}
-				cnt += 1
-			case <-quitChan:
-				return
-			}
-		}
-	}()
+	go p.subscribeStateLoop(req.Name, wg, stateQ, quitChan)
 	defer close(quitChan)
-	rand.Seed(time.Now().UnixNano())
 	subscriberName := req.Name + utils.RandSeq(10)
 	sigChan, unsub, err := stateQ.Subscribe(subscriberName)
 	if err != nil {
@@ -627,9 +609,11 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 			}
 			for i := 0; i < qLength-1; i++ {
 				inter := stateQ.Pop()
-				update := inter.(*fmtrpc.PluginStateUpdate)
-				if err := stream.Send(update); err != nil {
-					return err
+				if inter != nil {
+					update := inter.(*fmtrpc.PluginStateUpdate)
+					if err := stream.Send(update); err != nil {
+						return err
+					}
 				}
 			}
 		case <-stream.Context().Done():
