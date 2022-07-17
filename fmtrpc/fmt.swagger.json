@@ -134,7 +134,8 @@
       "type": "object",
       "properties": {
         "msg": {
-          "type": "string"
+          "type": "string",
+          "title": "A short message indicating success or failure"
         }
       }
     },
@@ -143,16 +144,26 @@
       "properties": {
         "timeout": {
           "type": "string",
-          "format": "int64"
+          "format": "int64",
+          "title": "The length of time for which this macaroon is valid"
         },
         "timeout_type": {
-          "$ref": "#/definitions/fmtrpcTimeoutType"
+          "$ref": "#/definitions/fmtrpcTimeoutType",
+          "title": "The unit for the macaroon timeout. Choose from `SECOND`, `MINUTE`, `HOUR` or `DAY`"
         },
         "permissions": {
           "type": "array",
           "items": {
             "$ref": "#/definitions/fmtrpcMacaroonPermission"
-          }
+          },
+          "title": "The list of permissions the new macaroon should grant"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "The list of plugin names to be included in the macaroon"
         }
       }
     },
@@ -160,7 +171,8 @@
       "type": "object",
       "properties": {
         "macaroon": {
-          "type": "string"
+          "type": "string",
+          "title": "The hex-encoded macaroon, serialized in binary format"
         }
       }
     },
@@ -168,10 +180,12 @@
       "type": "object",
       "properties": {
         "entity": {
-          "type": "string"
+          "type": "string",
+          "title": "The entity a permission grants access to"
         },
         "action": {
-          "type": "string"
+          "type": "string",
+          "title": "The action that is granted"
         }
       }
     },
@@ -185,7 +199,8 @@
       "type": "object",
       "properties": {
         "msg": {
-          "type": "string"
+          "type": "string",
+          "title": "A short message indicating success or failure"
         }
       }
     },

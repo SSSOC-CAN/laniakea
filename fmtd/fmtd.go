@@ -47,6 +47,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/plugins"
 	"github.com/SSSOC-CAN/fmtd/rga"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
@@ -161,15 +162,14 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
-	// _, err = plugins.NewPluginManager(server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
-	// if err != nil {
-	// 	server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
-	// 	return err
-	// }
-	// server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *server.cfg.Plugins))
-	for _, plug := range server.cfg.Plugins {
-		server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *plug))
+	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
+	err = pluginManager.Start(ctx)
+	if err != nil {
+		server.logger.Error().Msg(fmt.Sprintf("Unable to start plugin manager: %v", err))
+		return err
 	}
+	defer pluginManager.Stop()
+	server.logger.Info().Msg("Plugins initialized")
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
@@ -327,6 +327,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 			testPlanExecutor,
 			unlockerService,
 			controllerService,
+			pluginManager,
 		},
 		restDialOpts,
 		restListen,
@@ -351,7 +352,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiating Macaroon Service
 	server.logger.Info().Msg("Initiating macaroon service...")
-	macaroonService, err := macaroons.InitService(*db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd", macaroons.PluginCaveatChecker)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Macaroon service: %v", err))
 		return err
@@ -371,7 +372,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Baking macaroons...")
 	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), false, 0,
+			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), 0, server.cfg.Plugins,
 		)
 		if err != nil {
 			server.logger.Error().Msg(fmt.Sprintf("Unable to create admin macaroon: %v", err))
@@ -380,7 +381,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	if !utils.FileExists(server.cfg.TestMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, true, 120,
+			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, 120, server.cfg.Plugins,
 		)
 		if err != nil {
 			server.logger.Error().Msg(fmt.Sprintf("Unable to create test macaroon: %v", err))
@@ -419,12 +420,19 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 }
 
 // bakeMacaroons is a wrapper function around the NewMacaroon method of the macaroons.Service struct
-func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, timeOutCaveat bool, seconds int64) ([]byte, error) {
+func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, seconds int64, pluginNames []string) ([]byte, error) {
+	caveats := []checkers.Caveat{}
+	if seconds != 0 {
+		caveats = append(caveats, macaroons.TimeoutCaveat(seconds))
+	}
+	if len(pluginNames) != 0 {
+		caveats = append(caveats, macaroons.PluginCaveat(pluginNames))
+	}
+
 	mac, err := svc.NewMacaroon(
 		ctx,
 		macaroons.DefaultRootKeyID,
-		timeOutCaveat,
-		[]checkers.Caveat{macaroons.TimeoutCaveat(seconds)},
+		caveats,
 		perms...,
 	)
 	if err != nil {
@@ -434,8 +442,12 @@ func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.O
 }
 
 // genMacaroons will create the macaroon files specified if not already created
-func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, timeOutCaveat bool, seconds int64) error {
-	macBytes, err := bakeMacaroons(ctx, svc, perms, timeOutCaveat, seconds)
+func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, seconds int64, pluginCfgs []*fmtrpc.PluginConfig) error {
+	pluginNames := []string{}
+	for _, cfg := range pluginCfgs {
+		pluginNames = append(pluginNames, cfg.Name)
+	}
+	macBytes, err := bakeMacaroons(ctx, svc, perms, seconds, pluginNames)
 	if err != nil {
 		return err
 	}

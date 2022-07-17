@@ -32,15 +32,15 @@ import (
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"google.golang.org/grpc/metadata"
-	macaroon "gopkg.in/macaroon.v2"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
+	macaroon "gopkg.in/macaroon.v2"
 )
 
 const (
-	PermissionEntityCustomURI 			= "uri"
-	ErrMissingRootKeyID 	  			= bg.Error("missing root key ID")
-	ErrValidatorNil			  			= bg.Error("validator cannot be nil")
+	PermissionEntityCustomURI           = "uri"
+	ErrMissingRootKeyID                 = bg.Error("missing root key ID")
+	ErrValidatorNil                     = bg.Error("validator cannot be nil")
 	ErrValidatorMethodAlreadyRegistered = bg.Error("external validator for method already registered")
 	ErrMetadataFromContext              = bg.Error("unable to get metadata from context")
 	ErrUnexpectedMacNumber              = bg.Error("unexpected number of macaroons")
@@ -53,7 +53,7 @@ type MacaroonValidator interface {
 type Service struct {
 	bakery.Bakery
 
-	rks *RootKeyStorage
+	rks                *RootKeyStorage
 	ExternalValidators map[string]MacaroonValidator
 }
 
@@ -64,15 +64,22 @@ func InitService(db kvdb.DB, location string, checks ...Checker) (*Service, erro
 		return nil, err
 	}
 	bakeryParams := bakery.BakeryParams{
-		Location: location,
+		Location:     location,
 		RootKeyStore: rks,
-		Locator: nil,
-		Key: nil,
+		Locator:      nil,
+		Key:          nil,
 	}
 	service := bakery.New(bakeryParams)
+	checker := service.Checker.FirstPartyCaveatChecker.(*checkers.Checker)
+	for _, check := range checks {
+		cond, fun := check()
+		if !isRegistered(checker, cond) {
+			checker.Register(cond, "std", fun)
+		}
+	}
 	return &Service{
-		Bakery: *service,
-		rks: rks,
+		Bakery:             *service,
+		rks:                rks,
 		ExternalValidators: make(map[string]MacaroonValidator),
 	}, nil
 }
@@ -138,7 +145,7 @@ func (svc *Service) ValidateMacaroon(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	
+
 	// Check the method being called against the permitted operation, the
 	// expiration time and IP address and return the result.
 	authChecker := svc.Checker.Auth(macaroon.Slice{mac})
@@ -176,12 +183,12 @@ func ContextWithRootKeyId(ctx context.Context, value interface{}) context.Contex
 }
 
 // NewMacaroon is a wrapper around the Oven.NewMacaroon method and returns a freshly baked macaroon
-func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, caveats bool, cav []checkers.Caveat, ops ...bakery.Op) (*bakery.Macaroon, error) {
+func (s *Service) NewMacaroon(ctx context.Context, rootKeyId []byte, cav []checkers.Caveat, ops ...bakery.Op) (*bakery.Macaroon, error) {
 	if len(rootKeyId) == 0 {
 		return nil, ErrMissingRootKeyID
 	}
 	ctx = ContextWithRootKeyId(ctx, rootKeyId)
-	if !caveats {
+	if len(cav) == 0 {
 		return s.Oven.NewMacaroon(ctx, bakery.LatestVersion, nil, ops...)
 	}
 	return s.Oven.NewMacaroon(ctx, bakery.LatestVersion, cav, ops...)

@@ -26,9 +26,21 @@ THE SOFTWARE.
 package macaroons
 
 import (
+	"context"
+	"strings"
 	"time"
+
+	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 	macaroon "gopkg.in/macaroon.v2"
+)
+
+const (
+	ErrCantGetPeerFromContext   = bg.Error("unable to get peer info from context")
+	ErrInvalidListOfPlugins     = bg.Error("invalid list of plugins")
+	ErrUnauthorizedPluginAction = bg.Error("unauthorized plugin action")
 )
 
 type Constraint func(*macaroon.Macaroon) error
@@ -65,4 +77,62 @@ func TimeoutCaveat(seconds int64) checkers.Caveat {
 	macaroonTimeout := time.Duration(seconds)
 	requestTimeout := time.Now().Add(time.Second * macaroonTimeout)
 	return checkers.TimeBeforeCaveat(requestTimeout)
+}
+
+// PluginConstraint locks a macaroon to a given set of plugins. The plugin names are validated but not checked against currently registered list of plugins
+func PluginConstraint(pluginNames []string) func(*macaroon.Macaroon) error {
+	return func(mac *macaroon.Macaroon) error {
+		if len(pluginNames) != 0 {
+			for _, plug := range pluginNames {
+				if ok := utils.ValidatePluginName(plug); !ok {
+					return errors.ErrInvalidPluginName
+				}
+			}
+			caveat := checkers.Condition("plugins", strings.Join(pluginNames, ":"))
+			return mac.AddFirstPartyCaveat([]byte(caveat))
+		}
+		return nil
+	}
+}
+
+// PluginCaveat is a wrapper function which returns a checkers.Caveat struct
+func PluginCaveat(pluginNames []string) checkers.Caveat {
+	return checkers.DeclaredCaveat("plugins", strings.Join(pluginNames, ":"))
+}
+
+func strInStrSlice(strSlice []string, str string) bool {
+	for _, s := range strSlice {
+		if str == s {
+			return true
+		}
+	}
+	return false
+}
+
+// PluginCaveatChecker implements the checkers.Func type to act as the checking method for the PluginCaveat
+func PluginCaveatChecker() (string, checkers.Func) {
+	return "plugins", func(ctx context.Context, cond, arg string) error {
+		_, macSlice := checkers.MacaroonsFromContext(ctx)
+		caveats := macSlice[0].Caveats()
+		pluginNames := strings.Split(arg, ":")
+		if len(pluginNames) < 1 {
+			return ErrInvalidListOfPlugins
+		}
+		var ok bool
+		for _, caveat := range caveats {
+			split := strings.Split(string(caveat.Id), " ")
+			if split[0] == "plugins" {
+				plugins := strings.Split(split[1], ":")
+				for _, plug := range plugins {
+					if strInStrSlice(pluginNames, plug) {
+						ok = true
+					}
+				}
+			}
+		}
+		if !ok {
+			return ErrUnauthorizedPluginAction
+		}
+		return nil
+	}
 }

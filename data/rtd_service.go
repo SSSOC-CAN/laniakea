@@ -202,11 +202,11 @@ func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updat
 	lastSentRTDTimestamp := int64(0)
 	rand.Seed(time.Now().UnixNano())
 	subscriberName := s.name + utils.RandSeq(10)
-	updateChan, unsub := s.stateStore.Subscribe(subscriberName)
-	cleanUp := func() {
-		unsub(s.stateStore, subscriberName)
+	updateChan, unsub, err := s.stateStore.Subscribe(subscriberName)
+	if err != nil {
+		return err
 	}
-	defer cleanUp()
+	defer unsub()
 	for {
 		select {
 		case <-updateChan:
