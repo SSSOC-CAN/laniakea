@@ -12,7 +12,6 @@ package telemetry
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -166,7 +165,7 @@ func (s *TelemetryService) startRecording(pol_int int64, orgName, bucketName str
 			case <-ticker.C:
 				err = s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
+					s.Logger.Error().Msgf("Could not write to influxdb: %v", err)
 				}
 			case <-s.CancelChan:
 				ticker.Stop()
@@ -318,7 +317,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 					}
 					err = s.startRecording(n, split[1], split[2])
 					if err != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
+						s.Logger.Error().Msgf("Could not start recording: %v", err)
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: e.Wrap(err, "could not start recording")}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
@@ -328,7 +327,7 @@ func (s *TelemetryService) ListenForRTDSignal() {
 					s.Logger.Info().Msg("Stopping data recording...")
 					err := s.stopRecording()
 					if err != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
+						s.Logger.Error().Msgf("Could not stop recording: %v", err)
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: e.Wrap(err, "could not stop recording")}
 					} else {
 						s.Logger.Info().Msg("Stopped recording.")

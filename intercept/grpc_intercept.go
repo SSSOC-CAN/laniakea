@@ -27,7 +27,6 @@ package intercept
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/SSSOC-CAN/fmtd/errors"
@@ -301,7 +300,7 @@ func logUnaryServerInterceptor(log *zerolog.Logger) grpc.UnaryServerInterceptor 
 		handler grpc.UnaryHandler) (interface{}, error) {
 		resp, err := handler(ctx, req)
 		if err != nil {
-			log.Error().Msg(fmt.Sprintf("[%v]: %v", info.FullMethod, err))
+			log.Error().Msgf("[%v]: %v", info.FullMethod, err)
 		}
 		return resp, err
 	}
@@ -315,7 +314,7 @@ func logStreamServerInterceptor(log *zerolog.Logger) grpc.StreamServerIntercepto
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		err := handler(srv, ss)
 		if err != nil {
-			log.Error().Msg(fmt.Sprintf("[%v]: %v", info.FullMethod, err))
+			log.Error().Msgf("[%v]: %v", info.FullMethod, err)
 		}
 		return err
 	}

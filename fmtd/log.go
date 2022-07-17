@@ -187,7 +187,7 @@ func (s subLogger) LogWithErrors(level, msg string) error {
 		s.SubLogger.WithLevel(lvl).Msg(msg)
 		return nil
 	} else {
-		s.SubLogger.Error().Msg(fmt.Sprintf("Log level %v not found.", level))
+		s.SubLogger.Error().Msgf("Log level %v not found.", level)
 		return ErrLogLvlNotFound
 	}
 }

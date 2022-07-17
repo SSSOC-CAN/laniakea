@@ -26,7 +26,6 @@ THE SOFTWARE.
 package fmtd
 
 import (
-	"fmt"
 	"sync/atomic"
 
 	"github.com/SSSOC-CAN/fmtd/errors"
@@ -55,7 +54,7 @@ func (s *Server) Start() error {
 	if ok := atomic.CompareAndSwapInt32(&s.Active, 0, 1); !ok {
 		return errors.ErrServiceAlreadyStarted
 	}
-	s.logger.Info().Msg(fmt.Sprintf("Daemon succesfully started. Version: %s", utils.AppVersion))
+	s.logger.Info().Msgf("Daemon succesfully started. Version: %s", utils.AppVersion)
 	return nil
 }
 
