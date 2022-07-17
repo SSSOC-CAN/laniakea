@@ -28,7 +28,6 @@ package fmtd
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -238,7 +237,7 @@ func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerol
 	logger := &NewSubLogger(log, "RPCS").SubLogger
 	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(config.GrpcPort, 10))
 	if err != nil {
-		logger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err))
+		logger.Error().Msgf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err)
 		return nil, err
 	}
 	return &RpcServer{
@@ -295,7 +294,7 @@ func (s *RpcServer) Stop() error {
 	close(s.quit)
 	err := s.Listener.Close()
 	if err != nil {
-		s.SubLogger.Error().Msg(fmt.Sprintf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close()))
+		s.SubLogger.Error().Msgf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close())
 		return e.Wrapf(err, "could not stop listening at %v", s.Listener.Addr())
 	}
 	return nil

@@ -1,7 +1,6 @@
 package queue
 
 import (
-	"fmt"
 	"sync"
 
 	bg "github.com/SSSOCPaulCote/blunderguard"
@@ -52,14 +51,14 @@ func (m *QueueManager) RegisterSource(name string) (*Queue, func(), error) {
 		defer wg.Done()
 		sigChan, unsub, err := newQ.Subscribe(queueManagerName)
 		if err != nil {
-			m.Logger.Error().Msg(fmt.Sprintf("could not subscribe to %v queue: %v", name, err))
+			m.Logger.Error().Msgf("could not subscribe to %v queue: %v", name, err)
 		}
 		defer unsub()
 		for {
 			select {
 			case qLength := <-sigChan:
 				if qLength == 0 {
-					m.Logger.Info().Msg(fmt.Sprintf("closing %v queue manager", name))
+					m.Logger.Info().Msgf("closing %v queue manager", name)
 					return
 				}
 				for i := 0; i < qLength-1; i++ {
@@ -69,7 +68,7 @@ func (m *QueueManager) RegisterSource(name string) (*Queue, func(), error) {
 					}
 				}
 			case <-quitChan:
-				m.Logger.Info().Msg(fmt.Sprintf("closing %v queue manager", name))
+				m.Logger.Info().Msgf("closing %v queue manager", name)
 				return
 			}
 		}

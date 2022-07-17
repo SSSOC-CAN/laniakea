@@ -26,8 +26,6 @@ THE SOFTWARE.
 package macaroons
 
 import (
-	"context"
-	"log"
 	"strings"
 	"time"
 
@@ -100,37 +98,4 @@ func PluginConstraint(pluginNames []string) func(*macaroon.Macaroon) error {
 // PluginCaveat is a wrapper function which returns a checkers.Caveat struct
 func PluginCaveat(pluginNames []string) checkers.Caveat {
 	return checkers.DeclaredCaveat("plugins", strings.Join(pluginNames, ":"))
-}
-
-// PluginCaveatChecker implements the checkers.Func type to act as the checking method for the PluginCaveat
-func PluginCaveatChecker() (string, checkers.Func) {
-	return "declared", func(ctx context.Context, cond, arg string) error {
-		_, macSlice := checkers.MacaroonsFromContext(ctx)
-		if len(macSlice) == 0 {
-			return ErrNoMacaroonsFromContext
-		}
-		caveats := macSlice[0].Caveats()
-		log.Printf("PluginCaveatChecker arg: %v", arg)
-		pluginNames := strings.Split(arg, ":") // this may need to be cond and may need to split out declared plugins or just plugins
-		if len(pluginNames) < 1 {
-			return ErrInvalidListOfPlugins
-		}
-		var ok bool
-		for _, caveat := range caveats {
-			log.Printf("PluginCaveatChecker caveat.Id: %v", string(caveat.Id))
-			split := strings.Split(string(caveat.Id), " ")
-			if split[0] == "plugins" {
-				plugins := strings.Split(split[1], ":")
-				for _, plug := range plugins {
-					if utils.StrInStrSlice(pluginNames, plug) {
-						ok = true
-					}
-				}
-			}
-		}
-		if !ok {
-			return ErrUnauthorizedPluginAction
-		}
-		return nil
-	}
 }

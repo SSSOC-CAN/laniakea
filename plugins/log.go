@@ -76,7 +76,7 @@ func (l *PluginLogger) Log(level hclog.Level, msg string, args ...interface{}) {
 	case hclog.Off:
 		return
 	default:
-		l.zl.Debug().Msg(fmt.Sprintf("Unrecognized log level: %v", level))
+		l.zl.Debug().Msgf("Unrecognized log level: %v", level)
 	}
 }
 

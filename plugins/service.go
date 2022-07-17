@@ -9,7 +9,6 @@ package plugins
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"math/rand"
@@ -128,27 +127,27 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 				if i.getState() == fmtrpc.PluginState_UNRESPONSIVE {
 					// check if the plugin has exceeded the maximum number of times it can timeout
 					if int64(i.getTimeoutCount()) >= i.cfg.MaxTimeouts {
-						p.logger.zl.Error().Msg(fmt.Sprintf("Maximum timeouts reached for %v plugin, stopping plugin...", i.cfg.Name))
+						p.logger.zl.Error().Msgf("Maximum timeouts reached for %v plugin, stopping plugin...", i.cfg.Name)
 						err := i.stop(ctx)
 						if err != nil {
-							p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
+							p.logger.zl.Error().Msgf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err)
 							i.kill()
 						}
 						i.setKilled()
 						continue
 					}
 					i.incrementTimeoutCount()
-					p.logger.zl.Error().Msg(fmt.Sprintf("%v plugin timeout, stopping plugin...", i.cfg.Name))
+					p.logger.zl.Error().Msgf("%v plugin timeout, stopping plugin...", i.cfg.Name)
 					err := i.stop(ctx)
 					if err != nil {
-						p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
+						p.logger.zl.Error().Msgf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err)
 						i.kill()
 						i.setStopped()
 					}
-					p.logger.zl.Info().Msg(fmt.Sprintf("Restarting %v plugin...", i.cfg.Name))
+					p.logger.zl.Info().Msgf("Restarting %v plugin...", i.cfg.Name)
 					_, err = p.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: i.cfg.Name})
 					if err != nil {
-						p.logger.zl.Error().Msg(fmt.Sprintf("could not restart the %v plugin: %v", i.cfg.Name, err))
+						p.logger.zl.Error().Msgf("could not restart the %v plugin: %v", i.cfg.Name, err)
 						i.setUnresponsive()
 					}
 				}
@@ -230,12 +229,12 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 		newInstance.kill()
 		return nil, err
 	}
-	p.logger.zl.Info().Msg(fmt.Sprintf("registered plugin %s version: %v", newInstance.cfg.Name, newInstance.version))
+	p.logger.zl.Info().Msgf("registered plugin %s version: %v", newInstance.cfg.Name, newInstance.version)
 	cleanUp := func() {
 		if newInstance.client != nil {
 			err = newInstance.stop(ctx)
 			if err != nil {
-				newInstance.logger.Error().Msg(fmt.Sprintf("could not safely stop %v plugin: %v", newInstance.cfg.Name, err))
+				newInstance.logger.Error().Msgf("could not safely stop %v plugin: %v", newInstance.cfg.Name, err)
 				newInstance.kill()
 			}
 		}
@@ -511,7 +510,7 @@ func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup,
 	sigChan, unsub, err := instance.subscribeState(subscriberName)
 	if err != nil {
 		log.Printf("Unexpected error when subscribing to plugin %v state changes: %v", instance.cfg.Name, err)
-		instance.logger.Error().Msg(fmt.Sprintf("Unexpected error when subscribing to plugin state changes: %v", err))
+		instance.logger.Error().Msgf("Unexpected error when subscribing to plugin state changes: %v", err)
 		return
 	}
 	defer unsub()
