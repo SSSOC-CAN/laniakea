@@ -135,3 +135,13 @@ func ValidatePluginExec(exec string) bool {
 	match, _ := regexp.MatchString(pluginExecRegex, exec)
 	return match
 }
+
+// StrInStrSlice checks if a given string is in a string slice
+func StrInStrSlice(strSlice []string, str string) bool {
+	for _, s := range strSlice {
+		if str == s {
+			return true
+		}
+	}
+	return false
+}

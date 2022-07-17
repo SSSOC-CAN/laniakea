@@ -69,9 +69,10 @@ func getContext() context.Context {
 // printRespJSON will convert a proto response as a string and print it
 func printRespJSON(resp proto.Message) {
 	jsonMarshaler := &protojson.MarshalOptions{
-		Multiline:     true,
-		UseProtoNames: true,
-		Indent:        "    ",
+		Multiline:       true,
+		UseProtoNames:   true,
+		Indent:          "    ",
+		EmitUnpopulated: true,
 	}
 	jsonStr := jsonMarshaler.Format(resp)
 	fmt.Println(jsonStr)

@@ -115,6 +115,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	registeredPlugins := []string{}
+	for _, cfg := range server.cfg.Plugins {
+		registeredPlugins = append(registeredPlugins, cfg.Name)
+	}
 
 	// Create State stores
 	rtdStateStore := gux.CreateStore(RtdInitialState, RtdReducer)
@@ -163,6 +167,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
 	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
+	pluginManager.RegisterWithGrpcServer(grpc_server)
 	err = pluginManager.Start(ctx)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to start plugin manager: %v", err))
@@ -352,7 +357,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiating Macaroon Service
 	server.logger.Info().Msg("Initiating macaroon service...")
-	macaroonService, err := macaroons.InitService(*db, "fmtd", macaroons.PluginCaveatChecker)
+	macaroonService, err := macaroons.InitService(*db, "fmtd", NewSubLogger(server.logger, "BAKE").SubLogger, registeredPlugins, knownPluginMethods, macaroons.PluginCaveatChecker)
 	if err != nil {
 		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Macaroon service: %v", err))
 		return err

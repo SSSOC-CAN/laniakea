@@ -27,6 +27,7 @@ package macaroons
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ const (
 	ErrCantGetPeerFromContext   = bg.Error("unable to get peer info from context")
 	ErrInvalidListOfPlugins     = bg.Error("invalid list of plugins")
 	ErrUnauthorizedPluginAction = bg.Error("unauthorized plugin action")
+	ErrNoMacaroonsFromContext   = bg.Error("no macaroons received from context")
 )
 
 type Constraint func(*macaroon.Macaroon) error
@@ -100,31 +102,27 @@ func PluginCaveat(pluginNames []string) checkers.Caveat {
 	return checkers.DeclaredCaveat("plugins", strings.Join(pluginNames, ":"))
 }
 
-func strInStrSlice(strSlice []string, str string) bool {
-	for _, s := range strSlice {
-		if str == s {
-			return true
-		}
-	}
-	return false
-}
-
 // PluginCaveatChecker implements the checkers.Func type to act as the checking method for the PluginCaveat
 func PluginCaveatChecker() (string, checkers.Func) {
-	return "plugins", func(ctx context.Context, cond, arg string) error {
+	return "declared", func(ctx context.Context, cond, arg string) error {
 		_, macSlice := checkers.MacaroonsFromContext(ctx)
+		if len(macSlice) == 0 {
+			return ErrNoMacaroonsFromContext
+		}
 		caveats := macSlice[0].Caveats()
-		pluginNames := strings.Split(arg, ":")
+		log.Printf("PluginCaveatChecker arg: %v", arg)
+		pluginNames := strings.Split(arg, ":") // this may need to be cond and may need to split out declared plugins or just plugins
 		if len(pluginNames) < 1 {
 			return ErrInvalidListOfPlugins
 		}
 		var ok bool
 		for _, caveat := range caveats {
+			log.Printf("PluginCaveatChecker caveat.Id: %v", string(caveat.Id))
 			split := strings.Split(string(caveat.Id), " ")
 			if split[0] == "plugins" {
 				plugins := strings.Split(split[1], ":")
 				for _, plug := range plugins {
-					if strInStrSlice(pluginNames, plug) {
+					if utils.StrInStrSlice(pluginNames, plug) {
 						ok = true
 					}
 				}

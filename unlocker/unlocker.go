@@ -38,6 +38,7 @@ import (
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	e "github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	bolt "go.etcd.io/bbolt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -205,7 +206,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 		}
 	}
 	// Then we have to load the macaroon key-store, unlock it, change the old password and then shut it down
-	macaroonService, err := macaroons.InitService(*u.ps, "fmtd")
+	macaroonService, err := macaroons.InitService(*u.ps, "fmtd", zerolog.Nop(), []string{}, []string{})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

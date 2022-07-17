@@ -104,8 +104,19 @@ var (
 			Action: "write",
 		},
 	}
-	validActions  = []string{"read", "write", "generate"}
-	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", "plugins", macaroons.PermissionEntityCustomURI}
+	validActions       = []string{"read", "write", "generate"}
+	validEntities      = []string{"fmtd", "macaroon", "tpex", "ctrl", "plugins", macaroons.PermissionEntityCustomURI}
+	knownPluginMethods = []string{
+		"/fmtrpc.PluginAPI/StartRecord",
+		"/fmtrpc.PluginAPI/StopRecord",
+		"/fmtrpc.PluginAPI/Subscribe",
+		"/fmtrpc.PluginAPI/StartPlugin",
+		"/fmtrpc.PluginAPI/StopPlugin",
+		"/fmtrpc.PluginAPI/Command",
+		"/fmtrpc.PluginAPI/AddPlugin",
+		"/fmtrpc.PluginAPI/GetPlugin",
+		"/fmtrpc.PluginAPI/SubscribePluginState",
+	}
 )
 
 // MainGrpcServerPermissions returns a map of the command URI and it's associated permissions

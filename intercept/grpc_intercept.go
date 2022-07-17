@@ -33,6 +33,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/rs/zerolog"
@@ -56,6 +57,7 @@ const (
 	ErrInvalidRPCState         = bg.Error("invalid RPC state")
 	ErrDuplicateMacConstraints = bg.Error("duplicate macaroon constraints for given path")
 	ErrUnknownPermission       = bg.Error("unknown permission for given method")
+	ErrInvalidRequestType      = bg.Error("request is not a valid type")
 )
 
 var (
@@ -65,6 +67,17 @@ var (
 		"/fmtrpc.Unlocker/Login":          {}, //don't need a macaroon to login because succesful login will create macaroons
 		"/fmtrpc.Unlocker/SetPassword":    {},
 		"/fmtrpc.Unlocker/ChangePassword": {},
+	}
+	pluginMethodNames = []string{
+		"/fmtrpc.PluginAPI/StartRecord",
+		"/fmtrpc.PluginAPI/StopRecord",
+		"/fmtrpc.PluginAPI/Subscribe",
+		"/fmtrpc.PluginAPI/StartPlugin",
+		"/fmtrpc.PluginAPI/StopPlugin",
+		"/fmtrpc.PluginAPI/Command",
+		"/fmtrpc.PluginAPI/AddPlugin",
+		"/fmtrpc.PluginAPI/GetPlugin",
+		"/fmtrpc.PluginAPI/SubscribePluginState", // we leave out ListPlugins since this doesn't require plugin specific mac permissions
 	}
 )
 
@@ -276,7 +289,6 @@ func (i *GrpcInterceptor) checkMacaroon(ctx context.Context,
 	if !ok {
 		validator = svc
 	}
-
 	// Now that we know what validator to use, let it do its work.
 	return validator.ValidateMacaroon(ctx, uriPermissions, fullMethod)
 }
@@ -309,12 +321,41 @@ func logStreamServerInterceptor(log *zerolog.Logger) grpc.StreamServerIntercepto
 	}
 }
 
+// addPluginNameToContext adds the plugin name to the context. If all is the plugin name, all registered plugin names are added
+func (i *GrpcInterceptor) addPluginNametoContext(ctx context.Context, req interface{}) (context.Context, error) {
+	// first we asset the request type
+	var pluginName string
+	switch request := req.(type) {
+	case *fmtrpc.PluginRequest:
+		pluginName = request.Name
+	case *fmtrpc.ControllerPluginRequest:
+		pluginName = request.Name
+	case *fmtrpc.PluginConfig:
+		pluginName = request.Name
+	default:
+		return ctx, ErrInvalidRequestType
+	}
+	return context.WithValue(ctx, macaroons.PluginContextKey, pluginName), nil
+}
+
 // MacaroonUnaryServerInterceptor is a GRPC interceptor that checks whether the
 // request is authorized by the included macaroons.
 func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{},
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler) (interface{}, error) {
+		// Check if the method is a plugin method, then add plugin name to the context
+		if utils.StrInStrSlice(pluginMethodNames, info.FullMethod) {
+			ctx, err := i.addPluginNametoContext(ctx, req)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			// Check macaroons.
+			if err := i.checkMacaroon(ctx, info.FullMethod); err != nil {
+				return nil, status.Error(codes.PermissionDenied, err.Error())
+			}
+			return handler(ctx, req)
+		}
 		// Check macaroons.
 		if err := i.checkMacaroon(ctx, info.FullMethod); err != nil {
 			return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -328,6 +369,17 @@ func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInter
 func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream,
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		if utils.StrInStrSlice(pluginMethodNames, info.FullMethod) {
+			ctx, err := i.addPluginNametoContext(ss.Context(), srv)
+			if err != nil {
+				return status.Error(codes.Internal, err.Error())
+			}
+			err = i.checkMacaroon(ctx, info.FullMethod)
+			if err != nil {
+				return status.Error(codes.PermissionDenied, err.Error())
+			}
+			return handler(srv, ss)
+		}
 		// Check macaroons.
 		err := i.checkMacaroon(ss.Context(), info.FullMethod)
 		if err != nil {
