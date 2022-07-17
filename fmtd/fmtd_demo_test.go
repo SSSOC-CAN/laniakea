@@ -1,3 +1,4 @@
+//go:build demo
 // +build demo
 
 /*
@@ -20,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	e "github.com/pkg/errors"
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/controller"
@@ -39,6 +39,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/SSSOCPaulCote/gux"
+	e "github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
@@ -52,9 +53,9 @@ const (
 
 var (
 	testingConsoleOutput bool = false
-	defaultTestingPwd = []byte("abcdefgh")
-	defaultBucketName = "test"
-	defaultOrgName = "sssoc"
+	defaultTestingPwd         = []byte("abcdefgh")
+	defaultBucketName         = "test"
+	defaultOrgName            = "sssoc"
 )
 
 func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySigChan chan struct{}, wg *sync.WaitGroup, tempDir string) {
@@ -93,13 +94,13 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	// Create State stores
 	rtdStateStore := gux.CreateStore(RtdInitialState, RtdReducer)
 	ctrlStateStore := gux.CreateStore(controller.InitialState, controller.ControllerReducer)
-	
+
 	// Starting main server
 	err = server.Start()
 	if err != nil {
 		t.Error("Could not start server")
 	}
-	defer func() { 
+	defer func() {
 		t.Log("Stopping main server...")
 		err := server.Stop()
 		if err != nil {
@@ -228,7 +229,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	)
 	testPlanExecutor.RegisterWithGrpcServer(grpc_server)
 	services = append(services, testPlanExecutor)
-	
+
 	t.Log("RPC subservices instantiated and registered successfully.")
 
 	// Starting kvdb
@@ -277,14 +278,14 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 		t.Fatalf("Could not start gRPC listen on %v:%v", lis.Addr(), err)
 	}
 	t.Logf("gRPC listening on %v", lis.Addr())
-	
+
 	// TODO:SSSOCPaulCote - BufConn RESTProxy
-	readySigChan<-struct{}{}
+	readySigChan <- struct{}{}
 	// Wait for password
 	grpc_interceptor.SetDaemonLocked()
 	t.Log("Waiting for password. Use `fmtcli setpassword` to set a password for the first time, " +
-	"`fmtcli login` to unlock the daemon with an existing password, or `fmtcli changepassword` to change the " +
-	"existing password and unlock the daemon.")
+		"`fmtcli login` to unlock the daemon with an existing password, or `fmtcli changepassword` to change the " +
+		"existing password and unlock the daemon.")
 	pwd, err := waitForPassword(unlockerService, shutdownInterceptor.ShutdownChannel())
 	if err != nil {
 		t.Fatalf("Error while awaiting password: %v", err)
@@ -294,7 +295,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 
 	// Instantiating Macaroon Service
 	t.Log("Initiating macaroon service...")
-	macaroonService, err := macaroons.InitService(*db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{}, []string{})
 	if err != nil {
 		t.Errorf("Unable to instantiate Macaroon service: %v", err)
 	}
@@ -349,7 +350,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	}
 	// Stop Services CleanUp
 	cleanUpServices := func() {
-		for i := len(services)-1; i > -1; i-- {
+		for i := len(services) - 1; i > -1; i-- {
 			t.Logf("Shutting down %s service...", services[i].Name())
 			err := services[i].Stop()
 			if err != nil {
@@ -378,19 +379,19 @@ func unlockFMTD(ctx context.Context, unlockerClient fmtrpc.UnlockerClient) error
 }
 
 type unlockerCases struct {
-	caseName	string
-	command		string
-	oldPwd		[]byte
-	newPwd		[]byte
-	newMacKey	bool
-	expectErr   bool
+	caseName  string
+	command   string
+	oldPwd    []byte
+	newPwd    []byte
+	newMacKey bool
+	expectErr bool
 }
 
 var (
-	chngePwdCmd string = "changepassword"
-	loginCmd    string = "login"
-	setPwdCmd   string = "setpassword"
-	unlockerTestCasesOne = []unlockerCases{
+	chngePwdCmd          string = "changepassword"
+	loginCmd             string = "login"
+	setPwdCmd            string = "setpassword"
+	unlockerTestCasesOne        = []unlockerCases{
 		{"change-password-before-setting-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, true},
 		{"change-password-before-setting-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, true},
 		{"login-before-setting", loginCmd, defaultTestingPwd, nil, false, true},
@@ -420,7 +421,7 @@ func TestUnlockerGrpcApi(t *testing.T) {
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
-	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)
 	<-readySignal
 	ctx := context.Background()
 	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
@@ -443,8 +444,8 @@ func TestUnlockerGrpcApi(t *testing.T) {
 			switch c.command {
 			case chngePwdCmd:
 				resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
-					CurrentPassword: c.oldPwd,
-					NewPassword: c.newPwd,
+					CurrentPassword:    c.oldPwd,
+					NewPassword:        c.newPwd,
 					NewMacaroonRootKey: c.newMacKey,
 				})
 				t.Log(resp)
@@ -488,7 +489,7 @@ func TestUnlockerGrpcApi(t *testing.T) {
 			}
 		})
 	}
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	shutdownInterceptor.RequestShutdown()
 	wg.Wait()
 	if !utils.FileExists(path.Join(tempDir, "admin.macaroon")) || !utils.FileExists(path.Join(tempDir, "test.macaroon")) {
@@ -531,10 +532,10 @@ func getMacaroonGrpcCreds(tlsCertPath, adminMacPath string, macTimeout int64) ([
 }
 
 type bakeMacCases struct {
-	caseName	string
-	bakeMacReq	*fmtrpc.BakeMacaroonRequest
-	expectErr   bool
-	callback    func(string, grpc.DialOption) (*grpc.ClientConn, error)
+	caseName   string
+	bakeMacReq *fmtrpc.BakeMacaroonRequest
+	expectErr  bool
+	callback   func(string, grpc.DialOption) (*grpc.ClientConn, error)
 }
 
 var (
@@ -543,7 +544,7 @@ var (
 			return nil, nil
 		}},
 		{"bake-mac-invalid-permission-entity", &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(-10),
+			Timeout:     int64(-10),
 			TimeoutType: fmtrpc.TimeoutType_DAY,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -555,7 +556,7 @@ var (
 			return nil, nil
 		}},
 		{"bake-mac-invalid-permission-action", &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(-10),
+			Timeout:     int64(-10),
 			TimeoutType: fmtrpc.TimeoutType_DAY,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -567,7 +568,7 @@ var (
 			return nil, nil
 		}},
 		{"bake-mac-10-sec-timeout", &fmtrpc.BakeMacaroonRequest{
-			Timeout: int64(10),
+			Timeout:     int64(10),
 			TimeoutType: fmtrpc.TimeoutType_SECOND,
 			Permissions: []*fmtrpc.MacaroonPermission{
 				&fmtrpc.MacaroonPermission{
@@ -607,7 +608,7 @@ var (
 			if err == nil {
 				return nil, errors.ErrNoError
 			}
-			time.Sleep(10*time.Second)
+			time.Sleep(10 * time.Second)
 			_, err = client.AdminTest(ctx, &fmtrpc.AdminTestRequest{})
 			if err == nil {
 				return nil, ErrMacNotExpired
@@ -635,7 +636,7 @@ func TestFmtGrpcApi(t *testing.T) {
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
-	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)
 	<-readySignal
 	ctx := context.Background()
 	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
@@ -656,7 +657,7 @@ func TestFmtGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not set FMTD password: %v", err)
 	}
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	// now we get FmtClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
 	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(60))
@@ -719,7 +720,7 @@ func TestFmtGrpcApi(t *testing.T) {
 			}
 			if st.Message() != "error reading from server: EOF" {
 				t.Errorf("Unable to stop daemon: %v", st.Message())
-			}	
+			}
 		}
 	})
 	wg.Wait()
@@ -744,7 +745,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
-	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)
 	<-readySignal
 	ctx := context.Background()
 	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
@@ -765,7 +766,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not set FMTD password: %v", err)
 	}
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	// now we get DataCollectorClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
 	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(600))
@@ -779,9 +780,9 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	t.Run("start-record-invalid-polling-interval", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
 			PollingInterval: int64(1),
-			Type: fmtrpc.RecordService_TELEMETRY,
-			OrgName: defaultOrgName,
-			BucketName: defaultBucketName,
+			Type:            fmtrpc.RecordService_TELEMETRY,
+			OrgName:         defaultOrgName,
+			BucketName:      defaultBucketName,
 		})
 		if err == nil {
 			t.Error("Expected an error but got none")
@@ -790,7 +791,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	})
 	t.Run("start-record-rga-service-before-telemetry", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
-			Type: fmtrpc.RecordService_RGA,
+			Type:    fmtrpc.RecordService_RGA,
 			OrgName: defaultOrgName,
 		})
 		if err == nil {
@@ -800,8 +801,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	})
 	t.Run("start-record-telemetry", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
-			Type: fmtrpc.RecordService_TELEMETRY,
-			OrgName: defaultOrgName,
+			Type:       fmtrpc.RecordService_TELEMETRY,
+			OrgName:    defaultOrgName,
 			BucketName: defaultBucketName,
 		})
 		if err != nil {
@@ -811,8 +812,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	})
 	t.Run("start-record-telemetry-after-starting", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
-			Type: fmtrpc.RecordService_TELEMETRY,
-			OrgName: defaultOrgName,
+			Type:       fmtrpc.RecordService_TELEMETRY,
+			OrgName:    defaultOrgName,
 			BucketName: defaultBucketName,
 		})
 		if err == nil {
@@ -849,8 +850,8 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	})
 	t.Run("restart-record-telemetry", func(t *testing.T) {
 		resp, err := client.StartRecording(ctx, &fmtrpc.RecordRequest{
-			Type: fmtrpc.RecordService_TELEMETRY,
-			OrgName: defaultOrgName,
+			Type:       fmtrpc.RecordService_TELEMETRY,
+			OrgName:    defaultOrgName,
 			BucketName: defaultBucketName,
 		})
 		if err != nil {
@@ -863,7 +864,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 		if err != nil {
 			t.Errorf("Could not start telemetry: %v", err)
 		}
-		ticker := time.NewTicker(time.Duration(int64(10))*time.Second)
+		ticker := time.NewTicker(time.Duration(int64(10)) * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
@@ -887,7 +888,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ticker := time.NewTicker(time.Duration(int64(15))*time.Second)
+				ticker := time.NewTicker(time.Duration(int64(15)) * time.Second)
 				defer ticker.Stop()
 				stream, err := client.SubscribeDataStream(ctx, &fmtrpc.SubscribeDataRequest{})
 				if err != nil {
@@ -914,7 +915,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 	})
 	t.Run("subscribe-datastream-stress-test", func(t *testing.T) {
 		var wg sync.WaitGroup
-		ticker := time.NewTicker(time.Duration(int64(10))*time.Second)
+		ticker := time.NewTicker(time.Duration(int64(10)) * time.Second)
 		var (
 			shutdownChans []chan struct{}
 			cumGoRoutines int = 0
@@ -928,7 +929,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 					go func() {
 						defer wg.Done()
 						for k := 0; k < 10; k++ {
-							time.Sleep(time.Duration(int((rand.Float64() * 1) * 1000))*time.Millisecond)
+							time.Sleep(time.Duration(int((rand.Float64()*1)*1000)) * time.Millisecond)
 							close(shutdownChans[cumGoRoutines])
 							cumGoRoutines += 1
 						}
@@ -965,7 +966,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 			}
 		}
 		for k := 0; k < 10; k++ {
-			time.Sleep(time.Duration(int((rand.Float64() * 1) * 1000))*time.Millisecond)
+			time.Sleep(time.Duration(int((rand.Float64()*1)*1000)) * time.Millisecond)
 			close(shutdownChans[cumGoRoutines])
 			cumGoRoutines += 1
 		}
@@ -978,7 +979,7 @@ func TestDataCollectorGrpcApi(t *testing.T) {
 
 type Cases struct {
 	caseName  string
-	cmd		  string
+	cmd       string
 	expectErr bool
 	setPoint  float64
 	rampRate  float64
@@ -987,7 +988,7 @@ type Cases struct {
 var (
 	setTempCmd string = "set-temp"
 	setPresCmd string = "set-pres"
-	testCases = []Cases{
+	testCases         = []Cases{
 		{"set-temp-negative-change-rate", setTempCmd, true, 30.0, -4.0},
 		{"set-temp-hot-0-rate", setTempCmd, false, 30.0, 0.0},
 		{"set-temp-cold-0-rate", setTempCmd, false, -20.0, 0.0},
@@ -1021,7 +1022,7 @@ func TestControllerGrpcApi(t *testing.T) {
 	readySignal := make(chan struct{})
 	defer close(readySignal)
 	wg.Add(1)
-	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)	
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)
 	<-readySignal
 	ctx := context.Background()
 	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
@@ -1042,7 +1043,7 @@ func TestControllerGrpcApi(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not set FMTD password: %v", err)
 	}
-	time.Sleep(1*time.Second)
+	time.Sleep(1 * time.Second)
 	// now we get ControllerClient
 	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
 	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(1200))
@@ -1054,8 +1055,8 @@ func TestControllerGrpcApi(t *testing.T) {
 	defer authConn.Close()
 	dataClient := fmtrpc.NewDataCollectorClient(authConn)
 	_, err = dataClient.StartRecording(ctx, &fmtrpc.RecordRequest{
-		Type: fmtrpc.RecordService_TELEMETRY,
-		OrgName: defaultOrgName,
+		Type:       fmtrpc.RecordService_TELEMETRY,
+		OrgName:    defaultOrgName,
 		BucketName: defaultBucketName,
 	})
 	if err != nil {
@@ -1066,10 +1067,10 @@ func TestControllerGrpcApi(t *testing.T) {
 	t.Run("concurrent-set-temp", func(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(1)
-		go func () {
+		go func() {
 			defer wg.Done()
 			stream, err := client.SetTemperature(ctx, &demorpc.SetTempRequest{
-				TempSetPoint: 30.0,
+				TempSetPoint:   30.0,
 				TempChangeRate: 5.0,
 			})
 			if err != nil {
@@ -1088,10 +1089,10 @@ func TestControllerGrpcApi(t *testing.T) {
 				t.Log(resp)
 			}
 		}()
-		time.Sleep(5*time.Second)
+		time.Sleep(5 * time.Second)
 		tmpClient := demorpc.NewControllerClient(authConn)
 		stream, _ := tmpClient.SetTemperature(ctx, &demorpc.SetTempRequest{
-			TempSetPoint: 35.0,
+			TempSetPoint:   35.0,
 			TempChangeRate: 0.0,
 		})
 		_, err := stream.Recv()
@@ -1104,10 +1105,10 @@ func TestControllerGrpcApi(t *testing.T) {
 	t.Run("concurrent-set-pres", func(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(1)
-		go func () {
+		go func() {
 			defer wg.Done()
 			stream, err := client.SetPressure(ctx, &demorpc.SetPresRequest{
-				PressureSetPoint: 755.0,
+				PressureSetPoint:   755.0,
 				PressureChangeRate: 5.0,
 			})
 			if err != nil {
@@ -1126,10 +1127,10 @@ func TestControllerGrpcApi(t *testing.T) {
 				t.Log(resp)
 			}
 		}()
-		time.Sleep(5*time.Second)
+		time.Sleep(5 * time.Second)
 		tmpClient := demorpc.NewControllerClient(authConn)
 		stream, _ := tmpClient.SetPressure(ctx, &demorpc.SetPresRequest{
-			PressureSetPoint: 35.0,
+			PressureSetPoint:   35.0,
 			PressureChangeRate: 0.0,
 		})
 		_, err := stream.Recv()
@@ -1143,7 +1144,7 @@ func TestControllerGrpcApi(t *testing.T) {
 			switch c.cmd {
 			case "set-temp":
 				stream, err := client.SetTemperature(ctx, &demorpc.SetTempRequest{
-					TempSetPoint: c.setPoint,
+					TempSetPoint:   c.setPoint,
 					TempChangeRate: c.rampRate,
 				})
 				if err != nil {
@@ -1169,7 +1170,7 @@ func TestControllerGrpcApi(t *testing.T) {
 				}
 			case "set-pres":
 				stream, err := client.SetPressure(ctx, &demorpc.SetPresRequest{
-					PressureSetPoint: c.setPoint,
+					PressureSetPoint:   c.setPoint,
 					PressureChangeRate: c.rampRate,
 				})
 				if err != nil {

@@ -25,6 +25,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
@@ -254,7 +255,7 @@ func initGrpcServerMac(t *testing.T) func() {
 		}
 	})
 	// macaroon service
-	macaroonService, err := macaroons.InitService(*db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{}, []string{})
 	if err != nil {
 		t.Errorf("Could not initialize macaroon service: %v", err)
 	}
