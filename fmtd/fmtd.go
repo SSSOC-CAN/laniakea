@@ -375,6 +375,21 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Macaroon store unlocked.")
 	// Baking Macaroons
 	server.logger.Info().Msg("Baking macaroons...")
+	// Delete macaroon files if user requested it
+	if server.cfg.RegenerateMacaroons {
+		if utils.FileExists(server.cfg.AdminMacPath) {
+			err := os.Remove(server.cfg.AdminMacPath)
+			if err != nil {
+				server.logger.debug().Msg("Unexpected error when deleting %s: %v", server.cfg.AdminMacPath, err)
+			}
+		}
+		if utils.FileExists(server.cfg.TestMacPath) {
+			err := os.Remove(server.cfg.TestMacPath)
+			if err != nil {
+				server.logger.debug().Msg("Unexpected error when deleting %s: %v", server.cfg.TestMacPath, err)
+			}
+		}
+	}
 	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err := genMacaroons(
 			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), 0, server.cfg.Plugins,
