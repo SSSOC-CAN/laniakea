@@ -362,7 +362,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiating Macaroon Service
 	server.logger.Info().Msg("Initiating macaroon service...")
-	macaroonService, err := macaroons.InitService(*db, "fmtd", NewSubLogger(server.logger, "BAKE").SubLogger, registeredPlugins, knownPluginMethods)
+	macaroonService, err := macaroons.InitService(*db, "fmtd", NewSubLogger(server.logger, "BAKE").SubLogger, registeredPlugins)
 	if err != nil {
 		server.logger.Error().Msgf("Unable to instantiate Macaroon service: %v", err)
 		return err

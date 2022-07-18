@@ -103,18 +103,8 @@ var (
 			Action: "write",
 		},
 	}
-	validActions       = []string{"read", "write", "generate"}
-	validEntities      = []string{"fmtd", "macaroon", "tpex", "ctrl", "plugins", macaroons.PermissionEntityCustomURI}
-	knownPluginMethods = []string{
-		"/fmtrpc.PluginAPI/StartRecord",
-		"/fmtrpc.PluginAPI/StopRecord",
-		"/fmtrpc.PluginAPI/Subscribe",
-		"/fmtrpc.PluginAPI/StartPlugin",
-		"/fmtrpc.PluginAPI/StopPlugin",
-		"/fmtrpc.PluginAPI/Command",
-		"/fmtrpc.PluginAPI/GetPlugin",
-		"/fmtrpc.PluginAPI/SubscribePluginState",
-	}
+	validActions  = []string{"read", "write", "generate"}
+	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", "plugins", macaroons.PermissionEntityCustomURI}
 )
 
 // StreamingPluginAPIPermissions returns a map of the command URI and it's assocaited permissions for the streaming Plugin API methods

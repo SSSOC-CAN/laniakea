@@ -51,6 +51,19 @@ const (
 	PluginContextKey                    = "plugin"
 )
 
+var (
+	knownPluginMethods = []string{
+		"/fmtrpc.PluginAPI/StartRecord",
+		"/fmtrpc.PluginAPI/StopRecord",
+		"/fmtrpc.PluginAPI/Subscribe",
+		"/fmtrpc.PluginAPI/StartPlugin",
+		"/fmtrpc.PluginAPI/StopPlugin",
+		"/fmtrpc.PluginAPI/Command",
+		"/fmtrpc.PluginAPI/GetPlugin",
+		"/fmtrpc.PluginAPI/SubscribePluginState",
+	}
+)
+
 type MacaroonValidator interface {
 	ValidateMacaroon(ctx context.Context, requiredPermissions []bakery.Op, fullMethod string) error
 }
@@ -61,11 +74,10 @@ type Service struct {
 	rks                *RootKeyStorage
 	ExternalValidators map[string]MacaroonValidator
 	registeredPlugins  []string
-	pluginMethods      []string
 }
 
 // InitService returns initializes the rootkeystorage for the Macaroon service and returns the initialized service
-func InitService(db kvdb.DB, location string, logger zerolog.Logger, pluginNames, pluginMethods []string, checks ...Checker) (*Service, error) {
+func InitService(db kvdb.DB, location string, logger zerolog.Logger, pluginNames []string, checks ...Checker) (*Service, error) {
 	rks, err := InitRootKeyStorage(db)
 	if err != nil {
 		return nil, err
@@ -90,7 +102,6 @@ func InitService(db kvdb.DB, location string, logger zerolog.Logger, pluginNames
 		rks:                rks,
 		ExternalValidators: make(map[string]MacaroonValidator),
 		registeredPlugins:  pluginNames,
-		pluginMethods:      pluginMethods,
 	}, nil
 }
 
@@ -157,7 +168,7 @@ func (svc *Service) ValidateMacaroon(ctx context.Context,
 	}
 
 	// If the full method is a plugin method, then do the following
-	if len(svc.pluginMethods) != 0 && utils.StrInStrSlice(svc.pluginMethods, fullMethod) {
+	if len(knownPluginMethods) != 0 && utils.StrInStrSlice(knownPluginMethods, fullMethod) {
 		reqPlugName, ok := ctx.Value(PluginContextKey).(string)
 		if !ok || reqPlugName == "" {
 			return ErrKeyNotInContext

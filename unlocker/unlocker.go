@@ -206,7 +206,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 		}
 	}
 	// Then we have to load the macaroon key-store, unlock it, change the old password and then shut it down
-	macaroonService, err := macaroons.InitService(*u.ps, "fmtd", zerolog.Nop(), []string{}, []string{})
+	macaroonService, err := macaroons.InitService(*u.ps, "fmtd", zerolog.Nop(), []string{})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
