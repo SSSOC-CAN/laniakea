@@ -30,14 +30,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
 	macaroon "gopkg.in/macaroon.v2"
 )
 
 var (
-	testRootKey = []byte("dummyRootKey")
-	testID = []byte("dummyId")
-	testLocation = "fmtd"
-	testVersion = macaroon.LatestVersion
+	testRootKey                 = []byte("dummyRootKey")
+	testID                      = []byte("dummyId")
+	testLocation                = "fmtd"
+	testVersion                 = macaroon.LatestVersion
 	expectedTimeCaveatSubstring = fmt.Sprintf("time-before %d", time.Now().Year())
 )
 
@@ -79,3 +80,5 @@ func TestTimeoutConstraint(t *testing.T) {
 		t.Fatalf("Added caveat '%s' does not meet expectations", mac.Caveats()[0].Id)
 	}
 }
+
+//TODO:SSSOCPaulCote test new PluginConstraint

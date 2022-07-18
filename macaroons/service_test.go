@@ -33,7 +33,9 @@ import (
 	"path"
 	"reflect"
 	"testing"
+
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc/metadata"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
@@ -47,7 +49,7 @@ var (
 		Entity: PermissionEntityCustomURI,
 		Action: "Test",
 	}
-	testPw = []byte("hello") 
+	testPw = []byte("hello")
 )
 
 // createDummyRootKeyStore creates a dummy RootKeyStorage from the test password in a temporary directory
@@ -77,7 +79,7 @@ func TestNewService(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{}, []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -87,13 +89,13 @@ func TestNewService(t *testing.T) {
 		t.Fatalf("Could not unlock rks: %v", err)
 	}
 	// Test for missing root key Id
-	_, err = service.NewMacaroon(context.TODO(), nil, false, nil, testOp)
+	_, err = service.NewMacaroon(context.TODO(), nil, nil, testOp)
 	if err != ErrMissingRootKeyID {
 		t.Fatalf("Received %v instead of ErrMissingRootKeyID", err)
 	}
 
 	// Test we can actually make a macaroon
-	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, false, nil, testOp)
+	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, nil, testOp)
 	if err != nil {
 		t.Fatalf("Error creating macaroon: %v", err)
 	}
@@ -103,12 +105,13 @@ func TestNewService(t *testing.T) {
 	}
 }
 
+// TODO:SSSOCPaulCote - Update tests for new plugin validation
 // TestValidateMacaroon creates a dummy macaroon from a dummy service and validates it against test parameters
 func TestValidateMacaroon(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{}, []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -117,7 +120,7 @@ func TestValidateMacaroon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not unlock rks: %v", err)
 	}
-	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, false, nil, testOp, testOpURI,)
+	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, nil, testOp, testOpURI)
 	if err != nil {
 		t.Fatalf("Could not bake new macaroon: %v", err)
 	}
@@ -142,7 +145,7 @@ func TestListMacaroonIDs(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{}, []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -154,7 +157,7 @@ func TestListMacaroonIDs(t *testing.T) {
 
 	expectedIDs := [][]byte{{1}, {2}, {3}}
 	for _, v := range expectedIDs {
-		_, err := service.NewMacaroon(context.TODO(), v, false, nil, testOp)
+		_, err := service.NewMacaroon(context.TODO(), v, nil, testOp)
 		if err != nil {
 			t.Errorf("Error creating macaroon from service: %v", err)
 		}
@@ -172,7 +175,7 @@ func TestDeleteMacaroonID(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{}, []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -209,7 +212,7 @@ func TestDeleteMacaroonID(t *testing.T) {
 	// create 3 new macaroons and delete one
 	expectedIDs := [][]byte{{1}, {2}, {3}}
 	for _, v := range expectedIDs {
-		_, err := service.NewMacaroon(context.TODO(), v, false, nil, testOp)
+		_, err := service.NewMacaroon(context.TODO(), v, nil, testOp)
 		if err != nil {
 			t.Errorf("Error creating macaroon from service: %v", err)
 		}

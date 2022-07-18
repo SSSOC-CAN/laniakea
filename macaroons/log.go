@@ -15,10 +15,10 @@ var _ bakery.Logger = (*MacLogger)(nil)
 
 // Infof is part of the macaroon-bakery Logger interface
 func (m *MacLogger) Infof(ctx context.Context, f string, args ...interface{}) {
-	m.Info().Msgf(f, args)
+	m.Info().Msgf(f, args...)
 }
 
 // Debugf is part of the macaroon-bakery Logger interface
 func (m *MacLogger) Debugf(ctx context.Context, f string, args ...interface{}) {
-	m.Debug().Msgf(f, args)
+	m.Debug().Msgf(f, args...)
 }
