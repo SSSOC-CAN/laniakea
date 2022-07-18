@@ -46,6 +46,9 @@ type PluginAPIClient interface {
 	// fmtcli: `plugin-info`
 	//GetPlugin will retrieve the information for the given plugin.
 	GetPlugin(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (*Plugin, error)
+	//
+	//SubscribePluginState will create a stream which pushes plugin state updates to client
+	SubscribePluginState(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (PluginAPI_SubscribePluginStateClient, error)
 }
 
 type pluginAPIClient struct {
@@ -183,6 +186,38 @@ func (c *pluginAPIClient) GetPlugin(ctx context.Context, in *PluginRequest, opts
 	return out, nil
 }
 
+func (c *pluginAPIClient) SubscribePluginState(ctx context.Context, in *PluginRequest, opts ...grpc.CallOption) (PluginAPI_SubscribePluginStateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &PluginAPI_ServiceDesc.Streams[2], "/fmtrpc.PluginAPI/SubscribePluginState", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pluginAPISubscribePluginStateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type PluginAPI_SubscribePluginStateClient interface {
+	Recv() (*PluginStateUpdate, error)
+	grpc.ClientStream
+}
+
+type pluginAPISubscribePluginStateClient struct {
+	grpc.ClientStream
+}
+
+func (x *pluginAPISubscribePluginStateClient) Recv() (*PluginStateUpdate, error) {
+	m := new(PluginStateUpdate)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // PluginAPIServer is the server API for PluginAPI service.
 // All implementations must embed UnimplementedPluginAPIServer
 // for forward compatibility
@@ -214,6 +249,9 @@ type PluginAPIServer interface {
 	// fmtcli: `plugin-info`
 	//GetPlugin will retrieve the information for the given plugin.
 	GetPlugin(context.Context, *PluginRequest) (*Plugin, error)
+	//
+	//SubscribePluginState will create a stream which pushes plugin state updates to client
+	SubscribePluginState(*PluginRequest, PluginAPI_SubscribePluginStateServer) error
 	mustEmbedUnimplementedPluginAPIServer()
 }
 
@@ -247,6 +285,9 @@ func (UnimplementedPluginAPIServer) AddPlugin(context.Context, *PluginConfig) (*
 }
 func (UnimplementedPluginAPIServer) GetPlugin(context.Context, *PluginRequest) (*Plugin, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPlugin not implemented")
+}
+func (UnimplementedPluginAPIServer) SubscribePluginState(*PluginRequest, PluginAPI_SubscribePluginStateServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribePluginState not implemented")
 }
 func (UnimplementedPluginAPIServer) mustEmbedUnimplementedPluginAPIServer() {}
 
@@ -429,6 +470,27 @@ func _PluginAPI_GetPlugin_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginAPI_SubscribePluginState_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(PluginRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PluginAPIServer).SubscribePluginState(m, &pluginAPISubscribePluginStateServer{stream})
+}
+
+type PluginAPI_SubscribePluginStateServer interface {
+	Send(*PluginStateUpdate) error
+	grpc.ServerStream
+}
+
+type pluginAPISubscribePluginStateServer struct {
+	grpc.ServerStream
+}
+
+func (x *pluginAPISubscribePluginStateServer) Send(m *PluginStateUpdate) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // PluginAPI_ServiceDesc is the grpc.ServiceDesc for PluginAPI service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -474,6 +536,11 @@ var PluginAPI_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Command",
 			Handler:       _PluginAPI_Command_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribePluginState",
+			Handler:       _PluginAPI_SubscribePluginState_Handler,
 			ServerStreams: true,
 		},
 	},
