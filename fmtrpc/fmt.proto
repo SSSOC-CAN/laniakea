@@ -27,6 +27,8 @@ syntax = "proto3";
 
 package fmtrpc;
 
+import "plugin.proto";
+
 option go_package = "github.com/SSSOC-CAN/fmtd/fmtrpc";
 
 // Fmt is the main RPC server of the daemon.
@@ -48,6 +50,42 @@ service Fmt {
     BakeMacaroon will bake a new macaroon based on input permissions and constraints.
     */
     rpc BakeMacaroon (BakeMacaroonRequest) returns (BakeMacaroonResponse);
+    /*
+    Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command
+    */
+    rpc SetTemperature(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command
+    */
+    rpc SetPressure(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! StartRecording is now /fmtrpc.PluginAPI/StartRecord
+    */
+    rpc StartRecording(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! StopRecording is now /fmtrpc.PluginAPI/StopRecord
+    */
+    rpc StopRecording(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! SubscribeDataStream is now /fmtrpc.PluginAPI/Subscribe
+    */
+    rpc SubscribeDataStream(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! LoadTestPlan will no longer be supported
+    */
+    rpc LoadTestPlan(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! StartTestPlan will no longer be supported
+    */
+    rpc StartTestPlan(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! StopTestPlan will no longer be supported
+    */
+    rpc StopTestPlan(proto.Empty) returns (DeprecationResponse);
+    /*
+    Deprecated! InsertROIMarker will no longer be supported
+    */
+    rpc InsertROIMarker(proto.Empty) returns (DeprecationResponse);
 }
 
 message StopRequest {
@@ -104,4 +142,9 @@ message BakeMacaroonRequest {
 message BakeMacaroonResponse {
     // The hex-encoded macaroon, serialized in binary format
     string macaroon = 1;
+}
+
+message DeprecationResponse {
+    // The message indicating the API endpoint has been deprecated
+    string msg = 1;
 }

@@ -17,3 +17,21 @@ http:
     - selector: fmtrpc.Fmt.BakeMacaroon
       post: "/v1/bake/macaroon"
       body: "*"
+    - selector: fmtrpc.Fmt.SetTemperature
+      get: "/v1/set/temperature"
+    - selector: fmtrpc.Fmt.SetPressure
+      get: "/v1/set/pressure"
+    - selector: fmtrpc.Fmt.StartRecording
+      get: "/v1/start/recording"
+    - selector: fmtrpc.Fmt.StopRecording
+      get: "/v1/stop/recording"
+    - selector: fmtrpc.Fmt.SubscribeDataStream
+      get: "/v1/subscribe/datastream"
+    - selector: fmtrpc.Fmt.LoadTestPlan
+      get: "/v1/load/testplan"
+    - selector: fmtrpc.Fmt.StartTestPlan
+      get: "/v1/start/testplan"
+    - selector: fmtrpc.Fmt.StopTestPlan
+      get: "/v1/stop/testplan"
+    - selector: fmtrpc.Fmt.InsertROIMarker
+      get: "/v1/insert/roi"
