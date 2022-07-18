@@ -34,31 +34,31 @@ type FmtClient interface {
 	BakeMacaroon(ctx context.Context, in *BakeMacaroonRequest, opts ...grpc.CallOption) (*BakeMacaroonResponse, error)
 	//
 	//Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command
-	SetTemperature(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	SetTemperature(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command
-	SetPressure(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	SetPressure(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! StartRecording is now /fmtrpc.PluginAPI/StartRecord
-	StartRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	StartRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! StopRecording is now /fmtrpc.PluginAPI/StopRecord
-	StopRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	StopRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! SubscribeDataStream is now /fmtrpc.PluginAPI/Subscribe
-	SubscribeDataStream(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	SubscribeDataStream(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! LoadTestPlan will no longer be supported
-	LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! StartTestPlan will no longer be supported
-	StartTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	StartTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! StopTestPlan will no longer be supported
-	StopTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	StopTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 	//
 	//Deprecated! InsertROIMarker will no longer be supported
-	InsertROIMarker(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error)
+	InsertROIMarker(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 }
 
 type fmtClient struct {
@@ -105,8 +105,8 @@ func (c *fmtClient) BakeMacaroon(ctx context.Context, in *BakeMacaroonRequest, o
 	return out, nil
 }
 
-func (c *fmtClient) SetTemperature(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) SetTemperature(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/SetTemperature", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -114,8 +114,8 @@ func (c *fmtClient) SetTemperature(ctx context.Context, in *proto.Empty, opts ..
 	return out, nil
 }
 
-func (c *fmtClient) SetPressure(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) SetPressure(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/SetPressure", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -123,8 +123,8 @@ func (c *fmtClient) SetPressure(ctx context.Context, in *proto.Empty, opts ...gr
 	return out, nil
 }
 
-func (c *fmtClient) StartRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) StartRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StartRecording", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -132,8 +132,8 @@ func (c *fmtClient) StartRecording(ctx context.Context, in *proto.Empty, opts ..
 	return out, nil
 }
 
-func (c *fmtClient) StopRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) StopRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StopRecording", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -141,8 +141,8 @@ func (c *fmtClient) StopRecording(ctx context.Context, in *proto.Empty, opts ...
 	return out, nil
 }
 
-func (c *fmtClient) SubscribeDataStream(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) SubscribeDataStream(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/SubscribeDataStream", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -150,8 +150,8 @@ func (c *fmtClient) SubscribeDataStream(ctx context.Context, in *proto.Empty, op
 	return out, nil
 }
 
-func (c *fmtClient) LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/LoadTestPlan", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -159,8 +159,8 @@ func (c *fmtClient) LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...g
 	return out, nil
 }
 
-func (c *fmtClient) StartTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) StartTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StartTestPlan", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -168,8 +168,8 @@ func (c *fmtClient) StartTestPlan(ctx context.Context, in *proto.Empty, opts ...
 	return out, nil
 }
 
-func (c *fmtClient) StopTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) StopTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StopTestPlan", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -177,8 +177,8 @@ func (c *fmtClient) StopTestPlan(ctx context.Context, in *proto.Empty, opts ...g
 	return out, nil
 }
 
-func (c *fmtClient) InsertROIMarker(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*DeprecationResponse, error) {
-	out := new(DeprecationResponse)
+func (c *fmtClient) InsertROIMarker(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
 	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/InsertROIMarker", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -205,31 +205,31 @@ type FmtServer interface {
 	BakeMacaroon(context.Context, *BakeMacaroonRequest) (*BakeMacaroonResponse, error)
 	//
 	//Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command
-	SetTemperature(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	SetTemperature(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command
-	SetPressure(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	SetPressure(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! StartRecording is now /fmtrpc.PluginAPI/StartRecord
-	StartRecording(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	StartRecording(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! StopRecording is now /fmtrpc.PluginAPI/StopRecord
-	StopRecording(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	StopRecording(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! SubscribeDataStream is now /fmtrpc.PluginAPI/Subscribe
-	SubscribeDataStream(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	SubscribeDataStream(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! LoadTestPlan will no longer be supported
-	LoadTestPlan(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	LoadTestPlan(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! StartTestPlan will no longer be supported
-	StartTestPlan(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	StartTestPlan(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! StopTestPlan will no longer be supported
-	StopTestPlan(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	StopTestPlan(context.Context, *proto.Empty) (*proto.Empty, error)
 	//
 	//Deprecated! InsertROIMarker will no longer be supported
-	InsertROIMarker(context.Context, *proto.Empty) (*DeprecationResponse, error)
+	InsertROIMarker(context.Context, *proto.Empty) (*proto.Empty, error)
 	mustEmbedUnimplementedFmtServer()
 }
 
@@ -249,31 +249,31 @@ func (UnimplementedFmtServer) TestCommand(context.Context, *TestRequest) (*TestR
 func (UnimplementedFmtServer) BakeMacaroon(context.Context, *BakeMacaroonRequest) (*BakeMacaroonResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BakeMacaroon not implemented")
 }
-func (UnimplementedFmtServer) SetTemperature(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) SetTemperature(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetTemperature not implemented")
 }
-func (UnimplementedFmtServer) SetPressure(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) SetPressure(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetPressure not implemented")
 }
-func (UnimplementedFmtServer) StartRecording(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) StartRecording(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartRecording not implemented")
 }
-func (UnimplementedFmtServer) StopRecording(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) StopRecording(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopRecording not implemented")
 }
-func (UnimplementedFmtServer) SubscribeDataStream(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) SubscribeDataStream(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SubscribeDataStream not implemented")
 }
-func (UnimplementedFmtServer) LoadTestPlan(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) LoadTestPlan(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LoadTestPlan not implemented")
 }
-func (UnimplementedFmtServer) StartTestPlan(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) StartTestPlan(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StartTestPlan not implemented")
 }
-func (UnimplementedFmtServer) StopTestPlan(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) StopTestPlan(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method StopTestPlan not implemented")
 }
-func (UnimplementedFmtServer) InsertROIMarker(context.Context, *proto.Empty) (*DeprecationResponse, error) {
+func (UnimplementedFmtServer) InsertROIMarker(context.Context, *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InsertROIMarker not implemented")
 }
 func (UnimplementedFmtServer) mustEmbedUnimplementedFmtServer() {}
