@@ -37,6 +37,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	e "github.com/pkg/errors"
@@ -65,14 +66,6 @@ var (
 			Action: "read",
 		},
 		{
-			Entity: "tpex",
-			Action: "read",
-		},
-		{
-			Entity: "ctrl",
-			Action: "read",
-		},
-		{
 			Entity: "plugins",
 			Action: "read",
 		},
@@ -91,20 +84,12 @@ var (
 			Action: "write",
 		},
 		{
-			Entity: "tpex",
-			Action: "write",
-		},
-		{
-			Entity: "ctrl",
-			Action: "write",
-		},
-		{
 			Entity: "plugins",
 			Action: "write",
 		},
 	}
 	validActions  = []string{"read", "write", "generate"}
-	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", "plugins", macaroons.PermissionEntityCustomURI}
+	validEntities = []string{"fmtd", "macaroon", "plugins", macaroons.PermissionEntityCustomURI}
 )
 
 // StreamingPluginAPIPermissions returns a map of the command URI and it's assocaited permissions for the streaming Plugin API methods
@@ -136,49 +121,9 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "fmtd",
 			Action: "read",
 		}},
-		"/fmtrpc.DataCollector/StartRecording": {{
-			Entity: "fmtd",
-			Action: "write",
-		}},
-		"/fmtrpc.DataCollector/StopRecording": {{
-			Entity: "fmtd",
-			Action: "write",
-		}},
-		"/fmtrpc.DataCollector/SubscribeDataStream": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.DataCollector/DownloadHistoricalData": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.TestPlanExecutor/LoadTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/StartTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/StopTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/InsertROIMarker": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
 		"/fmtrpc.Fmt/BakeMacaroon": {{
 			Entity: "macaroon",
 			Action: "generate",
-		}},
-		"/demorpc.Controller/SetTemperature": {{
-			Entity: "ctrl",
-			Action: "write",
-		}},
-		"/demorpc.Controller/SetPressure": {{
-			Entity: "ctrl",
-			Action: "write",
 		}},
 		"/fmtrpc.PluginAPI/StartRecord": {{
 			Entity: "plugins",
@@ -336,7 +281,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}
 	perms := make([]bakery.Op, len(req.Permissions))
 	for i, op := range req.Permissions {
-		if !stringInSlice(op.Entity, validEntities) {
+		if !utils.StrInStrSlice(validEntities, op.Entity) {
 			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacEntity.Error())
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
@@ -344,7 +289,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			if _, ok := allPermissions[op.Action]; !ok {
 				return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 			}
-		} else if !stringInSlice(op.Action, validActions) {
+		} else if !utils.StrInStrSlice(validActions, op.Action) {
 			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 		}
 		perms[i] = bakery.Op{
@@ -372,14 +317,4 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	return &fmtrpc.BakeMacaroonResponse{
 		Macaroon: hex.EncodeToString(macBytes),
 	}, nil
-}
-
-// stringInSlice checks if a string "a" is in the slice
-func stringInSlice(a string, slice []string) bool {
-	for _, b := range slice {
-		if b == a {
-			return true
-		}
-	}
-	return false
 }
