@@ -131,8 +131,6 @@ func TestInitConfigFromYAML(t *testing.T) {
 		ConsoleOutput:  true,
 		GrpcPort:       3567,
 		RestPort:       8080,
-		TCPPort:        10024,
-		TCPAddr:        "0.0.0.0",
 		DataOutputDir:  default_data_output_dir,
 		MacaroonDBPath: default_macaroon_db_file,
 		TLSCertPath:    default_tls_cert_path,
@@ -141,7 +139,6 @@ func TestInitConfigFromYAML(t *testing.T) {
 		TestMacPath:    test_macaroon_path,
 		WSPingInterval: default_ws_ping_interval,
 		WSPongWait:     default_ws_pong_wait,
-		InfluxURL:      default_influx_url,
 		MaxLogFiles:    default_max_log_files,
 		MaxLogFileSize: default_log_file_size,
 		PluginDir:      default_plugin_dir,
@@ -164,18 +161,6 @@ func TestInitConfigFromYAML(t *testing.T) {
 		t.Errorf("%s", err)
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("RestPort: %v\n", d_config.RestPort))
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	_, err = config_file.WriteString(fmt.Sprintf("TCPPort: %v\n", d_config.TCPPort))
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	_, err = config_file.WriteString(fmt.Sprintf("TCPAddr: %v\n", d_config.TCPAddr))
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	_, err = config_file.WriteString(fmt.Sprintf("InfluxURL: %v\n", d_config.InfluxURL))
 	if err != nil {
 		t.Errorf("%s", err)
 	}
@@ -229,8 +214,6 @@ func TestDefaultConfig(t *testing.T) {
 		ConsoleOutput:  true,
 		GrpcPort:       7777,
 		RestPort:       8080,
-		TCPPort:        10024,
-		TCPAddr:        "0.0.0.0",
 		DataOutputDir:  default_data_output_dir,
 		MacaroonDBPath: default_macaroon_db_file,
 		TLSCertPath:    default_tls_cert_path,
@@ -239,7 +222,6 @@ func TestDefaultConfig(t *testing.T) {
 		TestMacPath:    test_macaroon_path,
 		WSPingInterval: default_ws_ping_interval,
 		WSPongWait:     default_ws_pong_wait,
-		InfluxURL:      default_influx_url,
 		MaxLogFiles:    default_max_log_files,
 		MaxLogFileSize: default_log_file_size,
 		PluginDir:      default_plugin_dir,

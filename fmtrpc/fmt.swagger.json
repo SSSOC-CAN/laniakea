@@ -80,7 +80,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -103,7 +103,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -126,7 +126,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -149,7 +149,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -172,7 +172,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -195,7 +195,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -251,7 +251,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -274,7 +274,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -297,7 +297,7 @@
           "200": {
             "description": "A successful response.",
             "schema": {
-              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+              "$ref": "#/definitions/protoEmpty"
             }
           },
           "default": {
@@ -383,15 +383,6 @@
         }
       }
     },
-    "fmtrpcDeprecationResponse": {
-      "type": "object",
-      "properties": {
-        "msg": {
-          "type": "string",
-          "title": "The message indicating the API endpoint has been deprecated"
-        }
-      }
-    },
     "fmtrpcMacaroonPermission": {
       "type": "object",
       "properties": {
@@ -429,6 +420,9 @@
         "DAY"
       ],
       "default": "SECOND"
+    },
+    "protoEmpty": {
+      "type": "object"
     },
     "protobufAny": {
       "type": "object",
