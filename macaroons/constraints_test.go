@@ -81,4 +81,20 @@ func TestTimeoutConstraint(t *testing.T) {
 	}
 }
 
-//TODO:SSSOCPaulCote test new PluginConstraint
+var (
+	pluginNames                   = []string{"plugin1", "plugin-two", "PlUgIn_ThR33"}
+	expectedPluginCaveatSubstring = "plugins"
+)
+
+// TestPluginConstraint tests that a caveat for the given plugins is created
+func TestPluginConstraint(t *testing.T) {
+	pluginFunc := PluginConstraint(pluginNames)
+	mac := createDummyMacaroon(t)
+	err := pluginFunc(mac)
+	if err != nil {
+		t.Fatalf("Error applying plugin constraint to dummy macaroon: %v", err)
+	}
+	if string(mac.Caveats()[0].Id) != fmt.Sprintf("%s %s", expectedPluginCaveatSubstring, strings.Join(pluginNames, ":")) {
+		t.Fatalf("Added caveat '%s' does not meet expectations", mac.Caveats()[0].Id)
+	}
+}
