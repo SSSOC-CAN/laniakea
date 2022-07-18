@@ -72,6 +72,144 @@
         ]
       }
     },
+    "/v1/insert/roi": {
+      "get": {
+        "summary": "Deprecated! InsertROIMarker will no longer be supported",
+        "operationId": "Fmt_InsertROIMarker",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/load/testplan": {
+      "get": {
+        "summary": "Deprecated! LoadTestPlan will no longer be supported",
+        "operationId": "Fmt_LoadTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/set/pressure": {
+      "get": {
+        "summary": "Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command",
+        "operationId": "Fmt_SetPressure",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/set/temperature": {
+      "get": {
+        "summary": "Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command",
+        "operationId": "Fmt_SetTemperature",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/start/recording": {
+      "get": {
+        "summary": "Deprecated! StartRecording is now /fmtrpc.PluginAPI/StartRecord",
+        "operationId": "Fmt_StartRecording",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/start/testplan": {
+      "get": {
+        "summary": "Deprecated! StartTestPlan will no longer be supported",
+        "operationId": "Fmt_StartTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
     "/v1/stop": {
       "post": {
         "summary": "fmtcli: `stop`\nStopDaemon will send a shutdown request to the interrupt handler, triggering\na graceful shutdown of the daemon.",
@@ -100,6 +238,75 @@
             }
           }
         ],
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/stop/recording": {
+      "get": {
+        "summary": "Deprecated! StopRecording is now /fmtrpc.PluginAPI/StopRecord",
+        "operationId": "Fmt_StopRecording",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/stop/testplan": {
+      "get": {
+        "summary": "Deprecated! StopTestPlan will no longer be supported",
+        "operationId": "Fmt_StopTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Fmt"
+        ]
+      }
+    },
+    "/v1/subscribe/datastream": {
+      "get": {
+        "summary": "Deprecated! SubscribeDataStream is now /fmtrpc.PluginAPI/Subscribe",
+        "operationId": "Fmt_SubscribeDataStream",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcDeprecationResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
         "tags": [
           "Fmt"
         ]
@@ -173,6 +380,15 @@
         "macaroon": {
           "type": "string",
           "title": "The hex-encoded macaroon, serialized in binary format"
+        }
+      }
+    },
+    "fmtrpcDeprecationResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string",
+          "title": "The message indicating the API endpoint has been deprecated"
         }
       }
     },
