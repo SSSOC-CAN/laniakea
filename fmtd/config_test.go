@@ -17,13 +17,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-var (
-	examplePlugins = []string{
-		"My-Plugin_124:datasource:plugin.exe",
-		"myplugin.test:controller:plugin.exe",
-	}
-)
-
 // TestInitConfigNoYAML ensures that if no .yaml is found, a default config is produced
 func TestInitConfigNoYAML(t *testing.T) {
 	home_dir := utils.AppDataDir("fmtd", false)
@@ -142,7 +135,6 @@ func TestInitConfigFromYAML(t *testing.T) {
 		MaxLogFiles:    default_max_log_files,
 		MaxLogFileSize: default_log_file_size,
 		PluginDir:      default_plugin_dir,
-		Plugins:        examplePlugins,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -175,16 +167,6 @@ func TestInitConfigFromYAML(t *testing.T) {
 	_, err = config_file.WriteString(fmt.Sprintf("PluginDir: %v\n", d_config.PluginDir))
 	if err != nil {
 		t.Errorf("%s", err)
-	}
-	_, err = config_file.WriteString("Plugins:\n")
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	for _, p := range d_config.Plugins {
-		_, err = config_file.WriteString(fmt.Sprintf("- %v\n", p))
-		if err != nil {
-			t.Errorf("%s", err)
-		}
 	}
 	config_file.Sync()
 	config_file.Close()

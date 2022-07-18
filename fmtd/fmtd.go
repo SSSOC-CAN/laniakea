@@ -38,7 +38,6 @@ import (
 
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/data"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
@@ -65,7 +64,7 @@ var (
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
-	var services []data.Service
+	var services []api.Service
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
