@@ -260,6 +260,38 @@
         ]
       }
     },
+    "/v2/plugin/{name}": {
+      "get": {
+        "summary": "fmtcli: `plugin-info`\nGetPlugin will retrieve the information for the given plugin.",
+        "operationId": "PluginAPI_GetPlugin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/fmtrpcPlugin"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
     "/v2/plugins": {
       "get": {
         "summary": "fmtcli: `plugin-list`\nListPlugins will send a list of registered and running plugins.",
@@ -285,19 +317,6 @@
     }
   },
   "definitions": {
-    "PluginPluginState": {
-      "type": "string",
-      "enum": [
-        "READY",
-        "BUSY",
-        "STOPPING",
-        "STOPPED",
-        "UNKNOWN",
-        "UNRESPONSIVE",
-        "KILLED"
-      ],
-      "default": "READY"
-    },
     "PluginPluginType": {
       "type": "string",
       "enum": [
@@ -331,7 +350,7 @@
           "title": "The plugin type (either Datasource or Controller)"
         },
         "state": {
-          "$ref": "#/definitions/PluginPluginState",
+          "$ref": "#/definitions/fmtrpcPluginState",
           "title": "the current state of the plugin"
         },
         "started_at": {
@@ -374,6 +393,32 @@
           "type": "string",
           "format": "int64",
           "title": "the maximum number of times a plugin can timeout"
+        }
+      }
+    },
+    "fmtrpcPluginState": {
+      "type": "string",
+      "enum": [
+        "READY",
+        "BUSY",
+        "STOPPING",
+        "STOPPED",
+        "UNKNOWN",
+        "UNRESPONSIVE",
+        "KILLED"
+      ],
+      "default": "READY"
+    },
+    "fmtrpcPluginStateUpdate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "the name of the plugin"
+        },
+        "state": {
+          "$ref": "#/definitions/fmtrpcPluginState",
+          "title": "the current state of the plugin"
         }
       }
     },

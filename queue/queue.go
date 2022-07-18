@@ -3,13 +3,11 @@ package queue
 import (
 	"sync"
 
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
-	bg "github.com/SSSOCPaulCote/blunderguard"
 )
 
-const (
-	ErrAlreadySubscribed = bg.Error("subscriber with given name already subscribed")
-)
+const ()
 
 type (
 	QueueListener struct {
@@ -67,7 +65,7 @@ func (q *Queue) Subscribe(name string) (chan int, func(), error) {
 	q.Lock()
 	defer q.Unlock()
 	if _, ok := q.listeners[name]; ok {
-		return nil, nil, ErrAlreadySubscribed
+		return nil, nil, errors.ErrAlreadySubscribed
 	}
 	q.listeners[name] = &QueueListener{IsConnected: true, Signal: make(chan int, 2)}
 	unsub := func() {

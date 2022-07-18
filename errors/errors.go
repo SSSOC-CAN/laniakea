@@ -19,4 +19,5 @@ const (
 	ErrAlreadyStoppedRecording = bg.Error("already stopped recording")
 	ErrPollingIntervalTooSmall = bg.Error("inputted polling interval smaller than minimum required value")
 	ErrMacSvcNil               = bg.Error("macaroon service uninitialized")
+	ErrAlreadySubscribed       = bg.Error("subscriber with given name already subscribed")
 )

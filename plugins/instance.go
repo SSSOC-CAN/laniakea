@@ -31,10 +31,15 @@ const (
 	ErrPluginNotStarted = bg.Error("plugin not started")
 )
 
+type StateListener struct {
+	IsConnected bool
+	Signal      chan fmtrpc.PluginState
+}
+
 type PluginInstance struct {
 	cfg           *fmtrpc.PluginConfig
 	client        *plugin.Client
-	state         fmtrpc.Plugin_PluginState
+	state         fmtrpc.PluginState
 	timeoutCnt    int
 	outgoingQueue *queue.Queue
 	cleanUp       func()
@@ -43,56 +48,78 @@ type PluginInstance struct {
 	startedAt     time.Time
 	stoppedAt     time.Time
 	version       string
+	listeners     map[string]*StateListener
 	sync.RWMutex
+}
+
+// updateListeners will send an update to all listeners, removing any that are not listening any longer
+func (i *PluginInstance) updateListeners(newState fmtrpc.PluginState) {
+	newListenerMap := make(map[string]*StateListener)
+	for n, l := range i.listeners {
+		if !l.IsConnected {
+			close(l.Signal)
+			continue
+		}
+		l.Signal <- newState
+		newListenerMap[n] = l
+	}
+	i.listeners = newListenerMap
 }
 
 // setReady changes the plugin instance state to ready
 func (i *PluginInstance) setReady() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_READY
+	i.state = fmtrpc.PluginState_READY
+	i.updateListeners(fmtrpc.PluginState_READY)
 }
 
 // setBusy changes the plugin instance state to Busy
 func (i *PluginInstance) setBusy() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_BUSY
+	i.state = fmtrpc.PluginState_BUSY
+	i.updateListeners(fmtrpc.PluginState_BUSY)
 }
 
 // setStopping changes the plugin instance state to stopping
 func (i *PluginInstance) setStopping() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_STOPPING
+	i.state = fmtrpc.PluginState_STOPPING
+	i.updateListeners(fmtrpc.PluginState_STOPPING)
 }
 
 // setStopped changes the plugin instance state to stopped
 func (i *PluginInstance) setStopped() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_STOPPED
+	i.state = fmtrpc.PluginState_STOPPED
+	i.updateListeners(fmtrpc.PluginState_STOPPED)
 }
 
 // setUnknown changes the plugin instance state to unknown
 func (i *PluginInstance) setUnknown() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_UNKNOWN
+	i.state = fmtrpc.PluginState_UNKNOWN
+	i.updateListeners(fmtrpc.PluginState_UNKNOWN)
 }
 
 // setUnresponsive changes the plugin instance state to unresponsive
 func (i *PluginInstance) setUnresponsive() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_UNRESPONSIVE
+	i.state = fmtrpc.PluginState_UNRESPONSIVE
+	i.updateListeners(fmtrpc.PluginState_UNRESPONSIVE)
 }
 
 // setKilled changes the plugin instance state to killed
 func (i *PluginInstance) setKilled() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.Plugin_KILLED
+	i.state = fmtrpc.PluginState_KILLED
+	i.updateListeners(fmtrpc.PluginState_KILLED)
 }
 
 // setRecording changes the plugin recording state to recording
@@ -126,7 +153,7 @@ func (i *PluginInstance) resetTimeoutCount() {
 // startRecord is the method that starts the data recording process if this plugin is a datasource
 func (i *PluginInstance) startRecord(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// check if we're already recording
@@ -217,7 +244,7 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 // stopRecord stops the recording process of the datasource plugin
 func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// check if plugin is recording
@@ -293,7 +320,7 @@ func (i *PluginInstance) kill() {
 
 // stop will send the signal to kill the plugin
 func (i *PluginInstance) stop(ctx context.Context) error {
-	if i.getState() == fmtrpc.Plugin_STOPPING || i.getState() == fmtrpc.Plugin_STOPPED || i.getState() == fmtrpc.Plugin_KILLED {
+	if i.getState() == fmtrpc.PluginState_STOPPING || i.getState() == fmtrpc.PluginState_STOPPED || i.getState() == fmtrpc.PluginState_KILLED {
 		return e.ErrServiceAlreadyStopped
 	}
 	if i.client == nil {
@@ -394,7 +421,7 @@ func (i *PluginInstance) setLogger(logger *zerolog.Logger) {
 // command will pass along a command frame to a controller plugin and store the streamed data in the queue
 func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	if i.client == nil {
@@ -475,7 +502,7 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 // pushVersion will push the fmtd/laniakea version to the plugin for compatibility reasons
 func (i *PluginInstance) pushVersion(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	if i.client == nil {
@@ -546,7 +573,7 @@ func (i *PluginInstance) setVersion(v string) {
 // getVersion will get the plugin version for compatibility reasons
 func (i *PluginInstance) getVersion(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.Plugin_READY && i.getState() != fmtrpc.Plugin_UNKNOWN {
+	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	if i.client == nil {
@@ -632,7 +659,7 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 }
 
 // getState is a goroutine safe way to read the current plugin state
-func (i *PluginInstance) getState() fmtrpc.Plugin_PluginState {
+func (i *PluginInstance) getState() fmtrpc.PluginState {
 	i.RLock()
 	defer i.RUnlock()
 	return i.state
@@ -650,4 +677,20 @@ func (i *PluginInstance) getTimeoutCount() int {
 	i.RLock()
 	defer i.RUnlock()
 	return i.timeoutCnt
+}
+
+// SubscribeState returns a channel which will have signals sent when a the state is changed as well as an unsub function
+func (i *PluginInstance) subscribeState(name string) (chan fmtrpc.PluginState, func(), error) {
+	i.Lock()
+	defer i.Unlock()
+	if _, ok := i.listeners[name]; ok {
+		return nil, nil, e.ErrAlreadySubscribed
+	}
+	i.listeners[name] = &StateListener{IsConnected: true, Signal: make(chan fmtrpc.PluginState, 2)}
+	unsub := func() {
+		i.Lock()
+		defer i.Unlock()
+		i.listeners[name].IsConnected = false
+	}
+	return i.listeners[name].Signal, unsub, nil
 }
