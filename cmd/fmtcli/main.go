@@ -32,7 +32,6 @@ import (
 
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/urfave/cli"
 )
@@ -72,45 +71,6 @@ func getFmtClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
 		conn.Close()
 	}
 	return fmtrpc.NewFmtClient(conn), cleanUp
-}
-
-//getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getDataCollectorClient(ctx *cli.Context) (fmtrpc.DataCollectorClient, func()) {
-	args := extractArgs(ctx)
-	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
-	if err != nil {
-		fatal(err)
-	}
-	cleanUp := func() {
-		conn.Close()
-	}
-	return fmtrpc.NewDataCollectorClient(conn), cleanUp
-}
-
-//getTestPlanExecutorClient returns the TestPlanExecutorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getTestPlanExecutorClient(ctx *cli.Context) (fmtrpc.TestPlanExecutorClient, func()) {
-	args := extractArgs(ctx)
-	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
-	if err != nil {
-		fatal(err)
-	}
-	cleanUp := func() {
-		conn.Close()
-	}
-	return fmtrpc.NewTestPlanExecutorClient(conn), cleanUp
-}
-
-// getControllerClient returns the ControllerClient instance from the demorpc package
-func getControllerClient(ctx *cli.Context) (demorpc.ControllerClient, func()) {
-	args := extractArgs(ctx)
-	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
-	if err != nil {
-		fatal(err)
-	}
-	cleanUp := func() {
-		conn.Close()
-	}
-	return demorpc.NewControllerClient(conn), cleanUp
 }
 
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
@@ -185,15 +145,7 @@ func main() {
 		loginCommand,
 		setPassword,
 		changePassword,
-		startRecording,
-		stopRecording,
-		loadTestPlan,
-		startTestPlan,
-		stopTestPlan,
-		insertROIMarker,
 		bakeMacaroon,
-		setTempCommand,
-		setPresCommand,
 		pluginStartRecordCmd,
 		pluginStopRecordCmd,
 		pluginStartCmd,
