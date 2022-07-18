@@ -109,7 +109,7 @@ func TestGetClientConnWithMac(t *testing.T) {
 	}
 	defer db.Close()
 	// macaroon service
-	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{}, []string{})
+	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating macaroon service: %v", err)
 	}

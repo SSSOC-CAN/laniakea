@@ -295,7 +295,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 
 	// Instantiating Macaroon Service
 	t.Log("Initiating macaroon service...")
-	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{}, []string{})
+	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{})
 	if err != nil {
 		t.Errorf("Unable to instantiate Macaroon service: %v", err)
 	}
