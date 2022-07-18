@@ -1,6 +1,3 @@
-//go:build demo
-// +build demo
-
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
@@ -12,34 +9,30 @@ package fmtd
 import (
 	"context"
 	"encoding/hex"
-	"io"
 	"io/ioutil"
-	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/controller"
-	"github.com/SSSOC-CAN/fmtd/data"
-	"github.com/SSSOC-CAN/fmtd/drivers"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/rga"
-	"github.com/SSSOC-CAN/fmtd/telemetry"
-	"github.com/SSSOC-CAN/fmtd/testplan"
+	"github.com/SSSOC-CAN/fmtd/plugins"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
-	"github.com/SSSOCPaulCote/gux"
 	e "github.com/pkg/errors"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
@@ -54,7 +47,63 @@ const (
 var (
 	testingConsoleOutput bool = false
 	defaultTestingPwd         = []byte("abcdefgh")
+	fmtdDirRegexp             = `/(?:fmtd)/(?:fmtd)$`
+	rootDirRegexp             = `/(?:fmtd)$`
+	startPluginDir            = "plugins/plugins/testing"
+	pluginCfgs                = []*fmtrpc.PluginConfig{
+		&fmtrpc.PluginConfig{
+			Name:        "test-rng-plugin",
+			Type:        "datasource",
+			ExecName:    "test_rng_plugin",
+			Timeout:     30,
+			MaxTimeouts: 3,
+		},
+		&fmtrpc.PluginConfig{
+			Name:        "test-timeout-plugin",
+			Type:        "datasource",
+			ExecName:    "test_timeout_plugin",
+			Timeout:     15,
+			MaxTimeouts: 3,
+		},
+		&fmtrpc.PluginConfig{
+			Name:        "test-ctrl-plugin",
+			Type:        "controller",
+			ExecName:    "test_ctrl_plugin",
+			Timeout:     30,
+			MaxTimeouts: 3,
+		},
+	}
 )
+
+// getPluginDir checks where we're running the test from and determines the path to the plugin directory
+func getPluginDir(t *testing.T) string {
+	// first get cwd, determine if root or plugins directory
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("could not get current working directory: %v", err)
+	}
+	// root dir
+	var pluginDir string
+	match, err := regexp.MatchString(fmtdDirRegexp, dir)
+	if err != nil {
+		t.Fatalf("could not run regular expression check: %v", err)
+	}
+	if !match {
+		// plugins dir
+		match, err = regexp.MatchString(rootDirRegexp, dir)
+		if err != nil {
+			t.Fatalf("could not run regular expression check: %v", err)
+		}
+		if !match {
+			t.Fatalf("Running test from an unexpected location, please run from root directory or within plugins package directory")
+		} else {
+			pluginDir = filepath.Join(dir, startPluginDir)
+		}
+	} else {
+		pluginDir = filepath.Join(filepath.Dir(dir), startPluginDir)
+	}
+	return pluginDir
+}
 
 func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySigChan chan struct{}, wg *sync.WaitGroup, tempDir string) {
 	defer wg.Done()
@@ -73,6 +122,8 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	config.TLSKeyPath = path.Join(tempDir, "tls.key")
 	config.AdminMacPath = path.Join(tempDir, "admin.macaroon")
 	config.TestMacPath = path.Join(tempDir, "test.macaroon")
+	config.PluginDir = getPluginDir(t)
+	config.Plugins = pluginCfgs[:]
 	// logger
 	log, err := InitLogger(&config)
 	if err != nil {
@@ -84,7 +135,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 		t.Fatalf("Could not initialize server: %v", err)
 	}
 	// Now we replicate Main
-	var services []data.Service
+	var services []api.Service
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -132,6 +183,20 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	rpcServer.RegisterWithGrpcServer(grpc_server)
 	rpcServer.AddGrpcInterceptor(grpc_interceptor)
 
+	// Initialize Plugin Manager
+	t.Log("Initializing plugins...")
+	pluginManager := plugins.NewPluginManager(config.PluginDir, config.Plugins, *server.logger, false)
+	pluginManager.RegisterWithGrpcServer(grpc_server)
+	err = pluginManager.AddPermissions(StreamingPluginAPIPermission())
+	if err != nil {
+		t.Errorf("Could not add permissions to plugin manager: %v", err)
+	}
+	err = pluginManager.Start(ctx)
+	if err != nil {
+		t.Errorf("Unable to start plugin manager: %v", err)
+	}
+	defer pluginManager.Stop()
+	t.Log("plugins initialized")
 	t.Log("RPC subservices instantiated and registered successfully.")
 
 	// Starting kvdb
@@ -223,7 +288,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	t.Log("Baking macaroons...")
 	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), false, 0,
+			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), 0, []string{},
 		)
 		if err != nil {
 			t.Errorf("Unable to create admin macaroon: %v", err)
@@ -231,7 +296,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	}
 	if !utils.FileExists(server.cfg.TestMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, true, 120,
+			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, 120, []string{},
 		)
 		if err != nil {
 			t.Errorf("Unable to create test macaroon: %v", err)
@@ -281,12 +346,12 @@ func unlockFMTD(ctx context.Context, unlockerClient fmtrpc.UnlockerClient) error
 }
 
 type unlockerCases struct {
-	caseName  string
-	command   string
-	oldPwd    []byte
-	newPwd    []byte
-	newMacKey bool
-	expectErr bool
+	caseName    string
+	command     string
+	oldPwd      []byte
+	newPwd      []byte
+	newMacKey   bool
+	expectedErr error
 }
 
 var (
@@ -294,14 +359,14 @@ var (
 	loginCmd             string = "login"
 	setPwdCmd            string = "setpassword"
 	unlockerTestCasesOne        = []unlockerCases{
-		{"change-password-before-setting-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, true},
-		{"change-password-before-setting-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, true},
-		{"login-before-setting", loginCmd, defaultTestingPwd, nil, false, true},
-		{"set-password-valid", setPwdCmd, defaultTestingPwd, nil, false, false},
-		{"set-password-after-setting", setPwdCmd, []byte("bbbbbbbb"), nil, false, true},
-		{"login-after-setting", loginCmd, defaultTestingPwd, nil, false, true},
-		{"change-password-after-setting-invalid-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, true},
-		{"change-password-after-setting-invalid-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, true},
+		{"change-password-before-setting-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, unlocker.ErrPasswordNotSet},
+		{"change-password-before-setting-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, unlocker.ErrPasswordNotSet},
+		{"login-before-setting", loginCmd, defaultTestingPwd, nil, false, unlocker.ErrPasswordNotSet},
+		{"set-password-valid", setPwdCmd, defaultTestingPwd, nil, false, nil},
+		{"set-password-after-setting", setPwdCmd, []byte("bbbbbbbb"), nil, false, intercept.ErrDaemonUnlocked},
+		{"login-after-setting", loginCmd, defaultTestingPwd, nil, false, intercept.ErrDaemonUnlocked},
+		{"change-password-after-setting-invalid-1", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), false, intercept.ErrDaemonUnlocked},
+		{"change-password-after-setting-invalid-2", chngePwdCmd, defaultTestingPwd, []byte("aaaaaaaa"), true, intercept.ErrDaemonUnlocked},
 	}
 )
 
@@ -345,47 +410,56 @@ func TestUnlockerGrpcApi(t *testing.T) {
 		t.Run(c.caseName, func(t *testing.T) {
 			switch c.command {
 			case chngePwdCmd:
-				resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
+				_, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
 					CurrentPassword:    c.oldPwd,
 					NewPassword:        c.newPwd,
 					NewMacaroonRootKey: c.newMacKey,
 				})
-				t.Log(resp)
-				if c.expectErr {
-					if err == nil {
-						t.Error("Expected an error and got none")
+				if c.expectedErr == nil {
+					if err != c.expectedErr {
+						t.Fatalf("Unexpected error when calling ChangePassword: %v", err)
 					}
 				} else {
-					if err != nil {
-						t.Errorf("Unexpected errror occured: %v", err)
+					st, ok := status.FromError(err)
+					if !ok {
+						t.Errorf("Unexpected error format when calling ChangePassword")
+					}
+					if st.Message() != c.expectedErr.Error() {
+						t.Errorf("Unexpected error when calling ChangePassword: %v", err)
 					}
 				}
 			case loginCmd:
-				resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
+				_, err := client.Login(ctx, &fmtrpc.LoginRequest{
 					Password: c.oldPwd,
 				})
-				t.Log(resp)
-				if c.expectErr {
-					if err == nil {
-						t.Error("Expected an error and got none")
+				if c.expectedErr == nil {
+					if err != c.expectedErr {
+						t.Fatalf("Unexpected error when calling Login: %v", err)
 					}
 				} else {
-					if err != nil {
-						t.Errorf("Unexpected errror occured: %v", err)
+					st, ok := status.FromError(err)
+					if !ok {
+						t.Errorf("Unexpected error format when calling Login")
+					}
+					if st.Message() != c.expectedErr.Error() {
+						t.Errorf("Unexpected error when calling Login: %v", err)
 					}
 				}
 			case setPwdCmd:
-				resp, err := client.SetPassword(ctx, &fmtrpc.SetPwdRequest{
+				_, err := client.SetPassword(ctx, &fmtrpc.SetPwdRequest{
 					Password: c.oldPwd,
 				})
-				t.Log(resp)
-				if c.expectErr {
-					if err == nil {
-						t.Error("Expected an error and got none")
+				if c.expectedErr == nil {
+					if err != c.expectedErr {
+						t.Fatalf("Unexpected error when calling SetPassword: %v", err)
 					}
 				} else {
-					if err != nil {
-						t.Errorf("Unexpected errror occured: %v", err)
+					st, ok := status.FromError(err)
+					if !ok {
+						t.Errorf("Unexpected error format when calling SetPassword")
+					}
+					if st.Message() != c.expectedErr.Error() {
+						t.Errorf("Unexpected error when calling SetPassword: %v", err)
 					}
 				}
 			}
@@ -434,15 +508,15 @@ func getMacaroonGrpcCreds(tlsCertPath, adminMacPath string, macTimeout int64) ([
 }
 
 type bakeMacCases struct {
-	caseName   string
-	bakeMacReq *fmtrpc.BakeMacaroonRequest
-	expectErr  bool
-	callback   func(string, grpc.DialOption) (*grpc.ClientConn, error)
+	caseName    string
+	bakeMacReq  *fmtrpc.BakeMacaroonRequest
+	expectedErr error
+	callback    func(string, grpc.DialOption) (*grpc.ClientConn, error)
 }
 
 var (
 	bakeMacTestCases = []bakeMacCases{
-		{"bake-mac-empty-permissions", &fmtrpc.BakeMacaroonRequest{}, true, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+		{"bake-mac-empty-permissions", &fmtrpc.BakeMacaroonRequest{}, ErrEmptyPermissionsList, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
 			return nil, nil
 		}},
 		{"bake-mac-invalid-permission-entity", &fmtrpc.BakeMacaroonRequest{
@@ -454,7 +528,7 @@ var (
 					Action: "invalid action",
 				},
 			},
-		}, true, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+		}, ErrInvalidMacEntity, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
 			return nil, nil
 		}},
 		{"bake-mac-invalid-permission-action", &fmtrpc.BakeMacaroonRequest{
@@ -466,7 +540,7 @@ var (
 					Action: "invalid action",
 				},
 			},
-		}, true, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+		}, ErrInvalidMacEntity, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
 			return nil, nil
 		}},
 		{"bake-mac-10-sec-timeout", &fmtrpc.BakeMacaroonRequest{
@@ -478,7 +552,7 @@ var (
 					Action: "/fmtrpc.Fmt/AdminTest",
 				},
 			},
-		}, false, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
+		}, nil, func(macHex string, tlsDialOpt grpc.DialOption) (*grpc.ClientConn, error) {
 			macBytes, err := hex.DecodeString(macHex)
 			if err != nil {
 				return nil, e.Wrap(err, "unable to hex decode macaroon")
@@ -555,6 +629,7 @@ func TestFmtGrpcApi(t *testing.T) {
 	}
 	defer conn.Close()
 	unlockerClient := fmtrpc.NewUnlockerClient(conn)
+	unAuthedFmtClient := fmtrpc.NewFmtClient(conn)
 	err = unlockFMTD(ctx, unlockerClient)
 	if err != nil {
 		t.Fatalf("Could not set FMTD password: %v", err)
@@ -593,21 +668,18 @@ func TestFmtGrpcApi(t *testing.T) {
 	// bake-macaroon
 	for _, c := range bakeMacTestCases {
 		t.Run(c.caseName, func(t *testing.T) {
-			resp, err := fmtClient.BakeMacaroon(ctx, c.bakeMacReq)
-			if c.expectErr {
-				if err == nil {
-					t.Error("Expected an error and got none")
+			_, err := fmtClient.BakeMacaroon(ctx, c.bakeMacReq)
+			if c.expectedErr == nil {
+				if err != c.expectedErr {
+					t.Fatalf("Unexpected error when calling BakeMacaroon: %v", err)
 				}
 			} else {
-				if err != nil {
-					t.Errorf("Unable to bake macaroon: %v", err)
+				st, ok := status.FromError(err)
+				if !ok {
+					t.Errorf("Unexpected error format when calling BakeMacaroon")
 				}
-				testConn, err := c.callback(resp.Macaroon, grpc.WithTransportCredentials(creds))
-				if err != nil {
-					t.Errorf("Error when testing freshly baked macaroon: %v", err)
-				}
-				if testConn != nil {
-					defer testConn.Close()
+				if st.Message() != c.expectedErr.Error() {
+					t.Errorf("Unexpected error when calling BakeMacaroon: %v", err)
 				}
 			}
 		})
@@ -623,6 +695,96 @@ func TestFmtGrpcApi(t *testing.T) {
 			if st.Message() != "error reading from server: EOF" {
 				t.Errorf("Unable to stop daemon: %v", st.Message())
 			}
+		}
+	})
+	t.Run("set-temperature", func(t *testing.T) {
+		_, err := unAuthedFmtClient.SetTemperature(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling SetTemperature")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling SetTemperature: %v", err)
+		}
+	})
+	t.Run("set-pressure", func(t *testing.T) {
+		_, err := unAuthedFmtClient.SetPressure(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling SetPressure")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling SetPressure: %v", err)
+		}
+	})
+	t.Run("start-recording", func(t *testing.T) {
+		_, err := unAuthedFmtClient.StartRecording(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling StartRecording")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StartRecording: %v", err)
+		}
+	})
+	t.Run("stop-recording", func(t *testing.T) {
+		_, err := unAuthedFmtClient.StopRecording(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling StopRecording")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StopRecording: %v", err)
+		}
+	})
+	t.Run("subscribe-datastream", func(t *testing.T) {
+		_, err := unAuthedFmtClient.SubscribeDataStream(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling SubscribeDataStream")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling SubscribeDataStream: %v", err)
+		}
+	})
+	t.Run("load-testplan", func(t *testing.T) {
+		_, err := unAuthedFmtClient.LoadTestPlan(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling LoadTestPlan")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling LoadTestPlan: %v", err)
+		}
+	})
+	t.Run("start-testplan", func(t *testing.T) {
+		_, err := unAuthedFmtClient.StartTestPlan(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling StartTestPlan")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StartTestPlan: %v", err)
+		}
+	})
+	t.Run("stop-testplan", func(t *testing.T) {
+		_, err := unAuthedFmtClient.StopTestPlan(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling StopTestPlan")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StopTestPlan: %v", err)
+		}
+	})
+	t.Run("insert-roi", func(t *testing.T) {
+		_, err := unAuthedFmtClient.InsertROIMarker(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Fatalf("Unexpected error format when calling InsertROIMarker")
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling InsertROIMarker: %v", err)
 		}
 	})
 	wg.Wait()

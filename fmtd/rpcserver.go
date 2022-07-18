@@ -38,6 +38,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	e "github.com/pkg/errors"
@@ -53,6 +54,7 @@ const (
 	ErrEmptyPermissionsList = bg.Error("empty permissions list")
 	ErrInvalidMacEntity     = bg.Error("invalid macaroon permission entity")
 	ErrInvalidMacAction     = bg.Error("invalid macaroon permission action")
+	ErrDeprecatedAction     = bg.Error("deprecated rpc command")
 )
 
 var (
@@ -317,4 +319,49 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	return &fmtrpc.BakeMacaroonResponse{
 		Macaroon: hex.EncodeToString(macBytes),
 	}, nil
+}
+
+// SetTemperature is a deprecated Controller API rpc command
+func (s *RpcServer) SetTemperature(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// SetPressure is a deprecated Controller API rpc command
+func (s *RpcServer) SetPressure(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StartRecording is a deprecated DataCollector API rpc command
+func (s *RpcServer) StartRecording(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StopRecording is a deprecated DataCollector API rpc command
+func (s *RpcServer) StopRecording(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// SubscribeDataStream is a deprecated DataCollector API rpc command
+func (s *RpcServer) SubscribeDataStream(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// LoadTestPlan is a deprecated Executor API rpc command
+func (s *RpcServer) LoadTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StartTestPlan is a deprecated Executor API rpc command
+func (s *RpcServer) StartTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StopTestPlan is a deprecated Executor API rpc command
+func (s *RpcServer) StopTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// InsertROIMarker is a deprecated Executor API rpc command
+func (s *RpcServer) InsertROIMarker(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
 }

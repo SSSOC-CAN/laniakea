@@ -116,7 +116,7 @@ func InitConfig(isTesting bool) (Config, error) {
 			config = check_yaml_config(config)
 			if len(config.Plugins) > 0 {
 				for _, cfg := range config.Plugins {
-					err = plugins.ValidatePluginConfig(cfg, config.PluginDir)
+					err = plugins.ValidatePluginConfig(cfg, config.PluginDir, isTesting)
 					if err != nil {
 						return Config{}, e.Wrapf(err, "Error validating %s plugin", cfg.Name)
 					}
