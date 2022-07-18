@@ -41,7 +41,7 @@ type Config struct {
 	InfluxAPIToken      string                 `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
 	PluginDir           string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
 	Plugins             []*fmtrpc.PluginConfig `yaml:"Plugins"`
-	RegenerateMacaroons bool                   `long:"regenmacaroons" description:"Boolean to determine whether macaroons are regenerated`
+	RegenerateMacaroons bool                   `long:"regenmacaroons" description:"Boolean to determine whether macaroons are regenerated"`
 	MacaroonDBPath      string
 	TLSCertPath         string
 	TLSKeyPath          string

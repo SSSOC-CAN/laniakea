@@ -49,14 +49,11 @@ const (
 	daemonLocked
 	daemonUnlocked
 	rpcActive
-	ErrWaitingToStart          = bg.Error("waiting to start, RPC services not available")
-	ErrDaemonLocked            = bg.Error("daemon locked, unlock it to enable full RPC access")
-	ErrDaemonUnlocked          = bg.Error("daemon already unlocked, unlocker service is no longer available")
-	ErrRPCStarting             = bg.Error("the RPC server is in the process of starting up, but not yet ready to accept calls")
-	ErrInvalidRPCState         = bg.Error("invalid RPC state")
-	ErrDuplicateMacConstraints = bg.Error("duplicate macaroon constraints for given path")
-	ErrUnknownPermission       = bg.Error("unknown permission for given method")
-	ErrInvalidRequestType      = bg.Error("request is not a valid type")
+	ErrWaitingToStart  = bg.Error("waiting to start, RPC services not available")
+	ErrDaemonLocked    = bg.Error("daemon locked, unlock it to enable full RPC access")
+	ErrDaemonUnlocked  = bg.Error("daemon already unlocked, unlocker service is no longer available")
+	ErrRPCStarting     = bg.Error("the RPC server is in the process of starting up, but not yet ready to accept calls")
+	ErrInvalidRPCState = bg.Error("invalid RPC state")
 )
 
 var (
@@ -70,18 +67,20 @@ var (
 	pluginMethodNames = []string{
 		"/fmtrpc.PluginAPI/StartRecord",
 		"/fmtrpc.PluginAPI/StopRecord",
-		"/fmtrpc.PluginAPI/Subscribe",
 		"/fmtrpc.PluginAPI/StartPlugin",
 		"/fmtrpc.PluginAPI/StopPlugin",
-		"/fmtrpc.PluginAPI/Command",
-		"/fmtrpc.PluginAPI/AddPlugin",
 		"/fmtrpc.PluginAPI/GetPlugin",
-		"/fmtrpc.PluginAPI/SubscribePluginState", // we leave out ListPlugins since this doesn't require plugin specific mac permissions
+	}
+	pluginStreamingMethodNames = []string{
+		"/fmtrpc.PluginAPI/Subscribe",
+		"/fmtrpc.PluginAPI/Command",
+		"/fmtrpc.PluginAPI/SubscribePluginState",
 	}
 )
 
 // GrpcInteceptor struct is a data structure with attributes relevant to creating the gRPC interceptor
 type GrpcInterceptor struct {
+	streamMethod  string
 	state         rpcState
 	noMacaroons   bool
 	log           *zerolog.Logger
@@ -236,7 +235,7 @@ func (i *GrpcInterceptor) AddPermissions(perms map[string][]bakery.Op) error {
 // AddPermission adds a new macaroon rule for the given method
 func (i *GrpcInterceptor) AddPermission(method string, ops []bakery.Op) error {
 	if _, ok := i.permissionMap[method]; ok {
-		return ErrDuplicateMacConstraints
+		return errors.ErrDuplicateMacConstraints
 	}
 	i.permissionMap[method] = ops
 	return nil
@@ -279,7 +278,7 @@ func (i *GrpcInterceptor) checkMacaroon(ctx context.Context,
 
 	uriPermissions, ok := i.permissionMap[fullMethod]
 	if !ok {
-		return ErrUnknownPermission
+		return errors.ErrUnknownPermission
 	}
 
 	// Find out if there is an external validator registered for
@@ -321,18 +320,20 @@ func logStreamServerInterceptor(log *zerolog.Logger) grpc.StreamServerIntercepto
 }
 
 // addPluginNameToContext adds the plugin name to the context. If all is the plugin name, all registered plugin names are added
-func (i *GrpcInterceptor) addPluginNametoContext(ctx context.Context, req interface{}) (context.Context, error) {
+func addPluginNametoContext(ctx context.Context, req interface{}) (context.Context, error) {
 	// first we asset the request type
 	var pluginName string
 	switch request := req.(type) {
 	case *fmtrpc.PluginRequest:
 		pluginName = request.Name
+	case fmtrpc.PluginRequest:
+		pluginName = request.Name
 	case *fmtrpc.ControllerPluginRequest:
 		pluginName = request.Name
-	case *fmtrpc.PluginConfig:
+	case fmtrpc.ControllerPluginRequest:
 		pluginName = request.Name
 	default:
-		return ctx, ErrInvalidRequestType
+		return ctx, errors.ErrInvalidRequestType
 	}
 	return context.WithValue(ctx, macaroons.PluginContextKey, pluginName), nil
 }
@@ -345,7 +346,7 @@ func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInter
 		handler grpc.UnaryHandler) (interface{}, error) {
 		// Check if the method is a plugin method, then add plugin name to the context
 		if utils.StrInStrSlice(pluginMethodNames, info.FullMethod) {
-			ctx, err := i.addPluginNametoContext(ctx, req)
+			ctx, err := addPluginNametoContext(ctx, req)
 			if err != nil {
 				return nil, status.Error(codes.Internal, err.Error())
 			}
@@ -368,15 +369,8 @@ func (i *GrpcInterceptor) MacaroonUnaryServerInterceptor() grpc.UnaryServerInter
 func (i *GrpcInterceptor) MacaroonStreamServerInterceptor() grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream,
 		info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if utils.StrInStrSlice(pluginMethodNames, info.FullMethod) {
-			ctx, err := i.addPluginNametoContext(ss.Context(), srv)
-			if err != nil {
-				return status.Error(codes.Internal, err.Error())
-			}
-			err = i.checkMacaroon(ctx, info.FullMethod)
-			if err != nil {
-				return status.Error(codes.PermissionDenied, err.Error())
-			}
+		if utils.StrInStrSlice(pluginStreamingMethodNames, info.FullMethod) {
+			// authentication is handled by each method in these cases
 			return handler(srv, ss)
 		}
 		// Check macaroons.
