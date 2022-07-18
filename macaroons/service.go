@@ -162,30 +162,30 @@ func (svc *Service) ValidateMacaroon(ctx context.Context,
 		if !ok || reqPlugName == "" {
 			return ErrKeyNotInContext
 		}
-		if reqPlugName != "all" {
-			// Check to see if the plugins in the macaroon match the list of registered plugins
-			if len(svc.registeredPlugins) != 0 {
-				var okP bool
-				for _, caveat := range mac.Caveats() {
-					split := strings.Split(string(caveat.Id), " ") // assuming "declared plugins plugin1:plugin-2"
-					if len(split) >= 2 && split[1] == "plugins" {
-						if strings.Contains(split[2], ":") {
-							plugins := strings.Split(split[2], ":")
-							if utils.StrInStrSlice(plugins, reqPlugName) {
-								okP = true
-							}
-						} else {
-							if strings.Contains(reqPlugName, split[2]) {
-								okP = true
-							}
+
+		// Check to see if the plugins in the macaroon match the list of registered plugins
+		if len(svc.registeredPlugins) != 0 {
+			var okP bool
+			for _, caveat := range mac.Caveats() {
+				split := strings.Split(string(caveat.Id), " ") // assuming "declared plugins plugin1:plugin-2"
+				if len(split) >= 2 && split[1] == "plugins" {
+					if strings.Contains(split[2], ":") {
+						plugins := strings.Split(split[2], ":")
+						if utils.StrInStrSlice(plugins, reqPlugName) {
+							okP = true
+						}
+					} else {
+						if strings.Contains(reqPlugName, split[2]) || split[2] == "all" {
+							okP = true
 						}
 					}
 				}
-				if !okP {
-					return ErrUnauthorizedPluginAction
-				}
+			}
+			if !okP {
+				return ErrUnauthorizedPluginAction
 			}
 		}
+
 	}
 
 	// Check the method being called against the permitted operation, the

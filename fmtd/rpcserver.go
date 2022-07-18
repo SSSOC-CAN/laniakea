@@ -112,11 +112,28 @@ var (
 		"/fmtrpc.PluginAPI/StartPlugin",
 		"/fmtrpc.PluginAPI/StopPlugin",
 		"/fmtrpc.PluginAPI/Command",
-		"/fmtrpc.PluginAPI/AddPlugin",
 		"/fmtrpc.PluginAPI/GetPlugin",
 		"/fmtrpc.PluginAPI/SubscribePluginState",
 	}
 )
+
+// StreamingPluginAPIPermissions returns a map of the command URI and it's assocaited permissions for the streaming Plugin API methods
+func StreamingPluginAPIPermission() map[string][]bakery.Op {
+	return map[string][]bakery.Op{
+		"/fmtrpc.PluginAPI/Subscribe": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/Command": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/SubscribePluginState": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+	}
+}
 
 // MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
 func MainGrpcServerPermissions() map[string][]bakery.Op {

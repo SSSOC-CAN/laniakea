@@ -21,4 +21,7 @@ const (
 	ErrMacSvcNil               = bg.Error("macaroon service uninitialized")
 	ErrAlreadySubscribed       = bg.Error("subscriber with given name already subscribed")
 	ErrInvalidPluginName       = bg.Error("invalid plugin name")
+	ErrInvalidRequestType      = bg.Error("request is not a valid type")
+	ErrDuplicateMacConstraints = bg.Error("duplicate macaroon constraints for given path")
+	ErrUnknownPermission       = bg.Error("unknown permission for given method")
 )

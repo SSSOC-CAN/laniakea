@@ -97,5 +97,8 @@ func PluginConstraint(pluginNames []string) func(*macaroon.Macaroon) error {
 
 // PluginCaveat is a wrapper function which returns a checkers.Caveat struct
 func PluginCaveat(pluginNames []string) checkers.Caveat {
+	if len(pluginNames) == 1 {
+		return checkers.DeclaredCaveat("plugins", pluginNames[0])
+	}
 	return checkers.DeclaredCaveat("plugins", strings.Join(pluginNames, ":"))
 }

@@ -166,11 +166,16 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
-	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
+	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger, false)
 	pluginManager.RegisterWithGrpcServer(grpc_server)
+	err = pluginManager.AddPermissions(StreamingPluginAPIPermission())
+	if err != nil {
+		server.logger.Error().Msgf("Could not add permissions to plugin manager: %v", err)
+		return err
+	}
 	err = pluginManager.Start(ctx)
 	if err != nil {
-		server.logger.Error().Msg("Unable to start plugin manager: %v", err)
+		server.logger.Error().Msgf("Unable to start plugin manager: %v", err)
 		return err
 	}
 	defer pluginManager.Stop()
@@ -181,7 +186,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, rtdStateStore)
 	err = rtdService.RegisterWithGrpcServer(grpc_server)
 	if err != nil {
-		server.logger.Error().Msg("Unable to register RTD Service with gRPC server: %v", err)
+		server.logger.Error().Msgf("Unable to register RTD Service with gRPC server: %v", err)
 		return err
 	}
 	services = append(services, rtdService)
@@ -392,7 +397,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), 0, server.cfg.Plugins,
+			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), 0, []string{"all"},
 		)
 		if err != nil {
 			server.logger.Error().Msgf("Unable to create admin macaroon: %v", err)
@@ -401,7 +406,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	if !utils.FileExists(server.cfg.TestMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, 120, server.cfg.Plugins,
+			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, 120, registeredPlugins,
 		)
 		if err != nil {
 			server.logger.Error().Msgf("Unable to create test macaroon: %v", err)
@@ -411,6 +416,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
 	rpcServer.AddMacaroonService(macaroonService)
+	pluginManager.AddMacaroonService(macaroonService)
 
 	// Starting services TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
 	for _, s := range services {
@@ -462,11 +468,7 @@ func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.O
 }
 
 // genMacaroons will create the macaroon files specified if not already created
-func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, seconds int64, pluginCfgs []*fmtrpc.PluginConfig) error {
-	pluginNames := []string{}
-	for _, cfg := range pluginCfgs {
-		pluginNames = append(pluginNames, cfg.Name)
-	}
+func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, seconds int64, pluginNames []string) error {
 	macBytes, err := bakeMacaroons(ctx, svc, perms, seconds, pluginNames)
 	if err != nil {
 		return err

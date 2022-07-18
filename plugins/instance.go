@@ -693,3 +693,9 @@ func (i *PluginInstance) subscribeState(name string) (chan fmtrpc.PluginState, f
 	}
 	return i.listeners[name].Signal, unsub, nil
 }
+
+func (i *PluginInstance) setStartTime(startTime time.Time) {
+	i.Lock()
+	defer i.Unlock()
+	i.startedAt = startTime
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	e "github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
@@ -32,6 +33,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
 const (
@@ -58,6 +60,9 @@ type PluginManager struct {
 	pluginRegistry map[string]*PluginInstance
 	queueManager   *queue.QueueManager
 	quitChan       chan struct{}
+	permissionMap  map[string][]bakery.Op
+	noMacaroons    bool
+	svc            *macaroons.Service
 	sync.WaitGroup
 }
 
@@ -65,16 +70,43 @@ type PluginManager struct {
 var _ api.RestProxyService = (*PluginManager)(nil)
 
 // NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
-func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger) *PluginManager {
+func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger, noMacaroons bool) *PluginManager {
 	l := NewPluginLogger("PLGN", &zl)
 	ql := l.zl.With().Str("subsystem", "QMGR").Logger()
 	return &PluginManager{
-		pluginDir:    pluginDir,
-		pluginCfgs:   pluginCfgs,
-		logger:       l,
-		queueManager: queue.NewQueueManager(&ql),
-		quitChan:     make(chan struct{}),
+		pluginDir:     pluginDir,
+		pluginCfgs:    pluginCfgs,
+		logger:        l,
+		queueManager:  queue.NewQueueManager(&ql),
+		quitChan:      make(chan struct{}),
+		permissionMap: make(map[string][]bakery.Op),
+		noMacaroons:   noMacaroons,
 	}
+}
+
+// Adds the macaroon service provided to GrpcInterceptor struct attributes
+func (p *PluginManager) AddMacaroonService(service *macaroons.Service) {
+	p.svc = service
+}
+
+// AddPermissions adds the inputted permission to the permissionMap attribute of the GrpcInterceptor struct
+func (p *PluginManager) AddPermissions(perms map[string][]bakery.Op) error {
+	for m, ops := range perms {
+		err := p.AddPermission(m, ops)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddPermission adds a new macaroon rule for the given method
+func (p *PluginManager) AddPermission(method string, ops []bakery.Op) error {
+	if _, ok := p.permissionMap[method]; ok {
+		return e.ErrDuplicateMacConstraints
+	}
+	p.permissionMap[method] = ops
+	return nil
 }
 
 // RegisterWithGrpcServer registers the PluginManager with the root gRPC server.
@@ -285,6 +317,12 @@ func (p *PluginManager) StopRecord(ctx context.Context, req *fmtrpc.PluginReques
 
 // Subscribe is the PluginAPI command which exposes the data stream of any datasource plugin
 func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribeServer) error {
+	if !p.noMacaroons {
+		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Subscribe")
+		if err != nil {
+			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
 	// get the plugin instance from the registry
 	_, ok := p.pluginRegistry[req.Name]
 	if !ok {
@@ -366,6 +404,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 	instance.setClient(newClient)
 	instance.setLogger(&zLogger)
 	instance.setReady()
+	instance.setStartTime(time.Now())
 	return &proto.Empty{}, nil
 }
 
@@ -436,6 +475,12 @@ func (p *PluginManager) ListPlugins(ctx context.Context, _ *proto.Empty) (*fmtrp
 
 // Command is the PluginAPI command for sending an arbitrary amount of data to a controller service
 func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtrpc.PluginAPI_CommandServer) error {
+	if !p.noMacaroons {
+		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Command")
+		if err != nil {
+			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
@@ -535,8 +580,49 @@ func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup,
 	}
 }
 
+// implementing checkMacaroon here because grpc interceptor doesn't expose the request object for streams
+func (p *PluginManager) checkMacaroon(ctx context.Context, req interface{}, fullMethod string) error {
+	var pluginName string
+	switch request := req.(type) {
+	case *fmtrpc.PluginRequest:
+		pluginName = request.Name
+	case *fmtrpc.ControllerPluginRequest:
+		pluginName = request.Name
+	default:
+		return e.ErrInvalidRequestType
+	}
+	ctx = context.WithValue(ctx, macaroons.PluginContextKey, pluginName)
+	svc := p.svc
+
+	// If the macaroon service is not yet active, we cannot allow
+	// the call.
+	if svc == nil {
+		return e.ErrMacSvcNil
+	}
+
+	uriPermissions, ok := p.permissionMap[fullMethod]
+	if !ok {
+		return e.ErrUnknownPermission
+	}
+
+	// Find out if there is an external validator registered for
+	// this method. Fall back to the internal one if there isn't.
+	validator, ok := svc.ExternalValidators[fullMethod]
+	if !ok {
+		validator = svc
+	}
+	// Now that we know what validator to use, let it do its work.
+	return validator.ValidateMacaroon(ctx, uriPermissions, fullMethod)
+}
+
 // SubscribePluginState implements the gRPC method of the same name. It subscribes a client to the given plugins state updates
 func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribePluginStateServer) error {
+	if !p.noMacaroons {
+		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/SubscribePluginState")
+		if err != nil {
+			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
 	rand.Seed(time.Now().UnixNano())
 	if req.Name == "all" {
 		stateQ := gux.NewQueue()
