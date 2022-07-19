@@ -123,7 +123,6 @@ func TestGetClientConnWithMac(t *testing.T) {
 	mac, err := macaroonService.NewMacaroon(
 		ctx,
 		macaroons.DefaultRootKeyID,
-		false,
 		[]checkers.Caveat{macaroons.TimeoutCaveat(int64(0))},
 		[]bakery.Op{
 			{
