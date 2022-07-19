@@ -9,6 +9,7 @@ package fmtd
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"io/ioutil"
 	"os"
 	"path"
@@ -70,6 +71,13 @@ var (
 			Type:        "controller",
 			ExecName:    "test_ctrl_plugin",
 			Timeout:     30,
+			MaxTimeouts: 3,
+		},
+		&fmtrpc.PluginConfig{
+			Name:        "test-error-plugin",
+			Type:        "datasource",
+			ExecName:    "test_error_plugin",
+			Timeout:     15,
 			MaxTimeouts: 3,
 		},
 	}
@@ -304,6 +312,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	}
 	grpc_interceptor.AddMacaroonService(macaroonService)
 	rpcServer.AddMacaroonService(macaroonService)
+	pluginManager.AddMacaroonService(macaroonService)
 	t.Log("Macaroons baked successfully.")
 
 	// Start all Services
@@ -787,5 +796,231 @@ func TestFmtGrpcApi(t *testing.T) {
 			t.Errorf("Unexpected error when calling InsertROIMarker: %v", err)
 		}
 	})
+	shutdownInterceptor.RequestShutdown()
+	wg.Wait()
+}
+
+// TestPluginAPI tests the PluginAPI service over bufnet gRPC with macaroons
+func TestPluginAPI(t *testing.T) {
+	// temp dir
+	tempDir, err := ioutil.TempDir("", "integration-testing-")
+	if err != nil {
+		t.Fatalf("Error creating temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	var wg sync.WaitGroup
+	// SIGINT interceptor
+	shutdownInterceptor, err := intercept.InitInterceptor()
+	if err != nil {
+		t.Fatalf("Could not initialize the shutdown interceptor: %v", err)
+	}
+	defer shutdownInterceptor.Close()
+	readySignal := make(chan struct{})
+	defer close(readySignal)
+	wg.Add(1)
+	go initFmtd(t, shutdownInterceptor, readySignal, &wg, tempDir)
+	<-readySignal
+	ctx := context.Background()
+	creds, err := credentials.NewClientTLSFromFile(path.Join(tempDir, "tls.cert"), "")
+	if err != nil {
+		t.Fatal("Could not get TLS credentials from file")
+	}
+	unlockerOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithContextDialer(bufDialer),
+	}
+	conn, err := grpc.DialContext(ctx, "bufnet", unlockerOpts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+	unlockerClient := fmtrpc.NewUnlockerClient(conn)
+	err = unlockFMTD(ctx, unlockerClient)
+	if err != nil {
+		t.Fatalf("Could not set FMTD password: %v", err)
+	}
+	time.Sleep(1 * time.Second)
+	// now we get FmtClient
+	opts := []grpc.DialOption{grpc.WithContextDialer(bufDialer)}
+	macDialOpts, err := getMacaroonGrpcCreds(path.Join(tempDir, "tls.cert"), path.Join(tempDir, "admin.macaroon"), int64(60))
+	opts = append(opts, macDialOpts...)
+	authConn, err := grpc.DialContext(ctx, "bufnet", opts...)
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer authConn.Close()
+	plugClient := fmtrpc.NewPluginAPIClient(authConn)
+	t.Run("start record-plugin not registered", func(t *testing.T) {
+		_, err := plugClient.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin-name"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StartRecord: %v", err)
+		}
+		if st.Message() != plugins.ErrUnregsiteredPlugin.Error() {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+	})
+	t.Run("start record-plugin invalid state", func(t *testing.T) {
+		_, err := plugClient.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "test-timeout-plugin"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		time.Sleep(20 * time.Second)
+		_, err = plugClient.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "test-timeout-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StartRecord: %v", err)
+		}
+		if st.Message() != plugins.ErrPluginNotReady.Error() {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+	})
+	t.Run("start record-already recording", func(t *testing.T) {
+		_, err := plugClient.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "test-rng-plugin"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		_, err = plugClient.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "test-rng-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StartRecord: %v", err)
+		}
+		if st.Message() != errors.ErrAlreadyRecording.Error() {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+	})
+	t.Run("start record-plugin error", func(t *testing.T) {
+		_, err := plugClient.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "test-error-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from StartRecord gRPC method: %v", err)
+		}
+		if st.Message() != "I don't wanna" {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+	})
+	t.Run("start record-plugin timeout", func(t *testing.T) {
+		pluginState, err := plugClient.GetPlugin(ctx, &fmtrpc.PluginRequest{Name: "test-timeout-plugin"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling GetPlugin: %v", err)
+		}
+		if pluginState.State != fmtrpc.PluginState_UNRESPONSIVE {
+			t.Errorf("Plugin in unexpected state: %v", pluginState.State)
+		}
+	})
+	t.Run("start plugin-unregistered plugin", func(t *testing.T) {
+		_, err := plugClient.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
+		}
+		if st.Message() != plugins.ErrUnregsiteredPlugin.Error() {
+			t.Errorf("Unexpected error when calling StartPlugin: %v", err)
+		}
+	})
+	t.Run("start plugin-already started", func(t *testing.T) {
+		_, err := plugClient.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: "test-error-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
+		}
+		if st.Message() != errors.ErrServiceAlreadyStarted.Error() {
+			t.Errorf("Unexpected error when calling StartPlugin: %v", err)
+		}
+	})
+	t.Run("start plugin-valid", func(t *testing.T) {
+		_, err := plugClient.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: "test-rng-plugin"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
+		}
+		_, err = plugClient.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: "test-rng-plugin"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartPlugin: %v", err)
+		}
+	})
+	t.Run("stop plugin-unregistered plugin", func(t *testing.T) {
+		_, err := plugClient.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from StopPlugin gRPC method: %v", err)
+		}
+		if st.Message() != plugins.ErrUnregsiteredPlugin.Error() {
+			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
+		}
+	})
+	t.Run("stop plugin-valid", func(t *testing.T) {
+		_, err := plugClient.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: "test-rng-plugin"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
+		}
+	})
+	t.Run("stop plugin-already stopped", func(t *testing.T) {
+		_, err := plugClient.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: "test-rng-plugin"})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from StopPlugin gRPC method: %v", err)
+		}
+		if st.Message() != errors.ErrServiceAlreadyStopped.Error() {
+			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
+		}
+	})
+	t.Run("command-unregistered plugin", func(t *testing.T) {
+		stream, _ := plugClient.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "unregistered-plugin"})
+		_, err := stream.Recv()
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		if st.Message() != plugins.ErrUnregsiteredPlugin.Error() {
+			t.Errorf("Unexpected error when calling Command: %v", err)
+		}
+	})
+	t.Run("Command-empty frame", func(t *testing.T) {
+		stream, _ := plugClient.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "test-ctrl-plugin", Frame: &proto.Frame{}})
+		_, err := stream.Recv()
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		if st.Message() != "invalid frame type" {
+			t.Errorf("Unexpected error when calling Command: %v", err)
+		}
+	})
+	t.Run("command-single return frame", func(t *testing.T) {
+		type examplePayload struct {
+			Command string `json:"command"`
+			Arg     string `json:"arg"`
+		}
+		pay := examplePayload{
+			Command: "echo",
+			Arg:     "foo bar",
+		}
+		p, err := json.Marshal(pay)
+		if err != nil {
+			t.Errorf("Could not format request payload: %v", err)
+		}
+		stream, err := plugClient.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "test-ctrl-plugin", Frame: &proto.Frame{
+			Source:    "client",
+			Type:      "application/json",
+			Timestamp: time.Now().UnixMilli(),
+			Payload:   p,
+		}})
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		resp, err := stream.Recv()
+		if err != nil {
+			t.Errorf("Unexpected error type coming from Command gRPC method: %v", err)
+		}
+		if resp == nil {
+			t.Errorf("Unexpected response from Command gRPC method: response is nil")
+		} else {
+			if string(resp.Payload) != "foo bar" {
+				t.Errorf("Unexpected response from Command gRPC method: %v", string(resp.Payload))
+			}
+			t.Logf("Echo response: %v", string(resp.Payload))
+		}
+	})
+	shutdownInterceptor.RequestShutdown()
 	wg.Wait()
 }
