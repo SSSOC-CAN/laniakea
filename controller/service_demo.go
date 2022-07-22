@@ -250,11 +250,11 @@ func (s *ControllerService) SetTemperature(req *demorpc.SetTempRequest, updateSt
 	})
 	rand.Seed(time.Now().UnixNano())
 	subscriberName := s.name + utils.RandSeq(10)
-	updateChan, unsub := s.rtdStateStore.Subscribe(subscriberName)
-	cleanUp := func() {
-		unsub(s.rtdStateStore, subscriberName)
+	updateChan, unsub, err := s.rtdStateStore.Subscribe(subscriberName)
+	if err != nil {
+		return err
 	}
-	defer cleanUp()
+	defer unsub()
 	for {
 		select {
 		case <-updateChan:
@@ -425,11 +425,11 @@ func (s *ControllerService) SetPressure(req *demorpc.SetPresRequest, updateStrea
 	})
 	rand.Seed(time.Now().UnixNano())
 	subscriberName := s.name + utils.RandSeq(10)
-	updateChan, unsub := s.rtdStateStore.Subscribe(subscriberName)
-	cleanUp := func() {
-		unsub(s.rtdStateStore, subscriberName)
+	updateChan, unsub, err := s.rtdStateStore.Subscribe(subscriberName)
+	if err != nil {
+		return err
 	}
-	defer cleanUp()
+	defer unsub()
 	for {
 		select {
 		case <-updateChan:

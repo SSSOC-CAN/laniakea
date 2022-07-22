@@ -28,7 +28,6 @@ package fmtd
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -73,6 +72,10 @@ var (
 			Entity: "ctrl",
 			Action: "read",
 		},
+		{
+			Entity: "plugins",
+			Action: "read",
+		},
 	}
 	writePermissions = []bakery.Op{
 		{
@@ -95,10 +98,32 @@ var (
 			Entity: "ctrl",
 			Action: "write",
 		},
+		{
+			Entity: "plugins",
+			Action: "write",
+		},
 	}
 	validActions  = []string{"read", "write", "generate"}
-	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", macaroons.PermissionEntityCustomURI}
+	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", "plugins", macaroons.PermissionEntityCustomURI}
 )
+
+// StreamingPluginAPIPermissions returns a map of the command URI and it's assocaited permissions for the streaming Plugin API methods
+func StreamingPluginAPIPermission() map[string][]bakery.Op {
+	return map[string][]bakery.Op{
+		"/fmtrpc.PluginAPI/Subscribe": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/Command": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/SubscribePluginState": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+	}
+}
 
 // MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
 func MainGrpcServerPermissions() map[string][]bakery.Op {
@@ -155,6 +180,46 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "ctrl",
 			Action: "write",
 		}},
+		"/fmtrpc.PluginAPI/StartRecord": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/StopRecord": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/Subscribe": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/StartPlugin": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/StopPlugin": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/Command": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/ListPlugins": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/AddPlugin": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/GetPlugin": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/SubscribePluginState": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
 	}
 }
 
@@ -179,7 +244,7 @@ func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerol
 	logger := &NewSubLogger(log, "RPCS").SubLogger
 	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(config.GrpcPort, 10))
 	if err != nil {
-		logger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err))
+		logger.Error().Msgf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err)
 		return nil, err
 	}
 	return &RpcServer{
@@ -236,7 +301,7 @@ func (s *RpcServer) Stop() error {
 	close(s.quit)
 	err := s.Listener.Close()
 	if err != nil {
-		s.SubLogger.Error().Msg(fmt.Sprintf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close()))
+		s.SubLogger.Error().Msgf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close())
 		return e.Wrapf(err, "could not stop listening at %v", s.Listener.Addr())
 	}
 	return nil
@@ -287,12 +352,8 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			Action: op.Action,
 		}
 	}
-	var (
-		timeoutSeconds int64
-		timeout        bool
-	)
+	var timeoutSeconds int64
 	if req.Timeout > 0 {
-		timeout = true
 		switch req.TimeoutType {
 		case fmtrpc.TimeoutType_SECOND:
 			timeoutSeconds = req.Timeout
@@ -304,7 +365,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			timeoutSeconds = req.Timeout * int64(60) * int64(60) * int64(24)
 		}
 	}
-	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeout, timeoutSeconds)
+	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeoutSeconds, req.Plugins)
 	if err != nil {
 		return nil, status.Error(codes.Internal, e.Wrap(err, "could not bake macaroon").Error())
 	}

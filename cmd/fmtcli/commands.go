@@ -69,9 +69,10 @@ func getContext() context.Context {
 // printRespJSON will convert a proto response as a string and print it
 func printRespJSON(resp proto.Message) {
 	jsonMarshaler := &protojson.MarshalOptions{
-		Multiline:     true,
-		UseProtoNames: true,
-		Indent:        "    ",
+		Multiline:       true,
+		UseProtoNames:   true,
+		Indent:          "    ",
+		EmitUnpopulated: true,
 	}
 	jsonStr := jsonMarshaler.Format(resp)
 	fmt.Println(jsonStr)
@@ -406,13 +407,17 @@ var bakeMacaroon = cli.Command{
 			Name:  "save_to",
 			Usage: "If set, the macaroon will be saved as a .macaroon file at the specified path. The hex encoded macaroon is printed to the console by default",
 		},
+		cli.StringFlag{
+			Name:  "plugins",
+			Usage: "If set, the macaroon will be locked to specified plugins. Enter plugin names, spaced with a colon (e.g. plugin-1:plugin_TWO:PlUgIn-_3Thousand)",
+		},
 	},
 	Action: bakeMac,
 }
 
 func bakeMac(ctx *cli.Context) error {
 	ctxc := getContext()
-	if ctx.NArg() < 1 || ctx.NumFlags() > 3 {
+	if ctx.NArg() < 1 || ctx.NumFlags() > 4 {
 		return cli.ShowCommandHelp(ctx, "bake-macaroon")
 	}
 	client, cleanUp := getFmtClient(ctx)
@@ -448,10 +453,16 @@ func bakeMac(ctx *cli.Context) error {
 			Action: action,
 		})
 	}
+	var parsedPlugins []string
+	if pluginNames := ctx.String("plugins"); pluginNames != "" {
+		parsedPlugins = strings.Split(pluginNames, ":")
+	}
+
 	bakeMacReq := &fmtrpc.BakeMacaroonRequest{
 		Timeout:     timeout,
 		TimeoutType: timeoutType,
 		Permissions: parsedPerms,
+		Plugins:     parsedPlugins,
 	}
 	bakeMacResponse, err := client.BakeMacaroon(ctxc, bakeMacReq)
 	if err != nil {

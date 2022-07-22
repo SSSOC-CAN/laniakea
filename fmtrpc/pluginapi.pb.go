@@ -385,15 +385,15 @@ type PluginConfig struct {
 	unknownFields protoimpl.UnknownFields
 
 	// the name of the plugin
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty" yaml:"name"`
 	// the type of the plugin, either datasource or controller
-	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty" yaml:"type"`
 	// the name of the executable of the plugin
-	ExecName string `protobuf:"bytes,3,opt,name=exec_name,json=execName,proto3" json:"exec_name,omitempty"`
+	ExecName string `protobuf:"bytes,3,opt,name=exec_name,json=execName,proto3" json:"exec_name,omitempty" yaml:"exec"`
 	// the time in seconds to determine if a plugin has timed out
-	Timeout int64 `protobuf:"varint,4,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Timeout int64 `protobuf:"varint,4,opt,name=timeout,proto3" json:"timeout,omitempty" yaml:"timeout"`
 	// the maximum number of times a plugin can timeout
-	MaxTimeouts int64 `protobuf:"varint,5,opt,name=max_timeouts,json=maxTimeouts,proto3" json:"max_timeouts,omitempty"`
+	MaxTimeouts int64 `protobuf:"varint,5,opt,name=max_timeouts,json=maxTimeouts,proto3" json:"max_timeouts,omitempty" yaml:"maxTimeouts"`
 }
 
 func (x *PluginConfig) Reset() {

@@ -47,6 +47,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/plugins"
 	"github.com/SSSOC-CAN/fmtd/rga"
 	"github.com/SSSOC-CAN/fmtd/telemetry"
 	"github.com/SSSOC-CAN/fmtd/testplan"
@@ -114,6 +115,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	registeredPlugins := []string{}
+	for _, cfg := range server.cfg.Plugins {
+		registeredPlugins = append(registeredPlugins, cfg.Name)
+	}
 
 	// Create State stores
 	rtdStateStore := gux.CreateStore(RtdInitialState, RtdReducer)
@@ -131,7 +136,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Loading TLS configuration...")
 	serverOpts, restDialOpts, restListen, cleanUp, err := cert.GetTLSConfig(server.cfg.TLSCertPath, server.cfg.TLSKeyPath, server.cfg.ExtraIPAddr)
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Could not load TLS configuration: %v", err))
+		server.logger.Error().Msgf("Could not load TLS configuration: %v", err)
 		return err
 	}
 	server.logger.Info().Msg("TLS configuration successfully loaded.")
@@ -140,7 +145,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Instantiating RPC server
 	rpcServer, err := NewRpcServer(interceptor, server.cfg, server.logger)
 	if err != nil {
-		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize RPC server: %v", err))
+		server.logger.Fatal().Msgf("Could not initialize RPC server: %v", err)
 		return err
 	}
 	server.logger.Info().Msg("RPC Server Initialized.")
@@ -149,7 +154,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	grpc_interceptor := intercept.NewGrpcInterceptor(rpcServer.SubLogger, false)
 	err = grpc_interceptor.AddPermissions(MainGrpcServerPermissions())
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Could not add permissions to gRPC middleware: %v", err))
+		server.logger.Error().Msgf("Could not add permissions to gRPC middleware: %v", err)
 		return err
 	}
 	rpcServerOpts := grpc_interceptor.CreateGrpcOptions()
@@ -161,22 +166,27 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
-	// _, err = plugins.NewPluginManager(server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger)
-	// if err != nil {
-	// 	server.logger.Error().Msg(fmt.Sprintf("Could not initialize plugins: %v", err))
-	// 	return err
-	// }
-	// server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *server.cfg.Plugins))
-	for _, plug := range server.cfg.Plugins {
-		server.logger.Debug().Msg(fmt.Sprintf("Plugins: %v", *plug))
+	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger, false)
+	pluginManager.RegisterWithGrpcServer(grpc_server)
+	err = pluginManager.AddPermissions(StreamingPluginAPIPermission())
+	if err != nil {
+		server.logger.Error().Msgf("Could not add permissions to plugin manager: %v", err)
+		return err
 	}
+	err = pluginManager.Start(ctx)
+	if err != nil {
+		server.logger.Error().Msgf("Unable to start plugin manager: %v", err)
+		return err
+	}
+	defer pluginManager.Stop()
+	server.logger.Info().Msg("Plugins initialized")
 
 	// Instantiate RTD Service
 	server.logger.Info().Msg("Instantiating RTD subservice...")
 	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, rtdStateStore)
 	err = rtdService.RegisterWithGrpcServer(grpc_server)
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to register RTD Service with gRPC server: %v", err))
+		server.logger.Error().Msgf("Unable to register RTD Service with gRPC server: %v", err)
 		return err
 	}
 	services = append(services, rtdService)
@@ -186,12 +196,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
 	daqConn, err := drivers.ConnectToDAQ()
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to DAQ: %v", err))
+		server.logger.Error().Msgf("Unable to connect to DAQ: %v", err)
 		return err
 	}
 	daqConnAssert, ok := daqConn.(*drivers.DAQConnection)
 	if !ok {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to DAQ: %v", errors.ErrInvalidType))
+		server.logger.Error().Msgf("Unable to connect to DAQ: %v", errors.ErrInvalidType)
 		return errors.ErrInvalidType
 	}
 	telemetryService := telemetry.NewTelemetryService(
@@ -208,12 +218,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Instantiate RGA service and register with gRPC server but NOT start
 	rgaConn, err := drivers.ConnectToRGA()
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to RGA: %v", err))
+		server.logger.Error().Msgf("Unable to connect to RGA: %v", err)
 		return err
 	}
 	rgaConnAssert, ok := rgaConn.(*drivers.RGAConnection)
 	if !ok {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to RGA: %v", errors.ErrInvalidType))
+		server.logger.Error().Msgf("Unable to connect to RGA: %v", errors.ErrInvalidType)
 		return errors.ErrInvalidType
 	}
 	rgaService := rga.NewRGAService(
@@ -231,12 +241,12 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Instantiating controller subservice and registering with gRPC server...")
 	ctrlConn, err := drivers.ConnectToController()
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to controller: %v", err))
+		server.logger.Error().Msgf("Unable to connect to controller: %v", err)
 		return err
 	}
 	ctrlConnAssert, ok := ctrlConn.(*drivers.ControllerConnection)
 	if !ok {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to connect to controller: %v", errors.ErrInvalidType))
+		server.logger.Error().Msgf("Unable to connect to controller: %v", errors.ErrInvalidType)
 		return errors.ErrInvalidType
 	}
 	controllerService := controller.NewControllerService(
@@ -247,7 +257,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	)
 	err = controllerService.RegisterWithGrpcServer(grpc_server)
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to register controller Service with gRPC server: %v", err))
+		server.logger.Error().Msgf("Unable to register controller Service with gRPC server: %v", err)
 		return err
 	}
 	services = append(services, controllerService)
@@ -285,7 +295,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Opening database...")
 	db, err := kvdb.NewDB(server.cfg.MacaroonDBPath)
 	if err != nil {
-		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize Macaroon DB: %v", err))
+		server.logger.Fatal().Msgf("Could not initialize Macaroon DB: %v", err)
 		return err
 	}
 	server.logger.Info().Msg("Database successfully opened.")
@@ -295,7 +305,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Initializing unlocker service...")
 	unlockerService, err := unlocker.InitUnlockerService(db, []string{server.cfg.AdminMacPath, server.cfg.TestMacPath})
 	if err != nil {
-		server.logger.Fatal().Msg(fmt.Sprintf("Could not initialize unlocker service: %v", err))
+		server.logger.Fatal().Msgf("Could not initialize unlocker service: %v", err)
 		return err
 	}
 	unlockerService.RegisterWithGrpcServer(grpc_server)
@@ -304,7 +314,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Starting RPC server
 	err = rpcServer.Start()
 	if err != nil {
-		server.logger.Fatal().Msg(fmt.Sprintf("Could not start RPC server: %v", err))
+		server.logger.Fatal().Msgf("Could not start RPC server: %v", err)
 		return err
 	}
 	defer rpcServer.Stop()
@@ -312,10 +322,10 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	// Start gRPC listening
 	err = startGrpcListen(grpc_server, rpcServer.Listener)
 	if err != nil {
-		rpcServer.SubLogger.Fatal().Msg(fmt.Sprintf("Could not start gRPC listen on %v:%v", rpcServer.Listener.Addr(), err))
+		rpcServer.SubLogger.Fatal().Msgf("Could not start gRPC listen on %v:%v", rpcServer.Listener.Addr(), err)
 		return err
 	}
-	rpcServer.SubLogger.Info().Msg(fmt.Sprintf("gRPC listening on %v", rpcServer.Listener.Addr()))
+	rpcServer.SubLogger.Info().Msgf("gRPC listening on %v", rpcServer.Listener.Addr())
 
 	// Starting REST proxy
 	stopProxy, err := startRestProxy(
@@ -327,6 +337,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 			testPlanExecutor,
 			unlockerService,
 			controllerService,
+			pluginManager,
 		},
 		restDialOpts,
 		restListen,
@@ -343,7 +354,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		"existing password and unlock the daemon.")
 	pwd, err := waitForPassword(unlockerService, interceptor.ShutdownChannel())
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Error while awaiting password: %v", err))
+		server.logger.Error().Msgf("Error while awaiting password: %v", err)
 		return err
 	}
 	grpc_interceptor.SetDaemonUnlocked()
@@ -351,9 +362,9 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Instantiating Macaroon Service
 	server.logger.Info().Msg("Initiating macaroon service...")
-	macaroonService, err := macaroons.InitService(*db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd", NewSubLogger(server.logger, "BAKE").SubLogger, registeredPlugins)
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to instantiate Macaroon service: %v", err))
+		server.logger.Error().Msgf("Unable to instantiate Macaroon service: %v", err)
 		return err
 	}
 	server.logger.Info().Msg("Macaroon service initialized.")
@@ -363,39 +374,55 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	server.logger.Info().Msg("Unlocking macaroon store...")
 	err = macaroonService.CreateUnlock(&pwd)
 	if err != nil {
-		server.logger.Error().Msg(fmt.Sprintf("Unable to unlock macaroon store: %v", err))
+		server.logger.Error().Msgf("Unable to unlock macaroon store: %v", err)
 		return err
 	}
 	server.logger.Info().Msg("Macaroon store unlocked.")
 	// Baking Macaroons
 	server.logger.Info().Msg("Baking macaroons...")
+	// Delete macaroon files if user requested it
+	if server.cfg.RegenerateMacaroons {
+		if utils.FileExists(server.cfg.AdminMacPath) {
+			err := os.Remove(server.cfg.AdminMacPath)
+			if err != nil {
+				server.logger.Error().Msgf("Unexpected error when deleting %s: %v", server.cfg.AdminMacPath, err)
+			}
+		}
+		if utils.FileExists(server.cfg.TestMacPath) {
+			err := os.Remove(server.cfg.TestMacPath)
+			if err != nil {
+				server.logger.Error().Msgf("Unexpected error when deleting %s: %v", server.cfg.TestMacPath, err)
+			}
+		}
+	}
 	if !utils.FileExists(server.cfg.AdminMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), false, 0,
+			ctx, macaroonService, server.cfg.AdminMacPath, adminPermissions(), 0, []string{"all"},
 		)
 		if err != nil {
-			server.logger.Error().Msg(fmt.Sprintf("Unable to create admin macaroon: %v", err))
+			server.logger.Error().Msgf("Unable to create admin macaroon: %v", err)
 			return err
 		}
 	}
 	if !utils.FileExists(server.cfg.TestMacPath) {
 		err := genMacaroons(
-			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, true, 120,
+			ctx, macaroonService, server.cfg.TestMacPath, readPermissions, 120, registeredPlugins,
 		)
 		if err != nil {
-			server.logger.Error().Msg(fmt.Sprintf("Unable to create test macaroon: %v", err))
+			server.logger.Error().Msgf("Unable to create test macaroon: %v", err)
 			return err
 		}
 	}
 	server.logger.Info().Msg("Macaroons baked successfully.")
 	grpc_interceptor.AddMacaroonService(macaroonService)
 	rpcServer.AddMacaroonService(macaroonService)
+	pluginManager.AddMacaroonService(macaroonService)
 
 	// Starting services TODO:SSSOCPaulCote - Start all subservices in go routines and make waitgroup
 	for _, s := range services {
 		err = s.Start()
 		if err != nil {
-			server.logger.Error().Msg(fmt.Sprintf("Unable to start %s service: %v", s.Name(), err))
+			server.logger.Error().Msgf("Unable to start %s service: %v", s.Name(), err)
 			return err
 		}
 		defer s.Stop()
@@ -405,7 +432,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		for i := len(services) - 1; i > -1; i-- {
 			err := services[i].Stop()
 			if err != nil {
-				server.logger.Error().Msg(fmt.Sprintf("Unable to stop %s service: %v", services[i].Name(), err))
+				server.logger.Error().Msgf("Unable to stop %s service: %v", services[i].Name(), err)
 			}
 		}
 	}
@@ -419,12 +446,19 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 }
 
 // bakeMacaroons is a wrapper function around the NewMacaroon method of the macaroons.Service struct
-func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, timeOutCaveat bool, seconds int64) ([]byte, error) {
+func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.Op, seconds int64, pluginNames []string) ([]byte, error) {
+	caveats := []checkers.Caveat{}
+	if seconds != 0 {
+		caveats = append(caveats, macaroons.TimeoutCaveat(seconds))
+	}
+	if len(pluginNames) != 0 {
+		caveats = append(caveats, macaroons.PluginCaveat(pluginNames))
+	}
+
 	mac, err := svc.NewMacaroon(
 		ctx,
 		macaroons.DefaultRootKeyID,
-		timeOutCaveat,
-		[]checkers.Caveat{macaroons.TimeoutCaveat(seconds)},
+		caveats,
 		perms...,
 	)
 	if err != nil {
@@ -434,8 +468,8 @@ func bakeMacaroons(ctx context.Context, svc *macaroons.Service, perms []bakery.O
 }
 
 // genMacaroons will create the macaroon files specified if not already created
-func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, timeOutCaveat bool, seconds int64) error {
-	macBytes, err := bakeMacaroons(ctx, svc, perms, timeOutCaveat, seconds)
+func genMacaroons(ctx context.Context, svc *macaroons.Service, macFile string, perms []bakery.Op, seconds int64, pluginNames []string) error {
+	macBytes, err := bakeMacaroons(ctx, svc, perms, seconds, pluginNames)
 	if err != nil {
 		return err
 	}
@@ -534,26 +568,26 @@ func startRestProxy(cfg *Config, rpcServer *RpcServer, services []api.RestProxyS
 	var wg sync.WaitGroup
 	restEndpoints, err := utils.NormalizeAddresses([]string{fmt.Sprintf("0.0.0.0:%d", cfg.RestPort)}, strconv.FormatInt(cfg.RestPort, 10), net.ResolveTCPAddr)
 	if err != nil {
-		rpcServer.SubLogger.Error().Msg(fmt.Sprintf("Unable to normalize address %s: %v", fmt.Sprintf("0.0.0.0:%d", cfg.RestPort), err))
+		rpcServer.SubLogger.Error().Msgf("Unable to normalize address %s: %v", fmt.Sprintf("0.0.0.0:%d", cfg.RestPort), err)
 	}
 	restEndpoint := restEndpoints[0]
 	lis, err := restListen(restEndpoint)
 	if err != nil {
-		rpcServer.SubLogger.Error().Msg(fmt.Sprintf("gRPC proxy unable to listen on %s: %v", restEndpoint, err))
+		rpcServer.SubLogger.Error().Msgf("gRPC proxy unable to listen on %s: %v", restEndpoint, err)
 	}
 	shutdownFuncs = append(shutdownFuncs, func() {
 		err := lis.Close()
 		if err != nil {
-			rpcServer.SubLogger.Error().Msg(fmt.Sprintf("Error closing listerner: %v", err))
+			rpcServer.SubLogger.Error().Msgf("Error closing listerner: %v", err)
 		}
 	})
 	wg.Add(1)
 	go func() {
-		rpcServer.SubLogger.Info().Msg(fmt.Sprintf("gRPC proxy started and listening at %s", lis.Addr()))
+		rpcServer.SubLogger.Info().Msgf("gRPC proxy started and listening at %s", lis.Addr())
 		wg.Done()
 		err := http.Serve(lis, restHandler)
 		if err != nil && !fmtrpc.IsClosedConnError(err) {
-			rpcServer.SubLogger.Error().Msg(fmt.Sprintf("%v", err))
+			rpcServer.SubLogger.Error().Msg(err.Error())
 		}
 	}()
 	wg.Wait()

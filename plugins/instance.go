@@ -3,7 +3,6 @@ package plugins
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -193,7 +192,7 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 				err = bg.Error(st.Message())
 			}
 			errChan <- err
-			i.logger.Error().Msg(fmt.Sprintf("could not start recording: %v", err))
+			i.logger.Error().Msgf("could not start recording: %v", err)
 			i.setUnknown()
 			return
 		}
@@ -283,7 +282,7 @@ func (i *PluginInstance) stopRecord(ctx context.Context) error {
 			if ok {
 				err = bg.Error(st.Message())
 			}
-			i.logger.Error().Msg(fmt.Sprintf("could not stop recording: %v", err))
+			i.logger.Error().Msgf("could not stop recording: %v", err)
 			i.setUnknown()
 		} else {
 			i.setNotRecording()
@@ -339,7 +338,7 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 		}(ctx, errChan)
 		select {
 		case err = <-errChan:
-			i.logger.Error().Msg(fmt.Sprintf("error when stopping %v plugin recording: %v", i.cfg.Name, err))
+			i.logger.Error().Msgf("error when stopping %v plugin recording: %v", i.cfg.Name, err)
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				i.setUnresponsive()
 			} else if err != nil {
@@ -374,7 +373,7 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 				if ok {
 					err = bg.Error(st.Message())
 				}
-				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
+				i.logger.Error().Msgf("could not safely stop plugin: %v", err)
 			}
 			errChan <- err
 		}(errChan)
@@ -388,7 +387,7 @@ func (i *PluginInstance) stop(ctx context.Context) error {
 				if ok {
 					err = bg.Error(st.Message())
 				}
-				i.logger.Error().Msg(fmt.Sprintf("could not safely stop plugin: %v", err))
+				i.logger.Error().Msgf("could not safely stop plugin: %v", err)
 			}
 			errChan <- err
 		}(errChan)
@@ -457,7 +456,7 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 				err = bg.Error(st.Message())
 			}
 			errChan <- err
-			i.logger.Error().Msg(fmt.Sprintf("could not send command: %v", err))
+			i.logger.Error().Msgf("could not send command: %v", err)
 			i.setUnknown()
 			return
 		}
@@ -693,4 +692,10 @@ func (i *PluginInstance) subscribeState(name string) (chan fmtrpc.PluginState, f
 		i.listeners[name].IsConnected = false
 	}
 	return i.listeners[name].Signal, unsub, nil
+}
+
+func (i *PluginInstance) setStartTime(startTime time.Time) {
+	i.Lock()
+	defer i.Unlock()
+	i.startedAt = startTime
 }
