@@ -96,6 +96,9 @@ message BakeMacaroonRequest {
 
     // The list of permissions the new macaroon should grant
     repeated MacaroonPermission permissions = 3;
+
+    // The list of plugin names to be included in the macaroon
+    repeated string plugins = 4;
 }
 
 message BakeMacaroonResponse {

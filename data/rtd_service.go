@@ -198,15 +198,15 @@ func (s *RTDService) StopRecording(ctx context.Context, req *fmtrpc.StopRecReque
 
 // SubscribeDataStream return a uni-directional stream (server -> client) to provide realtime data to the client
 func (s *RTDService) SubscribeDataStream(req *fmtrpc.SubscribeDataRequest, updateStream fmtrpc.DataCollector_SubscribeDataStreamServer) error {
-	s.Logger.Info().Msg("Have a new data listener.")
+	s.Logger.Debug().Msg("Have a new data listener.")
 	lastSentRTDTimestamp := int64(0)
 	rand.Seed(time.Now().UnixNano())
 	subscriberName := s.name + utils.RandSeq(10)
-	updateChan, unsub := s.stateStore.Subscribe(subscriberName)
-	cleanUp := func() {
-		unsub(s.stateStore, subscriberName)
+	updateChan, unsub, err := s.stateStore.Subscribe(subscriberName)
+	if err != nil {
+		return err
 	}
-	defer cleanUp()
+	defer unsub()
 	for {
 		select {
 		case <-updateChan:

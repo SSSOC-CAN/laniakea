@@ -45,7 +45,7 @@ var (
 // initPluginManager will init the plugin manager
 func initPluginManager(t *testing.T, pluginDir string, cfgs []*fmtrpc.PluginConfig) *PluginManager {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	return NewPluginManager(pluginDir, cfgs, logger)
+	return NewPluginManager(pluginDir, cfgs, logger, true)
 }
 
 var (
@@ -631,7 +631,7 @@ func TestPluginAPI(t *testing.T) {
 		if !ok {
 			t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
 		}
-		if st.Message() != ErrInvalidPluginName.Error() {
+		if st.Message() != errors.ErrInvalidPluginName.Error() {
 			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
 		}
 	})

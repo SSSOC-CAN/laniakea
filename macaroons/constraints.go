@@ -26,9 +26,21 @@ THE SOFTWARE.
 package macaroons
 
 import (
+	"strings"
 	"time"
+
+	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOC-CAN/fmtd/utils"
+	bg "github.com/SSSOCPaulCote/blunderguard"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 	macaroon "gopkg.in/macaroon.v2"
+)
+
+const (
+	ErrCantGetPeerFromContext   = bg.Error("unable to get peer info from context")
+	ErrInvalidListOfPlugins     = bg.Error("invalid list of plugins")
+	ErrUnauthorizedPluginAction = bg.Error("unauthorized plugin action")
+	ErrNoMacaroonsFromContext   = bg.Error("no macaroons received from context")
 )
 
 type Constraint func(*macaroon.Macaroon) error
@@ -65,4 +77,28 @@ func TimeoutCaveat(seconds int64) checkers.Caveat {
 	macaroonTimeout := time.Duration(seconds)
 	requestTimeout := time.Now().Add(time.Second * macaroonTimeout)
 	return checkers.TimeBeforeCaveat(requestTimeout)
+}
+
+// PluginConstraint locks a macaroon to a given set of plugins. The plugin names are validated but not checked against currently registered list of plugins
+func PluginConstraint(pluginNames []string) func(*macaroon.Macaroon) error {
+	return func(mac *macaroon.Macaroon) error {
+		if len(pluginNames) != 0 {
+			for _, plug := range pluginNames {
+				if ok := utils.ValidatePluginName(plug); !ok {
+					return errors.ErrInvalidPluginName
+				}
+			}
+			caveat := checkers.Condition("plugins", strings.Join(pluginNames, ":"))
+			return mac.AddFirstPartyCaveat([]byte(caveat))
+		}
+		return nil
+	}
+}
+
+// PluginCaveat is a wrapper function which returns a checkers.Caveat struct
+func PluginCaveat(pluginNames []string) checkers.Caveat {
+	if len(pluginNames) == 1 {
+		return checkers.DeclaredCaveat("plugins", pluginNames[0])
+	}
+	return checkers.DeclaredCaveat("plugins", strings.Join(pluginNames, ":"))
 }

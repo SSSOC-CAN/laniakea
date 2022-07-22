@@ -163,7 +163,7 @@ func (s *RGAService) startRecording(pol_int int64, orgName string) error {
 			case <-ticker.C:
 				err := s.record(writeAPI)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not write to influxdb: %v", err))
+					s.Logger.Error().Msgf("Could not write to influxdb: %v", err)
 				}
 			case <-s.CancelChan:
 				ticker.Stop()
@@ -256,11 +256,12 @@ func (s *RGAService) stopRecording() error {
 //CheckIfBroadcasting listens for a signal from RTD service to either stop or start broadcasting data to it.
 func (s *RGAService) ListenForRTDSignal() {
 	defer s.wgListen.Done()
-	signalChan, unsub := s.rtdStateStore.Subscribe(s.name)
-	cleanUp := func() {
-		unsub(s.rtdStateStore, s.name)
+	signalChan, unsub, err := s.rtdStateStore.Subscribe(s.name)
+	if err != nil {
+		s.Logger.Error().Msgf("Could not listen for RTD signals: %v", err)
+		return
 	}
-	defer cleanUp()
+	defer unsub()
 	for {
 		select {
 		case msg := <-s.StateChangeChan:
@@ -269,7 +270,7 @@ func (s *RGAService) ListenForRTDSignal() {
 				if msg.State {
 					err := s.startRecording(0, msg.Msg)
 					if err != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Could not start recording: %v", err))
+						s.Logger.Error().Msgf("Could not start recording: %v", err)
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: false, ErrMsg: e.Wrap(err, "could not start recording")}
 					} else {
 						s.Logger.Info().Msg("Started recording.")
@@ -279,7 +280,7 @@ func (s *RGAService) ListenForRTDSignal() {
 					s.Logger.Info().Msg("Stopping data recording...")
 					err := s.stopRecording()
 					if err != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
+						s.Logger.Error().Msgf("Could not stop recording: %v", err)
 						s.StateChangeChan <- &data.StateChangeMsg{Type: data.RECORDING, State: true, ErrMsg: e.Wrap(err, "could not stop recording")}
 					} else {
 						s.Logger.Info().Msg("Stopped recording.")
@@ -291,10 +292,10 @@ func (s *RGAService) ListenForRTDSignal() {
 			currentState := s.rtdStateStore.GetState()
 			cState, ok := currentState.(data.InitialRtdState)
 			if !ok {
-				s.Logger.Error().Msg(fmt.Sprintf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(data.InitialRtdState{})))
+				s.Logger.Error().Msgf("Invalid type %v expected %v\nStopping recording...", reflect.TypeOf(currentState), reflect.TypeOf(data.InitialRtdState{}))
 				err := s.stopRecording()
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
+					s.Logger.Error().Msgf("Could not stop recording: %v", err)
 				}
 			}
 			if cState.RealTimeData.Data == nil {
@@ -304,7 +305,7 @@ func (s *RGAService) ListenForRTDSignal() {
 			if s.currentPressure >= 0.00005 && atomic.LoadInt32(&s.Recording) == 1 {
 				err := s.stopRecording()
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Could not stop recording: %v", err))
+					s.Logger.Error().Msgf("Could not stop recording: %v", err)
 				}
 			}
 		case <-s.QuitChan:

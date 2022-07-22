@@ -161,10 +161,10 @@ func (s *TestPlanService) LoadTestPlan(ctx context.Context, req *fmtrpc.LoadTest
 	if atomic.LoadInt32(&s.Running) != 1 {
 		return nil, status.Error(codes.Aborted, ErrTPEXNotStarted.Error())
 	}
-	s.Logger.Info().Msg(fmt.Sprintf("Loading test plan file at: %s", req.PathToFile))
+	s.Logger.Info().Msgf("Loading test plan file at: %s", req.PathToFile)
 	tp, err := loadTestPlan(req.PathToFile)
 	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Could not load test plan file: %v", err))
+		s.Logger.Error().Msgf("Could not load test plan file: %v", err)
 		return &fmtrpc.LoadTestPlanResponse{
 			Msg: fmt.Sprintf("Could not load test plan: %v", err),
 		}, status.Error(codes.Internal, err.Error())
@@ -235,7 +235,7 @@ func (s *TestPlanService) executeTestPlan() {
 			time.Now(),
 		)
 		if err != nil {
-			s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+			s.Logger.Error().Msgf("Cannot write to report: %v", err)
 		}
 	}
 	defer func() {
@@ -248,7 +248,7 @@ func (s *TestPlanService) executeTestPlan() {
 			time.Now(),
 		)
 		if err != nil {
-			s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+			s.Logger.Error().Msgf("Cannot write to report: %v", err)
 		}
 	}()
 	s.Logger.Info().Msg("Starting test...")
@@ -260,7 +260,7 @@ func (s *TestPlanService) executeTestPlan() {
 		time.Now(),
 	)
 	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+		s.Logger.Error().Msgf("Cannot write to report: %v", err)
 		stoppingTest()
 		return
 	}
@@ -268,7 +268,7 @@ func (s *TestPlanService) executeTestPlan() {
 	// First we need to start recording with the telemetry
 	client, clientCleanup, err := s.collectorClient()
 	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
+		s.Logger.Error().Msgf("Cannot connect to Data Collector service: %v", err)
 		err := writeMsgToReport(
 			s.reportWriter,
 			fmtrpc.ReportLvl_ERROR,
@@ -277,7 +277,7 @@ func (s *TestPlanService) executeTestPlan() {
 			time.Now(),
 		)
 		if err != nil {
-			s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+			s.Logger.Error().Msgf("Cannot write to report: %v", err)
 		}
 		stoppingTest()
 		return
@@ -288,7 +288,7 @@ func (s *TestPlanService) executeTestPlan() {
 	}
 	_, err = client.StartRecording(ctx, telemetryRecordReq)
 	if err != nil && err != errors.ErrAlreadyRecording {
-		s.Logger.Fatal().Msg(fmt.Sprintf("Cannot start telemetry data recording: %v", err))
+		s.Logger.Fatal().Msgf("Cannot start telemetry data recording: %v", err)
 		err := writeMsgToReport(
 			s.reportWriter,
 			fmtrpc.ReportLvl_FATAL,
@@ -297,7 +297,7 @@ func (s *TestPlanService) executeTestPlan() {
 			time.Now(),
 		)
 		if err != nil {
-			s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+			s.Logger.Error().Msgf("Cannot write to report: %v", err)
 		}
 		stoppingTest()
 		return
@@ -311,13 +311,15 @@ func (s *TestPlanService) executeTestPlan() {
 		time.Now(),
 	)
 	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+		s.Logger.Error().Msgf("Cannot write to report: %v", err)
 	}
 	// subscribe to state change updates
-	stateChangeChan, unsub := s.stateStore.Subscribe(s.name)
-	defer func() {
-		unsub(s.stateStore, s.name)
-	}()
+	stateChangeChan, unsub, err := s.stateStore.Subscribe(s.name)
+	if err != nil {
+		s.Logger.Error().Msgf("could not subscribe to state store: %v", err)
+		return
+	}
+	defer unsub()
 	ticker := time.NewTicker(time.Second) // going to check things every second
 	defer ticker.Stop()
 	type NewLine struct {
@@ -338,7 +340,7 @@ func (s *TestPlanService) executeTestPlan() {
 		case <-ticker.C:
 			// First perform any ready Alerts
 			for _, alert := range readyAlerts {
-				s.Logger.Info().Msg(fmt.Sprintf("Executing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg))
+				s.Logger.Info().Msgf("Executing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg)
 				err = writeMsgToReport(
 					s.reportWriter,
 					fmtrpc.ReportLvl_INFO,
@@ -347,10 +349,10 @@ func (s *TestPlanService) executeTestPlan() {
 					time.Now(),
 				)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+					s.Logger.Error().Msgf("Cannot write to report: %v", err)
 				}
 				alert.ActionFunc(alert.ActionArg)
-				s.Logger.Info().Msg(fmt.Sprintf("%s alert executed.", alert.Name))
+				s.Logger.Info().Msgf("%s alert executed.", alert.Name)
 				err = writeMsgToReport(
 					s.reportWriter,
 					fmtrpc.ReportLvl_INFO,
@@ -359,7 +361,7 @@ func (s *TestPlanService) executeTestPlan() {
 					time.Now(),
 				)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+					s.Logger.Error().Msgf("Cannot write to report: %v", err)
 				}
 				alert.ExecutionState = ALERTSTATE_COMPLETED
 			}
@@ -367,10 +369,10 @@ func (s *TestPlanService) executeTestPlan() {
 			// Second let's check if there are any alerts we need to process in the next tick
 			for _, alert := range s.testPlan.Alerts {
 				if ticks == alert.ActionStartTime-1 && alert.ExecutionState == ALERTSTATE_PENDING {
-					s.Logger.Info().Msg(fmt.Sprintf("Preparing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg))
+					s.Logger.Info().Msgf("Preparing %s: %s(%v) alert...", alert.Name, alert.ActionName, alert.ActionArg)
 					readyAlerts = append(readyAlerts, alert)
 				} else if ticks > alert.ActionStartTime && alert.ExecutionState == ALERTSTATE_PENDING {
-					s.Logger.Info().Msg(fmt.Sprintf("%s alert expired.", alert.Name))
+					s.Logger.Info().Msgf("%s alert expired.", alert.Name)
 					newLines = append(newLines, NewLine{
 						RptLvl: fmtrpc.ReportLvl_ERROR,
 						Text:   fmt.Sprintf("%s alert expired", alert.Name),
@@ -386,7 +388,7 @@ func (s *TestPlanService) executeTestPlan() {
 				if rtd.Data[drivers.TelemetryPressureChannel].Value != 0 && rtd.Data[drivers.TelemetryPressureChannel].Value < minChamberPressure {
 					client, clientCleanup, err = s.collectorClient()
 					if err != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
+						s.Logger.Error().Msgf("Cannot connect to Data Collector service: %v", err)
 						newLines = append(newLines, NewLine{
 							RptLvl: fmtrpc.ReportLvl_ERROR,
 							Text:   fmt.Sprintf("Cannot connect to Data Collector service: %v", err),
@@ -402,7 +404,7 @@ func (s *TestPlanService) executeTestPlan() {
 					}
 					_, err = client.StartRecording(ctx, rgaRecordReq)
 					if err != nil && err != errors.ErrAlreadyRecording {
-						s.Logger.Error().Msg(fmt.Sprintf("Cannot start RGA data recording: %v", err))
+						s.Logger.Error().Msgf("Cannot start RGA data recording: %v", err)
 						newLines = append(newLines, NewLine{
 							RptLvl: fmtrpc.ReportLvl_ERROR,
 							Text:   fmt.Sprintf("Cannot start RGA data recording: %v", err),
@@ -428,14 +430,14 @@ func (s *TestPlanService) executeTestPlan() {
 			currentRtd := s.stateStore.GetState()
 			cRtd, ok := currentRtd.(data.InitialRtdState)
 			if !ok {
-				s.Logger.Error().Msg(fmt.Sprintf("Invalid type, expected fmtrpc.RealtimeData, received %v", reflect.TypeOf(currentRtd)))
+				s.Logger.Error().Msgf("Invalid type, expected fmtrpc.RealtimeData, received %v", reflect.TypeOf(currentRtd))
 			}
 			rtd = &cRtd.RealTimeData
 		case <-s.CancelChan:
 			stoppingTest()
 			client, clientCleanup, err = s.collectorClient()
 			if err != nil {
-				s.Logger.Error().Msg(fmt.Sprintf("Cannot connect to Data Collector service: %v", err))
+				s.Logger.Error().Msgf("Cannot connect to Data Collector service: %v", err)
 				err = writeMsgToReport(
 					s.reportWriter,
 					fmtrpc.ReportLvl_ERROR,
@@ -444,7 +446,7 @@ func (s *TestPlanService) executeTestPlan() {
 					time.Now(),
 				)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+					s.Logger.Error().Msgf("Cannot write to report: %v", err)
 				}
 			}
 			// stop rga recording if recording
@@ -454,7 +456,7 @@ func (s *TestPlanService) executeTestPlan() {
 				}
 				_, err := client.StopRecording(ctx, stopRgaReq)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Cannot stop RGA data recording: %v", err))
+					s.Logger.Error().Msgf("Cannot stop RGA data recording: %v", err)
 					err = writeMsgToReport(
 						s.reportWriter,
 						fmtrpc.ReportLvl_ERROR,
@@ -463,7 +465,7 @@ func (s *TestPlanService) executeTestPlan() {
 						time.Now(),
 					)
 					if err != nil {
-						s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+						s.Logger.Error().Msgf("Cannot write to report: %v", err)
 					}
 				} else {
 					rgaRecording = false
@@ -474,7 +476,7 @@ func (s *TestPlanService) executeTestPlan() {
 			}
 			_, err := client.StopRecording(ctx, stoptelemetryReq)
 			if err != nil {
-				s.Logger.Error().Msg(fmt.Sprintf("Cannot stop telemetry data recording: %v", err))
+				s.Logger.Error().Msgf("Cannot stop telemetry data recording: %v", err)
 				err = writeMsgToReport(
 					s.reportWriter,
 					fmtrpc.ReportLvl_ERROR,
@@ -483,7 +485,7 @@ func (s *TestPlanService) executeTestPlan() {
 					time.Now(),
 				)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+					s.Logger.Error().Msgf("Cannot write to report: %v", err)
 				}
 			}
 			clientCleanup()
@@ -500,7 +502,7 @@ func (s *TestPlanService) executeTestPlan() {
 					line.Time,
 				)
 				if err != nil {
-					s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+					s.Logger.Error().Msgf("Cannot write to report: %v", err)
 				}
 			}()
 		}
@@ -512,7 +514,7 @@ func (s *TestPlanService) StartTestPlan(ctx context.Context, req *fmtrpc.StartTe
 	s.Logger.Info().Msg("Starting execution of a test plan")
 	err := s.startTestPlan()
 	if err != nil {
-		s.Logger.Error().Msg(fmt.Sprintf("Could not start execution of test plan: %v", err))
+		s.Logger.Error().Msgf("Could not start execution of test plan: %v", err)
 	}
 	if err == ErrNoTestPlanLoaded || err == ErrTestPlanAlreadyStarted {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
@@ -531,7 +533,7 @@ func (s *TestPlanService) stopTestPlan() error {
 		s.Logger.Error().Msg("Could not stop test plan execution: execution already stopped.")
 		err := writeMsgToReport(s.reportWriter, fmtrpc.ReportLvl_ERROR, "Could not stop test plan execution: execution already stopped.", defaultAuthor, time.Now())
 		if err != nil {
-			s.Logger.Error().Msg(fmt.Sprintf("Cannot write to report: %v", err))
+			s.Logger.Error().Msgf("Cannot write to report: %v", err)
 		}
 		return ErrTestPlanAlreadyStopped
 	}

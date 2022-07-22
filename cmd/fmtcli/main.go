@@ -29,18 +29,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"github.com/urfave/cli"
+
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/urfave/cli"
 )
 
 var (
 	defaultRPCAddr               = "localhost"
 	defaultRPCPort               = "7777"
 	defaultTLSCertFilename       = "tls.cert"
-	defaultFmtdDir           	 = utils.AppDataDir("fmtd", false)
+	defaultFmtdDir               = utils.AppDataDir("fmtd", false)
 	defaultTLSCertPath           = filepath.Join(defaultFmtdDir, defaultTLSCertFilename)
 	defaultMacaroonTimeout int64 = 60
 	defaultAdminMacName          = "admin.macaroon"
@@ -125,6 +126,19 @@ func getUnlockerClient(ctx *cli.Context) (fmtrpc.UnlockerClient, func()) {
 	return fmtrpc.NewUnlockerClient(conn), cleanUp
 }
 
+// getPluginAPIClient returns the PluginAPIClient instance and a cleanup function
+func getPluginAPIClient(ctx *cli.Context) (fmtrpc.PluginAPIClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
+	if err != nil {
+		fatal(err)
+	}
+	cleanUp := func() {
+		conn.Close()
+	}
+	return fmtrpc.NewPluginAPIClient(conn), cleanUp
+}
+
 // extractArgs extracts the arguments inputted to the heartcli command
 func extractArgs(ctx *cli.Context) *Args {
 	return &Args{
@@ -180,6 +194,14 @@ func main() {
 		bakeMacaroon,
 		setTempCommand,
 		setPresCommand,
+		pluginStartRecordCmd,
+		pluginStopRecordCmd,
+		pluginStartCmd,
+		pluginStopCmd,
+		pluginCommandCmd,
+		addPluginCmd,
+		listPluginsCmd,
+		getPluginCmd,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

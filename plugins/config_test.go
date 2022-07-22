@@ -3,6 +3,7 @@ package plugins
 import (
 	"testing"
 
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 )
 
@@ -54,7 +55,7 @@ func TestValidatePluginConfig(t *testing.T) {
 	t.Run("validate cfg-invalid plugin name", func(t *testing.T) {
 		for _, cfg := range invalidPluginNameCfgs {
 			err := ValidatePluginConfig(cfg, pluginDir)
-			if err != ErrInvalidPluginName {
+			if err != errors.ErrInvalidPluginName {
 				t.Errorf("Unexpected error when calling ValidatePluginConfig: %v", err)
 			}
 		}

@@ -26,28 +26,29 @@ import (
 
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir  bool                   `yaml:"DefaultLogDir"`
-	LogFileDir     string                 `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
-	MaxLogFiles    int64                  `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
-	MaxLogFileSize int64                  `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
-	ConsoleOutput  bool                   `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
-	GrpcPort       int64                  `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
-	RestPort       int64                  `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
-	TCPPort        int64                  `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
-	TCPAddr        string                 `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
-	DataOutputDir  string                 `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
-	ExtraIPAddr    []string               `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
-	InfluxURL      string                 `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
-	InfluxAPIToken string                 `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
-	PluginDir      string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
-	Plugins        []*fmtrpc.PluginConfig `yaml:"Plugins"`
-	MacaroonDBPath string
-	TLSCertPath    string
-	TLSKeyPath     string
-	AdminMacPath   string
-	TestMacPath    string
-	WSPingInterval time.Duration
-	WSPongWait     time.Duration
+	DefaultLogDir       bool                   `yaml:"DefaultLogDir"`
+	LogFileDir          string                 `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	MaxLogFiles         int64                  `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
+	MaxLogFileSize      int64                  `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
+	ConsoleOutput       bool                   `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
+	GrpcPort            int64                  `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
+	RestPort            int64                  `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
+	TCPPort             int64                  `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
+	TCPAddr             string                 `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
+	DataOutputDir       string                 `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
+	ExtraIPAddr         []string               `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
+	InfluxURL           string                 `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
+	InfluxAPIToken      string                 `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
+	PluginDir           string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
+	Plugins             []*fmtrpc.PluginConfig `yaml:"Plugins"`
+	RegenerateMacaroons bool                   `long:"regenmacaroons" description:"Boolean to determine whether macaroons are regenerated"`
+	MacaroonDBPath      string
+	TLSCertPath         string
+	TLSKeyPath          string
+	AdminMacPath        string
+	TestMacPath         string
+	WSPingInterval      time.Duration
+	WSPongWait          time.Duration
 }
 
 // default_config returns the default configuration
