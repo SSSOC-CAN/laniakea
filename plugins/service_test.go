@@ -131,7 +131,7 @@ func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginCo
 }
 
 var (
-	startPluginDir     = "plugins/testing"
+	startPluginDir     = "plugins/_testing"
 	startDuplicateCfgs = []*fmtrpc.PluginConfig{
 		{
 			Name:        "test-rng-plugin",

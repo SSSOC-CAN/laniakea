@@ -50,7 +50,7 @@ var (
 	defaultTestingPwd         = []byte("abcdefgh")
 	fmtdDirRegexp             = `/(?:fmtd)/(?:fmtd)$`
 	rootDirRegexp             = `/(?:fmtd)$`
-	startPluginDir            = "plugins/plugins/testing"
+	startPluginDir            = "plugins/plugins/_testing"
 	pluginCfgs                = []*fmtrpc.PluginConfig{
 		&fmtrpc.PluginConfig{
 			Name:        "test-rng-plugin",
