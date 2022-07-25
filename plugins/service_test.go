@@ -364,7 +364,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 		plug := pluginManager.pluginRegistry[timeoutPluginName]
 		// Sleep until the plugin has timed out
-		time.Sleep(time.Duration(plug.cfg.Timeout+6) * time.Second)
+		time.Sleep(time.Duration(plug.cfg.Timeout+5) * time.Second)
 		if plug.getState() != fmtrpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Plugin in unexpected state after timing out: %v", plug.getState())
 		}
@@ -381,7 +381,7 @@ func TestDatasourcePlugin(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when calling StartRecord: %v", err)
 			}
-			time.Sleep(time.Duration(plug.cfg.Timeout+16) * time.Second)
+			time.Sleep(time.Duration(plug.cfg.Timeout+15) * time.Second)
 		}
 		if plug.getState() != fmtrpc.PluginState_KILLED {
 			t.Errorf("Plugin in unexpected state after reaching max timeouts: %v timeout counter: %v", plug.getState(), plug.getTimeoutCount())
