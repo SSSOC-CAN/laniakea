@@ -427,7 +427,7 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 // AddPlugin is the PluginAPI command to add a new plugin from a formatted plugin string
 func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig) (*fmtrpc.Plugin, error) {
 	// validate plugin config
-	err := ValidatePluginConfig(req, p.pluginDir)
+	err := ValidatePluginConfig(req, p.pluginDir, false)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
