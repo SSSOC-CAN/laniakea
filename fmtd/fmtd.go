@@ -37,24 +37,15 @@ import (
 	"sync"
 
 	"github.com/SSSOC-CAN/fmtd/api"
-	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/controller"
-	"github.com/SSSOC-CAN/fmtd/data"
-	"github.com/SSSOC-CAN/fmtd/drivers"
-	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/plugins"
-	"github.com/SSSOC-CAN/fmtd/rga"
-	"github.com/SSSOC-CAN/fmtd/telemetry"
-	"github.com/SSSOC-CAN/fmtd/testplan"
 	"github.com/SSSOC-CAN/fmtd/unlocker"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
-	"github.com/SSSOCPaulCote/gux"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -67,51 +58,13 @@ const (
 )
 
 var (
-	tempPwd                       = []byte("abcdefgh")
-	defaultMacTimeout int64       = 60
-	RtdInitialState               = data.InitialRtdState{}
-	RtdReducer        gux.Reducer = func(s interface{}, a gux.Action) (interface{}, error) {
-		// assert type of s
-		oldState, ok := s.(data.InitialRtdState)
-		if !ok {
-			return nil, gux.ErrInvalidStateType
-		}
-		// switch case action
-		switch a.Type {
-		case "telemetry/update":
-			// assert type of payload
-			newState, ok := a.Payload.(data.InitialRtdState)
-			if !ok {
-				return nil, gux.ErrInvalidPayloadType
-			}
-			oldState.RealTimeData = newState.RealTimeData
-			oldState.AverageTemperature = newState.AverageTemperature
-			return oldState, nil
-		case "rga/update":
-			// assert type of payload
-			newState, ok := a.Payload.(fmtrpc.RealTimeData)
-			if !ok {
-				return nil, gux.ErrInvalidPayloadType
-			}
-			oldState.RealTimeData = newState
-			return oldState, nil
-		case "telemetry/polling_interval/update":
-			// assert type of payload
-			newPol, ok := a.Payload.(int64)
-			if !ok {
-				return nil, gux.ErrInvalidPayloadType
-			}
-			oldState.TelPollingInterval = newPol
-			return oldState, nil
-		default:
-			return nil, gux.ErrInvalidAction
-		}
-	}
+	tempPwd                 = []byte("abcdefgh")
+	defaultMacTimeout int64 = 60
 )
 
 // Main is the true entry point for fmtd. It's called in a nested manner for proper defer execution
 func Main(interceptor *intercept.Interceptor, server *Server) error {
-	var services []data.Service
+	var services []api.Service
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -119,10 +72,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	for _, cfg := range server.cfg.Plugins {
 		registeredPlugins = append(registeredPlugins, cfg.Name)
 	}
-
-	// Create State stores
-	rtdStateStore := gux.CreateStore(RtdInitialState, RtdReducer)
-	ctrlStateStore := gux.CreateStore(controller.InitialState, controller.ControllerReducer)
 
 	// Starting main server
 	err := server.Start()
@@ -180,115 +129,6 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	defer pluginManager.Stop()
 	server.logger.Info().Msg("Plugins initialized")
-
-	// Instantiate RTD Service
-	server.logger.Info().Msg("Instantiating RTD subservice...")
-	rtdService := data.NewRTDService(&NewSubLogger(server.logger, "RTD").SubLogger, rtdStateStore)
-	err = rtdService.RegisterWithGrpcServer(grpc_server)
-	if err != nil {
-		server.logger.Error().Msgf("Unable to register RTD Service with gRPC server: %v", err)
-		return err
-	}
-	services = append(services, rtdService)
-	server.logger.Info().Msg("RTD service instantiated.")
-
-	// Instantiate Telemetry service and register with gRPC server but NOT start
-	server.logger.Info().Msg("Instantiating RPC subservices and registering with gRPC server...")
-	daqConn, err := drivers.ConnectToDAQ()
-	if err != nil {
-		server.logger.Error().Msgf("Unable to connect to DAQ: %v", err)
-		return err
-	}
-	daqConnAssert, ok := daqConn.(*drivers.DAQConnection)
-	if !ok {
-		server.logger.Error().Msgf("Unable to connect to DAQ: %v", errors.ErrInvalidType)
-		return errors.ErrInvalidType
-	}
-	telemetryService := telemetry.NewTelemetryService(
-		&NewSubLogger(server.logger, "TEL").SubLogger,
-		rtdStateStore,
-		ctrlStateStore,
-		daqConnAssert,
-		server.cfg.InfluxURL,
-		server.cfg.InfluxAPIToken,
-	)
-	telemetryService.RegisterWithRTDService(rtdService)
-	services = append(services, telemetryService)
-
-	// Instantiate RGA service and register with gRPC server but NOT start
-	rgaConn, err := drivers.ConnectToRGA()
-	if err != nil {
-		server.logger.Error().Msgf("Unable to connect to RGA: %v", err)
-		return err
-	}
-	rgaConnAssert, ok := rgaConn.(*drivers.RGAConnection)
-	if !ok {
-		server.logger.Error().Msgf("Unable to connect to RGA: %v", errors.ErrInvalidType)
-		return errors.ErrInvalidType
-	}
-	rgaService := rga.NewRGAService(
-		&NewSubLogger(server.logger, "RGA").SubLogger,
-		rtdStateStore,
-		ctrlStateStore,
-		rgaConnAssert,
-		server.cfg.InfluxURL,
-		server.cfg.InfluxAPIToken,
-	)
-	rgaService.RegisterWithRTDService(rtdService)
-	services = append(services, rgaService)
-
-	// Instantiate Controller Service and register with gRPC server but not start
-	server.logger.Info().Msg("Instantiating controller subservice and registering with gRPC server...")
-	ctrlConn, err := drivers.ConnectToController()
-	if err != nil {
-		server.logger.Error().Msgf("Unable to connect to controller: %v", err)
-		return err
-	}
-	ctrlConnAssert, ok := ctrlConn.(*drivers.ControllerConnection)
-	if !ok {
-		server.logger.Error().Msgf("Unable to connect to controller: %v", errors.ErrInvalidType)
-		return errors.ErrInvalidType
-	}
-	controllerService := controller.NewControllerService(
-		&NewSubLogger(server.logger, "CTRL").SubLogger,
-		rtdStateStore,
-		ctrlStateStore,
-		ctrlConnAssert,
-	)
-	err = controllerService.RegisterWithGrpcServer(grpc_server)
-	if err != nil {
-		server.logger.Error().Msgf("Unable to register controller Service with gRPC server: %v", err)
-		return err
-	}
-	services = append(services, controllerService)
-	server.logger.Info().Msg("Controller service instantiated")
-
-	// Instantiate Test Plan Executor and register with gRPC server but NOT start
-	getConnectionFunc := func() (fmtrpc.DataCollectorClient, func(), error) {
-		conn, err := auth.GetClientConn(
-			"localhost",
-			strconv.FormatInt(server.cfg.GrpcPort, 10),
-			server.cfg.TLSCertPath,
-			server.cfg.AdminMacPath,
-			false,
-			defaultMacTimeout,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
-		cleanUp := func() {
-			conn.Close()
-		}
-		return fmtrpc.NewDataCollectorClient(conn), cleanUp, nil
-	}
-	testPlanExecutor := testplan.NewTestPlanService(
-		&NewSubLogger(server.logger, "TPEX").SubLogger,
-		getConnectionFunc,
-		rtdStateStore,
-	)
-	testPlanExecutor.RegisterWithGrpcServer(grpc_server)
-	services = append(services, testPlanExecutor)
-
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
 	// Starting kvdb
@@ -333,10 +173,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 		rpcServer,
 		[]api.RestProxyService{
 			rpcServer,
-			rtdService,
-			testPlanExecutor,
 			unlockerService,
-			controllerService,
 			pluginManager,
 		},
 		restDialOpts,

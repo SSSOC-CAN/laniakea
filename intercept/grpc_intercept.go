@@ -63,6 +63,15 @@ var (
 		"/fmtrpc.Unlocker/Login":          {}, //don't need a macaroon to login because succesful login will create macaroons
 		"/fmtrpc.Unlocker/SetPassword":    {},
 		"/fmtrpc.Unlocker/ChangePassword": {},
+		"/fmtrpc.Fmt/SetTemperature":      {},
+		"/fmtrpc.Fmt/SetPressure":         {},
+		"/fmtrpc.Fmt/StartRecording":      {},
+		"/fmtrpc.Fmt/StopRecording":       {},
+		"/fmtrpc.Fmt/SubscribeDataStream": {},
+		"/fmtrpc.Fmt/LoadTestPlan":        {},
+		"/fmtrpc.Fmt/StartTestPlan":       {},
+		"/fmtrpc.Fmt/StopTestPlan":        {},
+		"/fmtrpc.Fmt/InsertROIMarker":     {},
 	}
 	pluginMethodNames = []string{
 		"/fmtrpc.PluginAPI/StartRecord",
