@@ -124,10 +124,10 @@ func TestLogWithErrors(t *testing.T) {
 		{"INFO", "T1"},
 		{"DEBUG", "T2"},
 		{"TRACE", "T3"},
-		{"ERROR", "T4"},
+		//{"ERROR", "T4"},
 		{"FATAL", "T5"},
 		{"PANIC", "T6"},
-		{"TEST", "T7"},
+		//{"TEST", "T7"},
 	}
 	var level, msg string
 	for i, table := range tables {
