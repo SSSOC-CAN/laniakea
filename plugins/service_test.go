@@ -131,28 +131,54 @@ func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginCo
 }
 
 var (
-	startPluginDir     = "plugins/_testing"
-	startDuplicateCfgs = []*fmtrpc.PluginConfig{
+	windowsExecExt        = ".exe"
+	macExecNameExt        = "_macos"
+	rngPluginName         = "test-rng-plugin"
+	errPluginName         = "test-error-plugin"
+	timeoutPluginName     = "test-timeout-plugin"
+	ctrlPluginName        = "test-ctrl-plugin"
+	versionPluginName     = "test-version-plugin"
+	rngPluginExecName     = "test_rng_plugin"
+	errPluginExecName     = "test_error_plugin"
+	timeoutPluginExecName = "test_timeout_plugin"
+	versionPluginExecName = "test_version_plugin"
+	ctrlPluginExecName    = "test_ctrl_plugin"
+	startPluginDir        = "plugins/_testing"
+	startDuplicateCfgs    = []*fmtrpc.PluginConfig{
 		{
-			Name:        "test-rng-plugin",
+			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_rng_plugin",
+			ExecName:    rngPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 		{
-			Name:        "test-rng-plugin",
+			Name:        rngPluginName,
 			Type:        CONTROLLER_STR,
-			ExecName:    "test_rng_plugin",
+			ExecName:    rngPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 	}
+	changeCfgExec = func(os string, cfgs []*fmtrpc.PluginConfig) []*fmtrpc.PluginConfig {
+		newCfgs := cfgs[:]
+		switch os {
+		case "windows":
+			for _, cfg := range newCfgs {
+				cfg.ExecName = cfg.ExecName + windowsExecExt
+			}
+		case "darwin":
+			for _, cfg := range newCfgs {
+				cfg.ExecName = cfg.ExecName + macExecNameExt
+			}
+		}
+		return newCfgs
+	}
 	startInvalidTypeCfgs = []*fmtrpc.PluginConfig{
 		{
-			Name:        "test-rng-plugin",
+			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_rng_plugin",
+			ExecName:    rngPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
@@ -166,25 +192,25 @@ var (
 	}
 	startInvalidVersionCfgs = []*fmtrpc.PluginConfig{
 		{
-			Name:        "test-rng-plugin",
+			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_rng_plugin",
+			ExecName:    rngPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 		{
-			Name:        "test-version-plugin",
+			Name:        versionPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_version_plugin",
+			ExecName:    versionPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 	}
 	startValidCfgs = []*fmtrpc.PluginConfig{
 		{
-			Name:        "test-rng-plugin",
+			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_rng_plugin",
+			ExecName:    rngPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
@@ -224,7 +250,7 @@ func getPluginDir(t *testing.T) string {
 func TestStartPluginManager(t *testing.T) {
 	pluginDir := getPluginDir(t)
 	t.Run("duplicate plugin names", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, startDuplicateCfgs)
+		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startDuplicateCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != ErrDuplicatePluginName {
 			t.Errorf("Unexpected error when calling Start: %v", err)
@@ -232,7 +258,7 @@ func TestStartPluginManager(t *testing.T) {
 		defer pluginManager.Stop()
 	})
 	t.Run("invalid plugin type", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, startInvalidTypeCfgs)
+		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startInvalidTypeCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != ErrInvalidPluginType {
 			t.Errorf("Unexpected error when calling start: %v", err)
@@ -240,7 +266,7 @@ func TestStartPluginManager(t *testing.T) {
 		defer pluginManager.Stop()
 	})
 	t.Run("incompatible versions", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, startInvalidVersionCfgs)
+		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startInvalidVersionCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != sdk.ErrLaniakeaVersionMismatch {
 			t.Errorf("Unexpected error when calling start: %v", err)
@@ -248,7 +274,7 @@ func TestStartPluginManager(t *testing.T) {
 		defer pluginManager.Stop()
 	})
 	t.Run("valid", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, startValidCfgs)
+		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startValidCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != nil {
 			t.Errorf("Unexpected error when calling start: %v", err)
@@ -258,29 +284,26 @@ func TestStartPluginManager(t *testing.T) {
 }
 
 var (
-	bufSize           = 1 * 1024 * 1024
-	lis               *bufconn.Listener
-	rngPluginName     = "test-rng-plugin"
-	timeoutPluginName = "test-timeout-plugin"
-	errorPluginName   = "test-error-plugin"
-	rngPluginCfg      = &fmtrpc.PluginConfig{
+	bufSize      = 1 * 1024 * 1024
+	lis          *bufconn.Listener
+	rngPluginCfg = &fmtrpc.PluginConfig{
 		Name:        rngPluginName,
 		Type:        DATASOURCE_STR,
-		ExecName:    "test_rng_plugin",
+		ExecName:    rngPluginExecName,
 		Timeout:     defaultPluginTimeout,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
 	timeoutPluginCfg = &fmtrpc.PluginConfig{
 		Name:        timeoutPluginName,
 		Type:        DATASOURCE_STR,
-		ExecName:    "test_timeout_plugin",
+		ExecName:    timeoutPluginExecName,
 		Timeout:     15,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
 	errPluginCfg = &fmtrpc.PluginConfig{
-		Name:        errorPluginName,
+		Name:        errPluginName,
 		Type:        DATASOURCE_STR,
-		ExecName:    "test_error_plugin",
+		ExecName:    errPluginExecName,
 		Timeout:     15,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
@@ -299,7 +322,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 // TestDatasourcePlugin tests a dummy datasource plugin to ensure PluginAPI functionality
 func TestDatasourcePlugin(t *testing.T) {
 	ctx := context.Background()
-	pluginManager, client, cleanUp := initTestingSetup(t, ctx, datasourceCfgs)
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, datasourceCfgs))
 	defer cleanUp()
 	t.Run("start record-plugin not registered", func(t *testing.T) {
 		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
@@ -344,7 +367,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start record-plugin error", func(t *testing.T) {
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartRecord gRPC method: %v", err)
@@ -353,7 +376,7 @@ func TestDatasourcePlugin(t *testing.T) {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		// check if the plugin state is Unknown
-		if plug := pluginManager.pluginRegistry[errorPluginName]; plug.getState() != fmtrpc.PluginState_UNKNOWN {
+		if plug := pluginManager.pluginRegistry[errPluginName]; plug.getState() != fmtrpc.PluginState_UNKNOWN {
 			t.Errorf("Unexpected plugin state after error when StartRecord: %v", plug.getState())
 		}
 	})
@@ -364,7 +387,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 		plug := pluginManager.pluginRegistry[timeoutPluginName]
 		// Sleep until the plugin has timed out
-		time.Sleep(time.Duration(plug.cfg.Timeout+5) * time.Second)
+		time.Sleep(time.Duration(plug.cfg.Timeout+6) * time.Second)
 		if plug.getState() != fmtrpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Plugin in unexpected state after timing out: %v", plug.getState())
 		}
@@ -381,7 +404,7 @@ func TestDatasourcePlugin(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when calling StartRecord: %v", err)
 			}
-			time.Sleep(time.Duration(plug.cfg.Timeout+15) * time.Second)
+			time.Sleep(time.Duration(plug.cfg.Timeout+16) * time.Second)
 		}
 		if plug.getState() != fmtrpc.PluginState_KILLED {
 			t.Errorf("Plugin in unexpected state after reaching max timeouts: %v timeout counter: %v", plug.getState(), plug.getTimeoutCount())
@@ -435,7 +458,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start plugin-invalid plugin state", func(t *testing.T) {
-		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
@@ -445,14 +468,14 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start plugin-invalid plugin type", func(t *testing.T) {
-		plug := pluginManager.pluginRegistry[errorPluginName]
+		plug := pluginManager.pluginRegistry[errPluginName]
 		plug.cfg.Type = "invalid-plugin-type"
 		plug.setKilled()
 		defer func() {
 			plug.cfg.Type = DATASOURCE_STR
 			plug.setReady()
 		}()
-		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
@@ -572,14 +595,14 @@ var (
 		{
 			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_rng_plugin",
+			ExecName:    rngPluginExecName,
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 		{
 			Name:        timeoutPluginName,
 			Type:        DATASOURCE_STR,
-			ExecName:    "test_timeout_plugin",
+			ExecName:    timeoutPluginExecName,
 			Timeout:     15,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
@@ -609,13 +632,13 @@ var (
 	}
 	invalidPlugAlreadyExistsCfg = &fmtrpc.PluginConfig{
 		Name:     rngPluginName,
-		ExecName: "test_rng_plugin",
+		ExecName: rngPluginExecName,
 		Type:     DATASOURCE_STR,
 	}
 	validAddPlugin = &fmtrpc.PluginConfig{
-		Name:        errorPluginName,
+		Name:        errPluginName,
 		Type:        DATASOURCE_STR,
-		ExecName:    "test_error_plugin",
+		ExecName:    errPluginExecName,
 		Timeout:     15,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
@@ -624,7 +647,7 @@ var (
 // TestPluginAPI tests the AddPlugin, GetPlugin and ListPlugins gRPC methods
 func TestPluginAPI(t *testing.T) {
 	ctx := context.Background()
-	_, client, cleanUp := initTestingSetup(t, ctx, addPluginCfgs)
+	_, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, addPluginCfgs))
 	defer cleanUp()
 	t.Run("add plugin-invalid plugin name", func(t *testing.T) {
 		_, err := client.AddPlugin(ctx, invalidPlugNameCfg)
@@ -703,14 +726,14 @@ var (
 		Name: "not-a-registered-plugin",
 	}
 	getPluginValid = &fmtrpc.PluginRequest{
-		Name: errorPluginName,
+		Name: errPluginName,
 	}
 )
 
 // TestGetPlugins will test the GetPlugin and ListPlugins gRPC methods
 func TestGetPlugins(t *testing.T) {
 	ctx := context.Background()
-	_, client, cleanUp := initTestingSetup(t, ctx, getPluginCfgs)
+	_, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, getPluginCfgs))
 	defer cleanUp()
 	t.Run("get plugin-unregistered plugin", func(t *testing.T) {
 		_, err := client.GetPlugin(ctx, getPluginUnregistered)
@@ -745,7 +768,7 @@ func TestGetPlugins(t *testing.T) {
 		}
 		plugCfgMap := map[string]*fmtrpc.PluginConfig{
 			rngPluginName:     rngPluginCfg,
-			errorPluginName:   errPluginCfg,
+			errPluginName:     errPluginCfg,
 			timeoutPluginName: timeoutPluginCfg,
 		}
 		for _, plug := range resp.Plugins {
@@ -768,11 +791,10 @@ func TestGetPlugins(t *testing.T) {
 }
 
 var (
-	ctrlPluginName = "test-ctrl-plugin"
-	ctrlPluginCfg  = &fmtrpc.PluginConfig{
+	ctrlPluginCfg = &fmtrpc.PluginConfig{
 		Name:        ctrlPluginName,
 		Type:        CONTROLLER_STR,
-		ExecName:    "test_ctrl_plugin",
+		ExecName:    ctrlPluginExecName,
 		Timeout:     10,
 		MaxTimeouts: 3,
 	}
@@ -784,7 +806,7 @@ var (
 // TestControllerPlugin will use dummy controller plugins to test some controller plugin functionality
 func TestControllerPlugin(t *testing.T) {
 	ctx := context.Background()
-	pluginManager, client, cleanUp := initTestingSetup(t, ctx, controllerCfgs)
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, controllerCfgs))
 	defer cleanUp()
 	t.Run("command-unregistered plugin", func(t *testing.T) {
 		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "unregistered-plugin"})
@@ -1010,7 +1032,7 @@ var (
 // TestSubscribePluginState tests the SubscribePluginState gRPC method
 func TestSubscribePluginState(t *testing.T) {
 	ctx := context.Background()
-	pluginManager, client, cleanUp := initTestingSetup(t, ctx, subStateCfgs)
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, subStateCfgs))
 	defer cleanUp()
 	t.Run("individual-unregistered plugin", func(t *testing.T) {
 		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: "not-a-registered-plugin"})
@@ -1107,7 +1129,7 @@ func TestSubscribePluginState(t *testing.T) {
 		wg.Wait()
 	})
 	t.Run("individual-unknown and stopped", func(t *testing.T) {
-		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
 		}
@@ -1145,7 +1167,7 @@ func TestSubscribePluginState(t *testing.T) {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 		}()
-		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error format when calling StartRecord: expected gRPC status format, got %v", err)
@@ -1153,7 +1175,7 @@ func TestSubscribePluginState(t *testing.T) {
 		if st.Message() != "I don't wanna" {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
-		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
 		st, ok = status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error format when calling StopPlugin: expected gRPC status format, got %v", err)
