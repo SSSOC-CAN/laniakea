@@ -29,18 +29,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"github.com/urfave/cli"
+
 	"github.com/SSSOC-CAN/fmtd/auth"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc/demorpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/urfave/cli"
 )
 
 var (
 	defaultRPCAddr               = "localhost"
 	defaultRPCPort               = "7777"
 	defaultTLSCertFilename       = "tls.cert"
-	defaultFmtdDir           	 = utils.AppDataDir("fmtd", false)
+	defaultFmtdDir               = utils.AppDataDir("fmtd", false)
 	defaultTLSCertPath           = filepath.Join(defaultFmtdDir, defaultTLSCertFilename)
 	defaultMacaroonTimeout int64 = 60
 	defaultAdminMacName          = "admin.macaroon"
@@ -73,45 +73,6 @@ func getFmtClient(ctx *cli.Context) (fmtrpc.FmtClient, func()) {
 	return fmtrpc.NewFmtClient(conn), cleanUp
 }
 
-//getDataCollectorClient returns the DataCollectorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getDataCollectorClient(ctx *cli.Context) (fmtrpc.DataCollectorClient, func()) {
-	args := extractArgs(ctx)
-	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
-	if err != nil {
-		fatal(err)
-	}
-	cleanUp := func() {
-		conn.Close()
-	}
-	return fmtrpc.NewDataCollectorClient(conn), cleanUp
-}
-
-//getTestPlanExecutorClient returns the TestPlanExecutorClient instance from the fmtrpc package with macaroon permissions and a cleanup function
-func getTestPlanExecutorClient(ctx *cli.Context) (fmtrpc.TestPlanExecutorClient, func()) {
-	args := extractArgs(ctx)
-	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
-	if err != nil {
-		fatal(err)
-	}
-	cleanUp := func() {
-		conn.Close()
-	}
-	return fmtrpc.NewTestPlanExecutorClient(conn), cleanUp
-}
-
-// getControllerClient returns the ControllerClient instance from the demorpc package
-func getControllerClient(ctx *cli.Context) (demorpc.ControllerClient, func()) {
-	args := extractArgs(ctx)
-	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
-	if err != nil {
-		fatal(err)
-	}
-	cleanUp := func() {
-		conn.Close()
-	}
-	return demorpc.NewControllerClient(conn), cleanUp
-}
-
 //getUnlockerClient returns the UnlockerClient instance from the fmtrpc package as well as a cleanup function
 func getUnlockerClient(ctx *cli.Context) (fmtrpc.UnlockerClient, func()) {
 	args := extractArgs(ctx)
@@ -123,6 +84,19 @@ func getUnlockerClient(ctx *cli.Context) (fmtrpc.UnlockerClient, func()) {
 		conn.Close()
 	}
 	return fmtrpc.NewUnlockerClient(conn), cleanUp
+}
+
+// getPluginAPIClient returns the PluginAPIClient instance and a cleanup function
+func getPluginAPIClient(ctx *cli.Context) (fmtrpc.PluginAPIClient, func()) {
+	args := extractArgs(ctx)
+	conn, err := auth.GetClientConn(args.RPCAddr, args.RPCPort, args.TLSCertPath, args.AdminMacPath, false, defaultMacaroonTimeout)
+	if err != nil {
+		fatal(err)
+	}
+	cleanUp := func() {
+		conn.Close()
+	}
+	return fmtrpc.NewPluginAPIClient(conn), cleanUp
 }
 
 // extractArgs extracts the arguments inputted to the heartcli command
@@ -171,15 +145,15 @@ func main() {
 		loginCommand,
 		setPassword,
 		changePassword,
-		startRecording,
-		stopRecording,
-		loadTestPlan,
-		startTestPlan,
-		stopTestPlan,
-		insertROIMarker,
 		bakeMacaroon,
-		setTempCommand,
-		setPresCommand,
+		pluginStartRecordCmd,
+		pluginStopRecordCmd,
+		pluginStartCmd,
+		pluginStopCmd,
+		pluginCommandCmd,
+		addPluginCmd,
+		listPluginsCmd,
+		getPluginCmd,
 	}
 	if err := app.Run(os.Args); err != nil {
 		fatal(err)

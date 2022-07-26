@@ -25,3 +25,5 @@ http:
     - selector: fmtrpc.PluginAPI.AddPlugin
       post: "/v2/plugin/add"
       body: "*"
+    - selector: fmtrpc.PluginAPI.GetPlugin
+      get: "/v2/plugin/{name}"

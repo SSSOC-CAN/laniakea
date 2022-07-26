@@ -26,28 +26,25 @@ import (
 
 // Config is the object which will hold all of the config parameters
 type Config struct {
-	DefaultLogDir  bool                   `yaml:"DefaultLogDir"`
-	LogFileDir     string                 `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
-	MaxLogFiles    int64                  `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
-	MaxLogFileSize int64                  `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
-	ConsoleOutput  bool                   `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
-	GrpcPort       int64                  `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
-	RestPort       int64                  `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
-	TCPPort        int64                  `yaml:"TCPPort" long:"tcp_port" description:"The port where the fmtd listens for TCP requests"`
-	TCPAddr        string                 `yaml:"TCPAddr" long:"tcp_addr" description:"The address where the fmtd listens for TCP requests"`
-	DataOutputDir  string                 `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
-	ExtraIPAddr    []string               `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
-	InfluxURL      string                 `yaml:"InfluxURL" long:"influxurl" description:"The InfluxDB URL for writing"`
-	InfluxAPIToken string                 `yaml:"InfluxAPIToken" long:"influxapitoken" description:"The InfluxDB API Token used to read and write"`
-	PluginDir      string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
-	Plugins        []*fmtrpc.PluginConfig `yaml:"Plugins"`
-	MacaroonDBPath string
-	TLSCertPath    string
-	TLSKeyPath     string
-	AdminMacPath   string
-	TestMacPath    string
-	WSPingInterval time.Duration
-	WSPongWait     time.Duration
+	DefaultLogDir       bool                   `yaml:"DefaultLogDir"`
+	LogFileDir          string                 `yaml:"LogFileDir" long:"logfiledir" description:"Choose the directory where the log file is stored"`
+	MaxLogFiles         int64                  `yaml:"MaxLogFiles" long:"maxlogfiles" description:"Maximum number of logfiles in the log rotation (0 for no rotation)"`
+	MaxLogFileSize      int64                  `yaml:"MaxLogFileSize" long:"maxlogfilesize" description:"Maximum size of a logfile in MB"`
+	ConsoleOutput       bool                   `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
+	GrpcPort            int64                  `yaml:"GrpcPort" long:"grpc_port" description:"The port where the fmtd listens for gRPC API requests"`
+	RestPort            int64                  `yaml:"RestPort" long:"rest_port" description:"The port where the fmtd listens for REST API requests"`
+	DataOutputDir       string                 `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
+	ExtraIPAddr         []string               `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
+	PluginDir           string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
+	Plugins             []*fmtrpc.PluginConfig `yaml:"Plugins"`
+	RegenerateMacaroons bool                   `long:"regenmacaroons" description:"Boolean to determine whether macaroons are regenerated"`
+	MacaroonDBPath      string
+	TLSCertPath         string
+	TLSKeyPath          string
+	AdminMacPath        string
+	TestMacPath         string
+	WSPingInterval      time.Duration
+	WSPongWait          time.Duration
 }
 
 // default_config returns the default configuration
@@ -57,8 +54,6 @@ var (
 	config_file_name  string = "config.yaml"
 	default_grpc_port int64  = 7777
 	default_rest_port int64  = 8080
-	default_tcp_port  int64  = 10024
-	default_tcp_addr  string = "0.0.0.0"
 	default_log_dir          = func() string {
 		return utils.AppDataDir("fmtd", false)
 	}
@@ -70,7 +65,6 @@ var (
 	default_data_output_dir     string = default_log_dir()
 	default_ws_ping_interval           = time.Second * 30
 	default_ws_pong_wait               = time.Second * 5
-	default_influx_url          string = "https://174.113.21.199:8088"
 	default_log_file_size       int64  = 10
 	default_max_log_files       int64  = 0
 	default_plugin_dir          string = default_log_dir()
@@ -83,8 +77,6 @@ var (
 			ConsoleOutput:  true,
 			GrpcPort:       default_grpc_port,
 			RestPort:       default_rest_port,
-			TCPPort:        default_tcp_port,
-			TCPAddr:        default_tcp_addr,
 			DataOutputDir:  default_data_output_dir,
 			MacaroonDBPath: default_macaroon_db_file,
 			TLSCertPath:    default_tls_cert_path,
@@ -93,7 +85,6 @@ var (
 			TestMacPath:    test_macaroon_path,
 			WSPingInterval: default_ws_ping_interval,
 			WSPongWait:     default_ws_pong_wait,
-			InfluxURL:      default_influx_url,
 			PluginDir:      default_plugin_dir,
 		}
 	}
@@ -125,7 +116,7 @@ func InitConfig(isTesting bool) (Config, error) {
 			config = check_yaml_config(config)
 			if len(config.Plugins) > 0 {
 				for _, cfg := range config.Plugins {
-					err = plugins.ValidatePluginConfig(cfg, config.PluginDir)
+					err = plugins.ValidatePluginConfig(cfg, config.PluginDir, isTesting)
 					if err != nil {
 						return Config{}, e.Wrapf(err, "Error validating %s plugin", cfg.Name)
 					}
@@ -200,14 +191,6 @@ func check_yaml_config(config Config) Config {
 			if f.Int() == 0 { // This may end up being a range of values
 				change_field(f, default_rest_port)
 			}
-		case "TCPPort":
-			if f.Int() == 0 {
-				change_field(f, default_tcp_port)
-			}
-		case "TCPAddr":
-			if f.String() == "" {
-				change_field(f, default_tcp_addr)
-			}
 		case "MacaroonDBPath":
 			if f.String() == "" {
 				change_field(f, default_macaroon_db_file)
@@ -235,10 +218,6 @@ func check_yaml_config(config Config) Config {
 		case "DataOutputDir":
 			if f.String() == "" {
 				change_field(f, default_data_output_dir)
-			}
-		case "InfluxURL":
-			if f.String() == "" {
-				change_field(f, default_influx_url)
 			}
 		case "PluginDir":
 			if f.String() == "" {

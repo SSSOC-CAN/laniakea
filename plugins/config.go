@@ -3,6 +3,7 @@ package plugins
 import (
 	"path/filepath"
 
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
@@ -12,7 +13,6 @@ const (
 	ErrInvalidPluginExec  = bg.Error("invalid plugin executable")
 	ErrPluginExecNotFound = bg.Error("plugin executable not found")
 	ErrInvalidPluginType  = bg.Error("invalid plugin type")
-	ErrInvalidPluginName  = bg.Error("invalid plugin name")
 )
 
 var (
@@ -21,10 +21,10 @@ var (
 )
 
 // ValidatePluginConfig takes a PluginConfig and validates the parameters
-func ValidatePluginConfig(cfg *fmtrpc.PluginConfig, pluginDir string) error {
+func ValidatePluginConfig(cfg *fmtrpc.PluginConfig, pluginDir string, isTesting bool) error {
 	// checks that the plugin has a valid name and executable
 	if !utils.ValidatePluginName(cfg.Name) {
-		return ErrInvalidPluginName
+		return errors.ErrInvalidPluginName
 	} else if !utils.ValidatePluginExec(cfg.ExecName) {
 		return ErrInvalidPluginExec
 	}
@@ -32,7 +32,7 @@ func ValidatePluginConfig(cfg *fmtrpc.PluginConfig, pluginDir string) error {
 	if cfg.Type != DATASOURCE_STR && cfg.Type != CONTROLLER_STR {
 		return ErrInvalidPluginType
 	}
-	if !utils.FileExists(filepath.Join(pluginDir, cfg.ExecName)) {
+	if !isTesting && !utils.FileExists(filepath.Join(pluginDir, cfg.ExecName)) {
 		return ErrPluginExecNotFound
 	}
 	// if timeout or maxtimeout or version are 0 set to default values

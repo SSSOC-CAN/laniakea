@@ -24,7 +24,9 @@ import (
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
@@ -213,6 +215,96 @@ func TestCommands(t *testing.T) {
 		}
 		t.Log(resp)
 	})
+	t.Run("deprecated-set temperature", func(t *testing.T) {
+		_, err := client.SetTemperature(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling SetTemperature: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling SetTemperature: %v", err)
+		}
+	})
+	t.Run("deprecated-set pressure", func(t *testing.T) {
+		_, err := client.SetPressure(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling SetPressure: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling SetPressure: %v", err)
+		}
+	})
+	t.Run("deprecated-start recording", func(t *testing.T) {
+		_, err := client.StartRecording(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StartRecording: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StartRecording: %v", err)
+		}
+	})
+	t.Run("deprecated-stop recording", func(t *testing.T) {
+		_, err := client.StopRecording(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StopRecording: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StopRecording: %v", err)
+		}
+	})
+	t.Run("deprecated-subscribe data stream", func(t *testing.T) {
+		_, err := client.SubscribeDataStream(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling SubscribeDataStream: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling SubscribeDataStream: %v", err)
+		}
+	})
+	t.Run("deprecated-load test plan", func(t *testing.T) {
+		_, err := client.LoadTestPlan(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling LoadTestPlan: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling LoadTestPlan: %v", err)
+		}
+	})
+	t.Run("deprecated-start test plan", func(t *testing.T) {
+		_, err := client.StartTestPlan(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StartTestPlan: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StartTestPlan: %v", err)
+		}
+	})
+	t.Run("deprecated-stop test plan", func(t *testing.T) {
+		_, err := client.StopTestPlan(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StopTestPlan: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling StopTestPlan: %v", err)
+		}
+	})
+	t.Run("deprecated-insert roi marker", func(t *testing.T) {
+		_, err := client.InsertROIMarker(ctx, &proto.Empty{})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling InsertROIMarker: %v", err)
+		}
+		if st.Message() != ErrDeprecatedAction.Error() {
+			t.Errorf("Unexpected error when calling InsertROIMarker: %v", err)
+		}
+	})
 }
 
 // initGrpcServer initializes the gRPC server and registers it with the RPC server
@@ -254,7 +346,7 @@ func initGrpcServerMac(t *testing.T) func() {
 		}
 	})
 	// macaroon service
-	macaroonService, err := macaroons.InitService(*db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{})
 	if err != nil {
 		t.Errorf("Could not initialize macaroon service: %v", err)
 	}

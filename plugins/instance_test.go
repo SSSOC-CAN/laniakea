@@ -15,49 +15,49 @@ import (
 func TestInstanceStates(t *testing.T) {
 	instance := PluginInstance{}
 	t.Run("ready", func(t *testing.T) {
-		if instance.getState() != fmtrpc.Plugin_READY {
+		if instance.getState() != fmtrpc.PluginState_READY {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("busy", func(t *testing.T) {
 		instance.setBusy()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.Plugin_BUSY {
+		if instance.getState() != fmtrpc.PluginState_BUSY {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("unknown", func(t *testing.T) {
 		instance.setUnknown()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.Plugin_UNKNOWN {
+		if instance.getState() != fmtrpc.PluginState_UNKNOWN {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("stopping", func(t *testing.T) {
 		instance.setStopping()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.Plugin_STOPPING {
+		if instance.getState() != fmtrpc.PluginState_STOPPING {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("stopped", func(t *testing.T) {
 		instance.setStopped()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.Plugin_STOPPED {
+		if instance.getState() != fmtrpc.PluginState_STOPPED {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("unresponsive", func(t *testing.T) {
 		instance.setUnresponsive()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.Plugin_UNRESPONSIVE {
+		if instance.getState() != fmtrpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("killed", func(t *testing.T) {
 		instance.setKilled()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.Plugin_KILLED {
+		if instance.getState() != fmtrpc.PluginState_KILLED {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})

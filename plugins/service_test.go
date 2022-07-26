@@ -45,7 +45,7 @@ var (
 // initPluginManager will init the plugin manager
 func initPluginManager(t *testing.T, pluginDir string, cfgs []*fmtrpc.PluginConfig) *PluginManager {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	return NewPluginManager(pluginDir, cfgs, logger)
+	return NewPluginManager(pluginDir, cfgs, logger, true)
 }
 
 var (
@@ -131,7 +131,7 @@ func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginCo
 }
 
 var (
-	startPluginDir     = "plugins/testing"
+	startPluginDir     = "plugins/_testing"
 	startDuplicateCfgs = []*fmtrpc.PluginConfig{
 		{
 			Name:        "test-rng-plugin",
@@ -353,7 +353,7 @@ func TestDatasourcePlugin(t *testing.T) {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		// check if the plugin state is Unknown
-		if plug := pluginManager.pluginRegistry[errorPluginName]; plug.getState() != fmtrpc.Plugin_UNKNOWN {
+		if plug := pluginManager.pluginRegistry[errorPluginName]; plug.getState() != fmtrpc.PluginState_UNKNOWN {
 			t.Errorf("Unexpected plugin state after error when StartRecord: %v", plug.getState())
 		}
 	})
@@ -364,13 +364,13 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 		plug := pluginManager.pluginRegistry[timeoutPluginName]
 		// Sleep until the plugin has timed out
-		time.Sleep(time.Duration(plug.cfg.Timeout+6) * time.Second)
-		if plug.getState() != fmtrpc.Plugin_UNRESPONSIVE {
+		time.Sleep(time.Duration(plug.cfg.Timeout+5) * time.Second)
+		if plug.getState() != fmtrpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Plugin in unexpected state after timing out: %v", plug.getState())
 		}
 		// Wait 10 more seconds and plugin manager should restart the plugin
 		time.Sleep(10 * time.Second)
-		if plug.getState() != fmtrpc.Plugin_READY {
+		if plug.getState() != fmtrpc.PluginState_READY {
 			t.Errorf("Plugin in unexpected state after timeout restart: %v", plug.getState())
 		} else if plug.getTimeoutCount() != 1 {
 			t.Errorf("Plugin timeout counter unexpected value: %v", plug.getTimeoutCount())
@@ -381,9 +381,9 @@ func TestDatasourcePlugin(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when calling StartRecord: %v", err)
 			}
-			time.Sleep(time.Duration(plug.cfg.Timeout+16) * time.Second)
+			time.Sleep(time.Duration(plug.cfg.Timeout+15) * time.Second)
 		}
-		if plug.getState() != fmtrpc.Plugin_KILLED {
+		if plug.getState() != fmtrpc.PluginState_KILLED {
 			t.Errorf("Plugin in unexpected state after reaching max timeouts: %v timeout counter: %v", plug.getState(), plug.getTimeoutCount())
 		} else if plug.getTimeoutCount() != int(plug.cfg.MaxTimeouts) {
 			t.Errorf("Plugin timeout counter unexpected value: %v", plug.getTimeoutCount())
@@ -631,7 +631,7 @@ func TestPluginAPI(t *testing.T) {
 		if !ok {
 			t.Errorf("Unexpected error type coming from AddPlugin gRPC method: %v", err)
 		}
-		if st.Message() != ErrInvalidPluginName.Error() {
+		if st.Message() != errors.ErrInvalidPluginName.Error() {
 			t.Errorf("Unexpected error when calling AddPlugin: %v", err)
 		}
 	})
@@ -690,8 +690,8 @@ func TestPluginAPI(t *testing.T) {
 			t.Errorf("Unexpected plugin name mismatch: expected %v got %v", validAddPlugin.Name, resp.Name)
 		} else if resp.Type != plugType {
 			t.Errorf("Unexpected plugin type mismatch: expected %v got %v", plugType, resp.Type)
-		} else if resp.State != fmtrpc.Plugin_READY {
-			t.Errorf("Unexpected plugin state mismatch: expected %v got %v", fmtrpc.Plugin_READY, resp.State)
+		} else if resp.State != fmtrpc.PluginState_READY {
+			t.Errorf("Unexpected plugin state mismatch: expected %v got %v", fmtrpc.PluginState_READY, resp.State)
 		}
 	})
 }
@@ -998,6 +998,220 @@ func TestControllerPlugin(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error occured when calling StopPlugin gRPC function: %v", err)
 		}
+		wg.Wait()
+	})
+}
+
+var (
+	subStateCfgs = datasourceCfgs
+)
+
+// TestSubscribePluginState tests the SubscribePluginState gRPC method
+func TestSubscribePluginState(t *testing.T) {
+	ctx := context.Background()
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, subStateCfgs)
+	defer cleanUp()
+	t.Run("individual-unregistered plugin", func(t *testing.T) {
+		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: "not-a-registered-plugin"})
+		if err == nil {
+			_, err := stream.Recv()
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error format when calling SusbcribePluginState: expected gRPC status format, got %v", err)
+			}
+			if st.Message() != ErrUnregsiteredPlugin.Error() {
+				t.Errorf("Unexpected errore when calling SusbscribePluginState: %v", err)
+			}
+		} else {
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Errorf("Unexpected error format when calling SusbcribePluginState: expected gRPC status format, got %v", err)
+			}
+			if st.Message() != ErrUnregsiteredPlugin.Error() {
+				t.Errorf("Unexpected errore when calling SusbscribePluginState: %v", err)
+			}
+		}
+	})
+	t.Run("individual-busy", func(t *testing.T) {
+		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
+		}
+		defer stream.CloseSend()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stateUpdate, err := stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_READY {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+		}()
+		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		wg.Wait()
+		_, err = client.StopRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StopRecord: %v", err)
+		}
+	})
+	t.Run("individual-timeout", func(t *testing.T) {
+		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
+		}
+		defer stream.CloseSend()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stateUpdate, err := stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_READY {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_UNRESPONSIVE {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+		}()
+		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		wg.Wait()
+	})
+	t.Run("individual-unknown and stopped", func(t *testing.T) {
+		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		if err != nil {
+			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
+		}
+		defer stream.CloseSend()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stateUpdate, err := stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_UNKNOWN {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_STOPPING {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_STOPPED {
+				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
+			}
+		}()
+		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		st, ok := status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StartRecord: expected gRPC status format, got %v", err)
+		}
+		if st.Message() != "I don't wanna" {
+			t.Errorf("Unexpected error when calling StartRecord: %v", err)
+		}
+		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: errorPluginName})
+		st, ok = status.FromError(err)
+		if !ok {
+			t.Errorf("Unexpected error format when calling StopPlugin: expected gRPC status format, got %v", err)
+		}
+		if st.Message() != "can't stop, won't stop" {
+			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
+		}
+		wg.Wait()
+	})
+	t.Run("all-valid", func(t *testing.T) {
+		// reset plugins
+		for _, cfg := range subStateCfgs {
+			_, err := client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: cfg.Name})
+			t.Logf("Error when calling stop plugin for plugin %v: %v", cfg.Name, err)
+			_, err = client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: cfg.Name})
+			t.Logf("Error when calling start plugin for plugin %v: %v", cfg.Name, err)
+		}
+		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: "all"})
+		if err != nil {
+			t.Errorf("Unexpected error when calling SusbscribePluginState: %v", err)
+		}
+		defer stream.CloseSend()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// we should be getting 3 plugin state updates that all say ready
+			stateUpdate, err := stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_READY {
+				t.Errorf("Unexpected state received from state update: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_READY {
+				t.Errorf("Unexpected state received from state update: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_READY {
+				t.Errorf("Unexpected state received from state update: %v", stateUpdate.State)
+			}
+			stateUpdate, err = stream.Recv()
+			if err != nil {
+				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
+			}
+			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+				t.Errorf("Unexpected state received from state update: %v", err)
+			}
+		}()
+		time.Sleep(1 * time.Second)
+		plug := pluginManager.pluginRegistry[rngPluginName]
+		plug.setBusy()
 		wg.Wait()
 	})
 }
