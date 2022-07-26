@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -131,7 +132,7 @@ func initFmtd(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	config.AdminMacPath = path.Join(tempDir, "admin.macaroon")
 	config.TestMacPath = path.Join(tempDir, "test.macaroon")
 	config.PluginDir = getPluginDir(t)
-	config.Plugins = pluginCfgs[:]
+	config.Plugins = plugins.ChangeCfgExec(runtime.GOOS, pluginCfgs)
 	// logger
 	log, err := InitLogger(&config)
 	if err != nil {

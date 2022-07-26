@@ -50,7 +50,24 @@ const (
 var (
 	allowedPluginProtocols               = []plugin.Protocol{plugin.ProtocolGRPC}
 	timeoutChecker         time.Duration = 10 * time.Second // time for when to check if plugins are unresponsive
+	windowsExecExt                       = ".exe"
+	macExecNameExt                       = "_macos"
 )
+
+func ChangeCfgExec(os string, cfgs []*fmtrpc.PluginConfig) []*fmtrpc.PluginConfig {
+	newCfgs := cfgs[:]
+	switch os {
+	case "windows":
+		for _, cfg := range newCfgs {
+			cfg.ExecName = cfg.ExecName + windowsExecExt
+		}
+	case "darwin":
+		for _, cfg := range newCfgs {
+			cfg.ExecName = cfg.ExecName + macExecNameExt
+		}
+	}
+	return newCfgs
+}
 
 type PluginManager struct {
 	fmtrpc.UnimplementedPluginAPIServer

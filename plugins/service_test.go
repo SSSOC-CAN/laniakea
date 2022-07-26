@@ -131,8 +131,6 @@ func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginCo
 }
 
 var (
-	windowsExecExt        = ".exe"
-	macExecNameExt        = "_macos"
 	rngPluginName         = "test-rng-plugin"
 	errPluginName         = "test-error-plugin"
 	timeoutPluginName     = "test-timeout-plugin"
@@ -159,20 +157,6 @@ var (
 			Timeout:     defaultPluginTimeout,
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
-	}
-	changeCfgExec = func(os string, cfgs []*fmtrpc.PluginConfig) []*fmtrpc.PluginConfig {
-		newCfgs := cfgs[:]
-		switch os {
-		case "windows":
-			for _, cfg := range newCfgs {
-				cfg.ExecName = cfg.ExecName + windowsExecExt
-			}
-		case "darwin":
-			for _, cfg := range newCfgs {
-				cfg.ExecName = cfg.ExecName + macExecNameExt
-			}
-		}
-		return newCfgs
 	}
 	startInvalidTypeCfgs = []*fmtrpc.PluginConfig{
 		{
@@ -250,7 +234,7 @@ func getPluginDir(t *testing.T) string {
 func TestStartPluginManager(t *testing.T) {
 	pluginDir := getPluginDir(t)
 	t.Run("duplicate plugin names", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startDuplicateCfgs))
+		pluginManager := initPluginManager(t, pluginDir, ChangeCfgExec(runtime.GOOS, startDuplicateCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != ErrDuplicatePluginName {
 			t.Errorf("Unexpected error when calling Start: %v", err)
@@ -258,7 +242,7 @@ func TestStartPluginManager(t *testing.T) {
 		defer pluginManager.Stop()
 	})
 	t.Run("invalid plugin type", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startInvalidTypeCfgs))
+		pluginManager := initPluginManager(t, pluginDir, ChangeCfgExec(runtime.GOOS, startInvalidTypeCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != ErrInvalidPluginType {
 			t.Errorf("Unexpected error when calling start: %v", err)
@@ -266,7 +250,7 @@ func TestStartPluginManager(t *testing.T) {
 		defer pluginManager.Stop()
 	})
 	t.Run("incompatible versions", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startInvalidVersionCfgs))
+		pluginManager := initPluginManager(t, pluginDir, ChangeCfgExec(runtime.GOOS, startInvalidVersionCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != sdk.ErrLaniakeaVersionMismatch {
 			t.Errorf("Unexpected error when calling start: %v", err)
@@ -274,7 +258,7 @@ func TestStartPluginManager(t *testing.T) {
 		defer pluginManager.Stop()
 	})
 	t.Run("valid", func(t *testing.T) {
-		pluginManager := initPluginManager(t, pluginDir, changeCfgExec(runtime.GOOS, startValidCfgs))
+		pluginManager := initPluginManager(t, pluginDir, ChangeCfgExec(runtime.GOOS, startValidCfgs))
 		err := pluginManager.Start(context.Background())
 		if err != nil {
 			t.Errorf("Unexpected error when calling start: %v", err)
@@ -322,7 +306,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 // TestDatasourcePlugin tests a dummy datasource plugin to ensure PluginAPI functionality
 func TestDatasourcePlugin(t *testing.T) {
 	ctx := context.Background()
-	pluginManager, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, datasourceCfgs))
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, datasourceCfgs))
 	defer cleanUp()
 	t.Run("start record-plugin not registered", func(t *testing.T) {
 		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
@@ -647,7 +631,7 @@ var (
 // TestPluginAPI tests the AddPlugin, GetPlugin and ListPlugins gRPC methods
 func TestPluginAPI(t *testing.T) {
 	ctx := context.Background()
-	_, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, addPluginCfgs))
+	_, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, addPluginCfgs))
 	defer cleanUp()
 	t.Run("add plugin-invalid plugin name", func(t *testing.T) {
 		_, err := client.AddPlugin(ctx, invalidPlugNameCfg)
@@ -733,7 +717,7 @@ var (
 // TestGetPlugins will test the GetPlugin and ListPlugins gRPC methods
 func TestGetPlugins(t *testing.T) {
 	ctx := context.Background()
-	_, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, getPluginCfgs))
+	_, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, getPluginCfgs))
 	defer cleanUp()
 	t.Run("get plugin-unregistered plugin", func(t *testing.T) {
 		_, err := client.GetPlugin(ctx, getPluginUnregistered)
@@ -806,7 +790,7 @@ var (
 // TestControllerPlugin will use dummy controller plugins to test some controller plugin functionality
 func TestControllerPlugin(t *testing.T) {
 	ctx := context.Background()
-	pluginManager, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, controllerCfgs))
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, controllerCfgs))
 	defer cleanUp()
 	t.Run("command-unregistered plugin", func(t *testing.T) {
 		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "unregistered-plugin"})
@@ -1032,7 +1016,7 @@ var (
 // TestSubscribePluginState tests the SubscribePluginState gRPC method
 func TestSubscribePluginState(t *testing.T) {
 	ctx := context.Background()
-	pluginManager, client, cleanUp := initTestingSetup(t, ctx, changeCfgExec(runtime.GOOS, subStateCfgs))
+	pluginManager, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, subStateCfgs))
 	defer cleanUp()
 	t.Run("individual-unregistered plugin", func(t *testing.T) {
 		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: "not-a-registered-plugin"})
