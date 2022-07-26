@@ -277,7 +277,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Change RPC state to active
 	grpc_interceptor.SetRPCActive()
-
+	server.logger.Info().Msg("Fmtd started successfully and ready to use")
 	<-interceptor.ShutdownChannel()
 	return nil
 }
