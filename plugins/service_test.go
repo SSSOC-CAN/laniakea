@@ -462,6 +462,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start plugin-valid", func(t *testing.T) {
+		time.Sleep(1 * time.Second)
 		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartPlugin: %v", err)
