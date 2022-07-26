@@ -119,22 +119,23 @@ func TestInitConfigFromYAML(t *testing.T) {
 	}
 	// write to yaml file
 	d_config := Config{
-		DefaultLogDir:  true,
-		LogFileDir:     default_log_dir(), // this is not OS agnostic
-		ConsoleOutput:  true,
-		GrpcPort:       3567,
-		RestPort:       8080,
-		DataOutputDir:  default_data_output_dir,
-		MacaroonDBPath: default_macaroon_db_file,
-		TLSCertPath:    default_tls_cert_path,
-		TLSKeyPath:     default_tls_key_path,
-		AdminMacPath:   default_admin_macaroon_path,
-		TestMacPath:    test_macaroon_path,
-		WSPingInterval: default_ws_ping_interval,
-		WSPongWait:     default_ws_pong_wait,
-		MaxLogFiles:    default_max_log_files,
-		MaxLogFileSize: default_log_file_size,
-		PluginDir:      default_plugin_dir,
+		DefaultLogDir:   true,
+		LogFileDir:      default_log_dir(), // this is not OS agnostic
+		ConsoleOutput:   true,
+		GrpcPort:        3567,
+		RestPort:        8080,
+		DataOutputDir:   default_data_output_dir,
+		MacaroonDBPath:  default_macaroon_db_file,
+		TLSCertPath:     default_tls_cert_path,
+		TLSKeyPath:      default_tls_key_path,
+		AdminMacPath:    default_admin_macaroon_path,
+		TestMacPath:     test_macaroon_path,
+		WSPingInterval:  default_ws_ping_interval,
+		WSPongWait:      default_ws_pong_wait,
+		MaxLogFiles:     default_max_log_files,
+		MaxLogFileSize:  default_log_file_size,
+		PluginDir:       default_plugin_dir,
+		MemorySizeLimit: default_mem_size_limit,
 	}
 	_, err = config_file.WriteString(fmt.Sprintf("DefaultLogDir: %v\n", d_config.DefaultLogDir))
 	if err != nil {
@@ -168,6 +169,10 @@ func TestInitConfigFromYAML(t *testing.T) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
+	_, err = config_file.WriteString(fmt.Sprintf("MemorySizeLimit: %v\n", d_config.MemorySizeLimit))
+	if err != nil {
+		t.Errorf("%s", err)
+	}
 	config_file.Sync()
 	config_file.Close()
 	config, err := InitConfig(true)
@@ -191,22 +196,23 @@ func TestDefaultLogDir(t *testing.T) {
 // TestDefaultConfig checks if default_config does return the expected default config struct
 func TestDefaultConfig(t *testing.T) {
 	d_config := Config{
-		DefaultLogDir:  true,
-		LogFileDir:     default_log_dir(),
-		ConsoleOutput:  true,
-		GrpcPort:       7777,
-		RestPort:       8080,
-		DataOutputDir:  default_data_output_dir,
-		MacaroonDBPath: default_macaroon_db_file,
-		TLSCertPath:    default_tls_cert_path,
-		TLSKeyPath:     default_tls_key_path,
-		AdminMacPath:   default_admin_macaroon_path,
-		TestMacPath:    test_macaroon_path,
-		WSPingInterval: default_ws_ping_interval,
-		WSPongWait:     default_ws_pong_wait,
-		MaxLogFiles:    default_max_log_files,
-		MaxLogFileSize: default_log_file_size,
-		PluginDir:      default_plugin_dir,
+		DefaultLogDir:   true,
+		LogFileDir:      default_log_dir(),
+		ConsoleOutput:   true,
+		GrpcPort:        7777,
+		RestPort:        8080,
+		DataOutputDir:   default_data_output_dir,
+		MacaroonDBPath:  default_macaroon_db_file,
+		TLSCertPath:     default_tls_cert_path,
+		TLSKeyPath:      default_tls_key_path,
+		AdminMacPath:    default_admin_macaroon_path,
+		TestMacPath:     test_macaroon_path,
+		WSPingInterval:  default_ws_ping_interval,
+		WSPongWait:      default_ws_pong_wait,
+		MaxLogFiles:     default_max_log_files,
+		MaxLogFileSize:  default_log_file_size,
+		PluginDir:       default_plugin_dir,
+		MemorySizeLimit: default_mem_size_limit,
 	}
 	if !cmp.Equal(d_config, default_config()) {
 		t.Errorf("default_config not returning expected config. Expected: %v\tReceived: %v", d_config, default_config())

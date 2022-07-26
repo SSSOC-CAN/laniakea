@@ -38,6 +38,7 @@ type Config struct {
 	PluginDir           string                 `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
 	Plugins             []*fmtrpc.PluginConfig `yaml:"Plugins"`
 	RegenerateMacaroons bool                   `long:"regenmacaroons" description:"Boolean to determine whether macaroons are regenerated"`
+	MemorySizeLimit     int64                  `yaml:"MemorySizeLimit" long:"memorysizelimit" description:"The size limit, in MB, for memory consumption of fmtd. This doesn't apply to plugins."`
 	MacaroonDBPath      string
 	TLSCertPath         string
 	TLSKeyPath          string
@@ -68,24 +69,26 @@ var (
 	default_log_file_size       int64  = 10
 	default_max_log_files       int64  = 0
 	default_plugin_dir          string = default_log_dir()
+	default_mem_size_limit      int64  = 2000 // 2 GB default
 	default_config                     = func() Config {
 		return Config{
-			DefaultLogDir:  true,
-			LogFileDir:     default_log_dir(),
-			MaxLogFiles:    default_max_log_files,
-			MaxLogFileSize: default_log_file_size,
-			ConsoleOutput:  true,
-			GrpcPort:       default_grpc_port,
-			RestPort:       default_rest_port,
-			DataOutputDir:  default_data_output_dir,
-			MacaroonDBPath: default_macaroon_db_file,
-			TLSCertPath:    default_tls_cert_path,
-			TLSKeyPath:     default_tls_key_path,
-			AdminMacPath:   default_admin_macaroon_path,
-			TestMacPath:    test_macaroon_path,
-			WSPingInterval: default_ws_ping_interval,
-			WSPongWait:     default_ws_pong_wait,
-			PluginDir:      default_plugin_dir,
+			DefaultLogDir:   true,
+			LogFileDir:      default_log_dir(),
+			MaxLogFiles:     default_max_log_files,
+			MaxLogFileSize:  default_log_file_size,
+			ConsoleOutput:   true,
+			GrpcPort:        default_grpc_port,
+			RestPort:        default_rest_port,
+			DataOutputDir:   default_data_output_dir,
+			MacaroonDBPath:  default_macaroon_db_file,
+			TLSCertPath:     default_tls_cert_path,
+			TLSKeyPath:      default_tls_key_path,
+			AdminMacPath:    default_admin_macaroon_path,
+			TestMacPath:     test_macaroon_path,
+			WSPingInterval:  default_ws_ping_interval,
+			WSPongWait:      default_ws_pong_wait,
+			PluginDir:       default_plugin_dir,
+			MemorySizeLimit: default_mem_size_limit,
 		}
 	}
 )
@@ -222,6 +225,10 @@ func check_yaml_config(config Config) Config {
 		case "PluginDir":
 			if f.String() == "" {
 				change_field(f, default_plugin_dir)
+			}
+		case "MemorySizeLimit":
+			if f.Int() == 0 {
+				change_field(f, default_mem_size_limit)
 			}
 		default:
 			continue
