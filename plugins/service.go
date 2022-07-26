@@ -80,6 +80,7 @@ type PluginManager struct {
 	permissionMap  map[string][]bakery.Op
 	noMacaroons    bool
 	svc            *macaroons.Service
+	memSizeLimit   int64
 	sync.WaitGroup
 }
 
@@ -87,17 +88,18 @@ type PluginManager struct {
 var _ api.RestProxyService = (*PluginManager)(nil)
 
 // NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
-func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger, noMacaroons bool) *PluginManager {
+func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger, noMacaroons bool, memorySizeLimit int64) *PluginManager {
 	l := NewPluginLogger("PLGN", &zl)
 	ql := l.zl.With().Str("subsystem", "QMGR").Logger()
 	return &PluginManager{
 		pluginDir:     pluginDir,
 		pluginCfgs:    pluginCfgs,
 		logger:        l,
-		queueManager:  queue.NewQueueManager(&ql),
+		queueManager:  queue.NewQueueManager(&ql, memorySizeLimit/2),
 		quitChan:      make(chan struct{}),
 		permissionMap: make(map[string][]bakery.Op),
 		noMacaroons:   noMacaroons,
+		memSizeLimit:  memorySizeLimit / 2,
 	}
 }
 

@@ -115,7 +115,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
-	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger, false)
+	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger, false, server.cfg.MemorySizeLimit)
 	pluginManager.RegisterWithGrpcServer(grpc_server)
 	err = pluginManager.AddPermissions(StreamingPluginAPIPermission())
 	if err != nil {

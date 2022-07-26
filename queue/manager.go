@@ -19,17 +19,19 @@ type QueueManager struct {
 	quitChans      map[string]chan struct{}
 	Logger         *zerolog.Logger
 	wgs            map[string]*sync.WaitGroup
+	memSizeLimit   int64
 	sync.RWMutex
 }
 
 // NewQueueManager initializes a new QueueManager instance
-func NewQueueManager(logger *zerolog.Logger) *QueueManager {
+func NewQueueManager(logger *zerolog.Logger, memorySizeLimit int64) *QueueManager {
 	return &QueueManager{
 		incomingQueues: make(map[string]*Queue),
 		outgoingQueues: make(map[string]map[string]*Queue),
 		quitChans:      make(map[string]chan struct{}),
 		Logger:         logger,
 		wgs:            make(map[string]*sync.WaitGroup),
+		memSizeLimit:   memorySizeLimit,
 	}
 }
 
