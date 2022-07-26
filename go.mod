@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220713081125-e717dddd1348
 	github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a
-	github.com/SSSOCPaulCote/gux v0.0.0-20220611205314-b5a349054bc0
+	github.com/SSSOCPaulCote/gux v0.0.0-20220630051244-9dcaa23fcf84
 	github.com/btcsuite/btcwallet v0.12.0
 	github.com/google/go-cmp v0.5.7
 	github.com/gorilla/websocket v1.4.2

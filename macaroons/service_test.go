@@ -33,9 +33,12 @@ import (
 	"path"
 	"reflect"
 	"testing"
+
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc/metadata"
 	"gopkg.in/macaroon-bakery.v2/bakery"
+	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 )
 
 var (
@@ -47,7 +50,7 @@ var (
 		Entity: PermissionEntityCustomURI,
 		Action: "Test",
 	}
-	testPw = []byte("hello") 
+	testPw = []byte("hello")
 )
 
 // createDummyRootKeyStore creates a dummy RootKeyStorage from the test password in a temporary directory
@@ -77,7 +80,7 @@ func TestNewService(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -87,13 +90,13 @@ func TestNewService(t *testing.T) {
 		t.Fatalf("Could not unlock rks: %v", err)
 	}
 	// Test for missing root key Id
-	_, err = service.NewMacaroon(context.TODO(), nil, false, nil, testOp)
+	_, err = service.NewMacaroon(context.TODO(), nil, nil, testOp)
 	if err != ErrMissingRootKeyID {
 		t.Fatalf("Received %v instead of ErrMissingRootKeyID", err)
 	}
 
 	// Test we can actually make a macaroon
-	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, false, nil, testOp)
+	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, nil, testOp)
 	if err != nil {
 		t.Fatalf("Error creating macaroon: %v", err)
 	}
@@ -103,12 +106,17 @@ func TestNewService(t *testing.T) {
 	}
 }
 
+var (
+	valPluginNames = []string{"plugin-1", "plugin_two", "PlUgIn_ThR33"}
+)
+
+// TODO:SSSOCPaulCote - Update tests for new plugin validation
 // TestValidateMacaroon creates a dummy macaroon from a dummy service and validates it against test parameters
 func TestValidateMacaroon(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), valPluginNames)
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -117,7 +125,7 @@ func TestValidateMacaroon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not unlock rks: %v", err)
 	}
-	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, false, nil, testOp, testOpURI,)
+	mac, err := service.NewMacaroon(context.TODO(), DefaultRootKeyID, []checkers.Caveat{PluginCaveat(valPluginNames)}, testOp, testOpURI)
 	if err != nil {
 		t.Fatalf("Could not bake new macaroon: %v", err)
 	}
@@ -125,16 +133,80 @@ func TestValidateMacaroon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not serialize macaroon: %v", err)
 	}
+	t.Run("error-no metadata", func(t *testing.T) {
+		err = service.ValidateMacaroon(context.Background(), []bakery.Op{testOp}, "Foo")
+		if err != ErrMetadataFromContext {
+			t.Errorf("Unexpected error when calling ValidateMacaroon: %v", err)
+		}
+	})
+	t.Run("error-empty mac data", func(t *testing.T) {
+		md := metadata.New(map[string]string{"macaroon": ""})
+		dummyContext := metadata.NewIncomingContext(context.Background(), md)
+		err = service.ValidateMacaroon(dummyContext, []bakery.Op{testOp}, "Foo")
+		if err.Error() != "empty macaroon data" {
+			t.Errorf("Unexpected error when calling ValidateMacaroon: %v", err)
+		}
+	})
 	md := metadata.New(map[string]string{"macaroon": hex.EncodeToString(macBinary)})
 	dummyContext := metadata.NewIncomingContext(context.Background(), md)
-	err = service.ValidateMacaroon(dummyContext, []bakery.Op{testOp}, "Foo")
+	t.Run("valid-test ops", func(t *testing.T) {
+		err = service.ValidateMacaroon(dummyContext, []bakery.Op{testOp}, "Foo")
+		if err != nil {
+			t.Fatalf("Could not validate macaroon: %v", err)
+		}
+		err = service.ValidateMacaroon(dummyContext, []bakery.Op{{Entity: "Yikes"}}, "Test")
+		if err != nil {
+			t.Fatalf("Could not validate macaroon: %v", err)
+		}
+	})
+	t.Run("error-plugin key not in context", func(t *testing.T) {
+		err = service.ValidateMacaroon(dummyContext, []bakery.Op{testOp}, knownPluginMethods[0])
+		if err != ErrKeyNotInContext {
+			t.Errorf("Unexpected error when calling ValidateMacaroon: %v", err)
+		}
+	})
+	t.Run("error-unauthorized plugin action", func(t *testing.T) {
+		pluginValues := []string{"not-a-valid-name", "all"}
+		for _, v := range pluginValues {
+			ctx := context.WithValue(dummyContext, PluginContextKey, v)
+			err = service.ValidateMacaroon(ctx, []bakery.Op{testOp}, knownPluginMethods[0])
+			if err != ErrUnauthorizedPluginAction {
+				t.Errorf("Unexpected error when calling ValidateMacaroon: %v", err)
+			}
+		}
+	})
+	t.Run("valid-plugin actions", func(t *testing.T) {
+		pluginValues := valPluginNames[:]
+		for _, v := range pluginValues {
+			ctx := context.WithValue(dummyContext, PluginContextKey, v)
+			err = service.ValidateMacaroon(ctx, []bakery.Op{testOp}, knownPluginMethods[0])
+			if err != nil {
+				t.Errorf("Unexpected error when calling ValidateMacaroon: %v", err)
+			}
+		}
+	})
+	mac, err = service.NewMacaroon(context.TODO(), DefaultRootKeyID, []checkers.Caveat{PluginCaveat([]string{"all"})}, testOp, testOpURI)
 	if err != nil {
-		t.Fatalf("Could not validate macaroon: %v", err)
+		t.Fatalf("Could not bake new macaroon: %v", err)
 	}
-	err = service.ValidateMacaroon(dummyContext, []bakery.Op{{Entity: "Yikes"}}, "Test")
+	macBinary, err = mac.M().MarshalBinary()
 	if err != nil {
-		t.Fatalf("Could not validate macaroon: %v", err)
+		t.Fatalf("Could not serialize macaroon: %v", err)
 	}
+	md = metadata.New(map[string]string{"macaroon": hex.EncodeToString(macBinary)})
+	dummyContext = metadata.NewIncomingContext(context.Background(), md)
+	t.Run("valid-plugin actions 2", func(t *testing.T) {
+		pluginValues := valPluginNames[:]
+		pluginValues = append(pluginValues, "all")
+		pluginValues = append(pluginValues, "not-a-registered-plugin")
+		for _, v := range pluginValues {
+			ctx := context.WithValue(dummyContext, PluginContextKey, v)
+			err = service.ValidateMacaroon(ctx, []bakery.Op{testOp}, knownPluginMethods[0])
+			if err != nil {
+				t.Errorf("Unexpected error when calling ValidateMacaroon: %v", err)
+			}
+		}
+	})
 }
 
 // TestListMacaroonIDs checks that ListMacaroonIDs returns the expected result
@@ -142,7 +214,7 @@ func TestListMacaroonIDs(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -154,7 +226,7 @@ func TestListMacaroonIDs(t *testing.T) {
 
 	expectedIDs := [][]byte{{1}, {2}, {3}}
 	for _, v := range expectedIDs {
-		_, err := service.NewMacaroon(context.TODO(), v, false, nil, testOp)
+		_, err := service.NewMacaroon(context.TODO(), v, nil, testOp)
 		if err != nil {
 			t.Errorf("Error creating macaroon from service: %v", err)
 		}
@@ -172,7 +244,7 @@ func TestDeleteMacaroonID(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd")
+	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -209,7 +281,7 @@ func TestDeleteMacaroonID(t *testing.T) {
 	// create 3 new macaroons and delete one
 	expectedIDs := [][]byte{{1}, {2}, {3}}
 	for _, v := range expectedIDs {
-		_, err := service.NewMacaroon(context.TODO(), v, false, nil, testOp)
+		_, err := service.NewMacaroon(context.TODO(), v, nil, testOp)
 		if err != nil {
 			t.Errorf("Error creating macaroon from service: %v", err)
 		}

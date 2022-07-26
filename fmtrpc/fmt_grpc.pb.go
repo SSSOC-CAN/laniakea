@@ -4,6 +4,7 @@ package fmtrpc
 
 import (
 	context "context"
+	proto "github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -31,6 +32,33 @@ type FmtClient interface {
 	// fmtcli: `bake-macaroon`
 	//BakeMacaroon will bake a new macaroon based on input permissions and constraints.
 	BakeMacaroon(ctx context.Context, in *BakeMacaroonRequest, opts ...grpc.CallOption) (*BakeMacaroonResponse, error)
+	//
+	//Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command
+	SetTemperature(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command
+	SetPressure(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! StartRecording is now /fmtrpc.PluginAPI/StartRecord
+	StartRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! StopRecording is now /fmtrpc.PluginAPI/StopRecord
+	StopRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! SubscribeDataStream is now /fmtrpc.PluginAPI/Subscribe
+	SubscribeDataStream(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! LoadTestPlan will no longer be supported
+	LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! StartTestPlan will no longer be supported
+	StartTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! StopTestPlan will no longer be supported
+	StopTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
+	//
+	//Deprecated! InsertROIMarker will no longer be supported
+	InsertROIMarker(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error)
 }
 
 type fmtClient struct {
@@ -77,6 +105,87 @@ func (c *fmtClient) BakeMacaroon(ctx context.Context, in *BakeMacaroonRequest, o
 	return out, nil
 }
 
+func (c *fmtClient) SetTemperature(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/SetTemperature", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) SetPressure(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/SetPressure", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) StartRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StartRecording", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) StopRecording(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StopRecording", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) SubscribeDataStream(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/SubscribeDataStream", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) LoadTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/LoadTestPlan", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) StartTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StartTestPlan", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) StopTestPlan(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/StopTestPlan", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fmtClient) InsertROIMarker(ctx context.Context, in *proto.Empty, opts ...grpc.CallOption) (*proto.Empty, error) {
+	out := new(proto.Empty)
+	err := c.cc.Invoke(ctx, "/fmtrpc.Fmt/InsertROIMarker", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FmtServer is the server API for Fmt service.
 // All implementations must embed UnimplementedFmtServer
 // for forward compatibility
@@ -94,6 +203,33 @@ type FmtServer interface {
 	// fmtcli: `bake-macaroon`
 	//BakeMacaroon will bake a new macaroon based on input permissions and constraints.
 	BakeMacaroon(context.Context, *BakeMacaroonRequest) (*BakeMacaroonResponse, error)
+	//
+	//Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command
+	SetTemperature(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command
+	SetPressure(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! StartRecording is now /fmtrpc.PluginAPI/StartRecord
+	StartRecording(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! StopRecording is now /fmtrpc.PluginAPI/StopRecord
+	StopRecording(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! SubscribeDataStream is now /fmtrpc.PluginAPI/Subscribe
+	SubscribeDataStream(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! LoadTestPlan will no longer be supported
+	LoadTestPlan(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! StartTestPlan will no longer be supported
+	StartTestPlan(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! StopTestPlan will no longer be supported
+	StopTestPlan(context.Context, *proto.Empty) (*proto.Empty, error)
+	//
+	//Deprecated! InsertROIMarker will no longer be supported
+	InsertROIMarker(context.Context, *proto.Empty) (*proto.Empty, error)
 	mustEmbedUnimplementedFmtServer()
 }
 
@@ -112,6 +248,33 @@ func (UnimplementedFmtServer) TestCommand(context.Context, *TestRequest) (*TestR
 }
 func (UnimplementedFmtServer) BakeMacaroon(context.Context, *BakeMacaroonRequest) (*BakeMacaroonResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BakeMacaroon not implemented")
+}
+func (UnimplementedFmtServer) SetTemperature(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetTemperature not implemented")
+}
+func (UnimplementedFmtServer) SetPressure(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetPressure not implemented")
+}
+func (UnimplementedFmtServer) StartRecording(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartRecording not implemented")
+}
+func (UnimplementedFmtServer) StopRecording(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StopRecording not implemented")
+}
+func (UnimplementedFmtServer) SubscribeDataStream(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SubscribeDataStream not implemented")
+}
+func (UnimplementedFmtServer) LoadTestPlan(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method LoadTestPlan not implemented")
+}
+func (UnimplementedFmtServer) StartTestPlan(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartTestPlan not implemented")
+}
+func (UnimplementedFmtServer) StopTestPlan(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StopTestPlan not implemented")
+}
+func (UnimplementedFmtServer) InsertROIMarker(context.Context, *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InsertROIMarker not implemented")
 }
 func (UnimplementedFmtServer) mustEmbedUnimplementedFmtServer() {}
 
@@ -198,6 +361,168 @@ func _Fmt_BakeMacaroon_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Fmt_SetTemperature_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).SetTemperature(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/SetTemperature",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).SetTemperature(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_SetPressure_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).SetPressure(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/SetPressure",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).SetPressure(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_StartRecording_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).StartRecording(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/StartRecording",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).StartRecording(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_StopRecording_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).StopRecording(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/StopRecording",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).StopRecording(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_SubscribeDataStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).SubscribeDataStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/SubscribeDataStream",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).SubscribeDataStream(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_LoadTestPlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).LoadTestPlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/LoadTestPlan",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).LoadTestPlan(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_StartTestPlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).StartTestPlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/StartTestPlan",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).StartTestPlan(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_StopTestPlan_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).StopTestPlan(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/StopTestPlan",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).StopTestPlan(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Fmt_InsertROIMarker_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(proto.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FmtServer).InsertROIMarker(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/fmtrpc.Fmt/InsertROIMarker",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FmtServer).InsertROIMarker(ctx, req.(*proto.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Fmt_ServiceDesc is the grpc.ServiceDesc for Fmt service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -220,6 +545,42 @@ var Fmt_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "BakeMacaroon",
 			Handler:    _Fmt_BakeMacaroon_Handler,
+		},
+		{
+			MethodName: "SetTemperature",
+			Handler:    _Fmt_SetTemperature_Handler,
+		},
+		{
+			MethodName: "SetPressure",
+			Handler:    _Fmt_SetPressure_Handler,
+		},
+		{
+			MethodName: "StartRecording",
+			Handler:    _Fmt_StartRecording_Handler,
+		},
+		{
+			MethodName: "StopRecording",
+			Handler:    _Fmt_StopRecording_Handler,
+		},
+		{
+			MethodName: "SubscribeDataStream",
+			Handler:    _Fmt_SubscribeDataStream_Handler,
+		},
+		{
+			MethodName: "LoadTestPlan",
+			Handler:    _Fmt_LoadTestPlan_Handler,
+		},
+		{
+			MethodName: "StartTestPlan",
+			Handler:    _Fmt_StartTestPlan_Handler,
+		},
+		{
+			MethodName: "StopTestPlan",
+			Handler:    _Fmt_StopTestPlan_Handler,
+		},
+		{
+			MethodName: "InsertROIMarker",
+			Handler:    _Fmt_InsertROIMarker_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

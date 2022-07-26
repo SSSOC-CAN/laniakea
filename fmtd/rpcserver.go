@@ -28,7 +28,6 @@ package fmtd
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"strconv"
 	"sync/atomic"
@@ -38,6 +37,8 @@ import (
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	e "github.com/pkg/errors"
@@ -53,6 +54,7 @@ const (
 	ErrEmptyPermissionsList = bg.Error("empty permissions list")
 	ErrInvalidMacEntity     = bg.Error("invalid macaroon permission entity")
 	ErrInvalidMacAction     = bg.Error("invalid macaroon permission action")
+	ErrDeprecatedAction     = bg.Error("deprecated rpc command")
 )
 
 var (
@@ -66,11 +68,7 @@ var (
 			Action: "read",
 		},
 		{
-			Entity: "tpex",
-			Action: "read",
-		},
-		{
-			Entity: "ctrl",
+			Entity: "plugins",
 			Action: "read",
 		},
 	}
@@ -88,17 +86,31 @@ var (
 			Action: "write",
 		},
 		{
-			Entity: "tpex",
-			Action: "write",
-		},
-		{
-			Entity: "ctrl",
+			Entity: "plugins",
 			Action: "write",
 		},
 	}
 	validActions  = []string{"read", "write", "generate"}
-	validEntities = []string{"fmtd", "macaroon", "tpex", "ctrl", macaroons.PermissionEntityCustomURI}
+	validEntities = []string{"fmtd", "macaroon", "plugins", macaroons.PermissionEntityCustomURI}
 )
+
+// StreamingPluginAPIPermissions returns a map of the command URI and it's assocaited permissions for the streaming Plugin API methods
+func StreamingPluginAPIPermission() map[string][]bakery.Op {
+	return map[string][]bakery.Op{
+		"/fmtrpc.PluginAPI/Subscribe": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/Command": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/SubscribePluginState": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+	}
+}
 
 // MainGrpcServerPermissions returns a map of the command URI and it's associated permissions
 func MainGrpcServerPermissions() map[string][]bakery.Op {
@@ -111,49 +123,49 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 			Entity: "fmtd",
 			Action: "read",
 		}},
-		"/fmtrpc.DataCollector/StartRecording": {{
-			Entity: "fmtd",
-			Action: "write",
-		}},
-		"/fmtrpc.DataCollector/StopRecording": {{
-			Entity: "fmtd",
-			Action: "write",
-		}},
-		"/fmtrpc.DataCollector/SubscribeDataStream": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.DataCollector/DownloadHistoricalData": {{
-			Entity: "fmtd",
-			Action: "read",
-		}},
-		"/fmtrpc.TestPlanExecutor/LoadTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/StartTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/StopTestPlan": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
-		"/fmtrpc.TestPlanExecutor/InsertROIMarker": {{
-			Entity: "tpex",
-			Action: "write",
-		}},
 		"/fmtrpc.Fmt/BakeMacaroon": {{
 			Entity: "macaroon",
 			Action: "generate",
 		}},
-		"/demorpc.Controller/SetTemperature": {{
-			Entity: "ctrl",
+		"/fmtrpc.PluginAPI/StartRecord": {{
+			Entity: "plugins",
 			Action: "write",
 		}},
-		"/demorpc.Controller/SetPressure": {{
-			Entity: "ctrl",
+		"/fmtrpc.PluginAPI/StopRecord": {{
+			Entity: "plugins",
 			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/Subscribe": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/StartPlugin": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/StopPlugin": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/Command": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/ListPlugins": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/AddPlugin": {{
+			Entity: "plugins",
+			Action: "write",
+		}},
+		"/fmtrpc.PluginAPI/GetPlugin": {{
+			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.PluginAPI/SubscribePluginState": {{
+			Entity: "plugins",
+			Action: "read",
 		}},
 	}
 }
@@ -179,7 +191,7 @@ func NewRpcServer(interceptor *intercept.Interceptor, config *Config, log *zerol
 	logger := &NewSubLogger(log, "RPCS").SubLogger
 	listener, err := net.Listen("tcp", ":"+strconv.FormatInt(config.GrpcPort, 10))
 	if err != nil {
-		logger.Error().Msg(fmt.Sprintf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err))
+		logger.Error().Msgf("Couldn't open tcp listener on port %v: %v", config.GrpcPort, err)
 		return nil, err
 	}
 	return &RpcServer{
@@ -236,7 +248,7 @@ func (s *RpcServer) Stop() error {
 	close(s.quit)
 	err := s.Listener.Close()
 	if err != nil {
-		s.SubLogger.Error().Msg(fmt.Sprintf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close()))
+		s.SubLogger.Error().Msgf("Could not stop listening at %v: %v", s.Listener.Addr(), s.Listener.Close())
 		return e.Wrapf(err, "could not stop listening at %v", s.Listener.Addr())
 	}
 	return nil
@@ -271,7 +283,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}
 	perms := make([]bakery.Op, len(req.Permissions))
 	for i, op := range req.Permissions {
-		if !stringInSlice(op.Entity, validEntities) {
+		if !utils.StrInStrSlice(validEntities, op.Entity) {
 			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacEntity.Error())
 		}
 		if op.Entity == macaroons.PermissionEntityCustomURI {
@@ -279,7 +291,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			if _, ok := allPermissions[op.Action]; !ok {
 				return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 			}
-		} else if !stringInSlice(op.Action, validActions) {
+		} else if !utils.StrInStrSlice(validActions, op.Action) {
 			return nil, status.Error(codes.InvalidArgument, ErrInvalidMacAction.Error())
 		}
 		perms[i] = bakery.Op{
@@ -287,12 +299,8 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			Action: op.Action,
 		}
 	}
-	var (
-		timeoutSeconds int64
-		timeout        bool
-	)
+	var timeoutSeconds int64
 	if req.Timeout > 0 {
-		timeout = true
 		switch req.TimeoutType {
 		case fmtrpc.TimeoutType_SECOND:
 			timeoutSeconds = req.Timeout
@@ -304,7 +312,7 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 			timeoutSeconds = req.Timeout * int64(60) * int64(60) * int64(24)
 		}
 	}
-	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeout, timeoutSeconds)
+	macBytes, err := bakeMacaroons(ctx, s.macSvc, perms, timeoutSeconds, req.Plugins)
 	if err != nil {
 		return nil, status.Error(codes.Internal, e.Wrap(err, "could not bake macaroon").Error())
 	}
@@ -313,12 +321,47 @@ func (s *RpcServer) BakeMacaroon(ctx context.Context, req *fmtrpc.BakeMacaroonRe
 	}, nil
 }
 
-// stringInSlice checks if a string "a" is in the slice
-func stringInSlice(a string, slice []string) bool {
-	for _, b := range slice {
-		if b == a {
-			return true
-		}
-	}
-	return false
+// SetTemperature is a deprecated Controller API rpc command
+func (s *RpcServer) SetTemperature(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// SetPressure is a deprecated Controller API rpc command
+func (s *RpcServer) SetPressure(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StartRecording is a deprecated DataCollector API rpc command
+func (s *RpcServer) StartRecording(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StopRecording is a deprecated DataCollector API rpc command
+func (s *RpcServer) StopRecording(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// SubscribeDataStream is a deprecated DataCollector API rpc command
+func (s *RpcServer) SubscribeDataStream(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// LoadTestPlan is a deprecated Executor API rpc command
+func (s *RpcServer) LoadTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StartTestPlan is a deprecated Executor API rpc command
+func (s *RpcServer) StartTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// StopTestPlan is a deprecated Executor API rpc command
+func (s *RpcServer) StopTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+// InsertROIMarker is a deprecated Executor API rpc command
+func (s *RpcServer) InsertROIMarker(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
 }

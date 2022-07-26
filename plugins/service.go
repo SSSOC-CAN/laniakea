@@ -9,8 +9,8 @@ package plugins
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"os/exec"
 	"path/filepath"
@@ -20,17 +20,20 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	e "github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	bg "github.com/SSSOCPaulCote/blunderguard"
+	"github.com/SSSOCPaulCote/gux"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"gopkg.in/macaroon-bakery.v2/bakery"
 )
 
 const (
@@ -57,6 +60,9 @@ type PluginManager struct {
 	pluginRegistry map[string]*PluginInstance
 	queueManager   *queue.QueueManager
 	quitChan       chan struct{}
+	permissionMap  map[string][]bakery.Op
+	noMacaroons    bool
+	svc            *macaroons.Service
 	sync.WaitGroup
 }
 
@@ -64,16 +70,43 @@ type PluginManager struct {
 var _ api.RestProxyService = (*PluginManager)(nil)
 
 // NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
-func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger) *PluginManager {
+func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger, noMacaroons bool) *PluginManager {
 	l := NewPluginLogger("PLGN", &zl)
 	ql := l.zl.With().Str("subsystem", "QMGR").Logger()
 	return &PluginManager{
-		pluginDir:    pluginDir,
-		pluginCfgs:   pluginCfgs,
-		logger:       l,
-		queueManager: queue.NewQueueManager(&ql),
-		quitChan:     make(chan struct{}),
+		pluginDir:     pluginDir,
+		pluginCfgs:    pluginCfgs,
+		logger:        l,
+		queueManager:  queue.NewQueueManager(&ql),
+		quitChan:      make(chan struct{}),
+		permissionMap: make(map[string][]bakery.Op),
+		noMacaroons:   noMacaroons,
 	}
+}
+
+// Adds the macaroon service provided to GrpcInterceptor struct attributes
+func (p *PluginManager) AddMacaroonService(service *macaroons.Service) {
+	p.svc = service
+}
+
+// AddPermissions adds the inputted permission to the permissionMap attribute of the GrpcInterceptor struct
+func (p *PluginManager) AddPermissions(perms map[string][]bakery.Op) error {
+	for m, ops := range perms {
+		err := p.AddPermission(m, ops)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AddPermission adds a new macaroon rule for the given method
+func (p *PluginManager) AddPermission(method string, ops []bakery.Op) error {
+	if _, ok := p.permissionMap[method]; ok {
+		return e.ErrDuplicateMacConstraints
+	}
+	p.permissionMap[method] = ops
+	return nil
 }
 
 // RegisterWithGrpcServer registers the PluginManager with the root gRPC server.
@@ -123,30 +156,30 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 		case <-ticker.C:
 			for _, i := range p.pluginRegistry {
 				// if the plugin is in the unresponsive state, we will try to restart
-				if i.getState() == fmtrpc.Plugin_UNRESPONSIVE {
+				if i.getState() == fmtrpc.PluginState_UNRESPONSIVE {
 					// check if the plugin has exceeded the maximum number of times it can timeout
 					if int64(i.getTimeoutCount()) >= i.cfg.MaxTimeouts {
-						p.logger.zl.Error().Msg(fmt.Sprintf("Maximum timeouts reached for %v plugin, stopping plugin...", i.cfg.Name))
+						p.logger.zl.Error().Msgf("Maximum timeouts reached for %v plugin, stopping plugin...", i.cfg.Name)
 						err := i.stop(ctx)
 						if err != nil {
-							p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
+							p.logger.zl.Error().Msgf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err)
 							i.kill()
 						}
 						i.setKilled()
 						continue
 					}
 					i.incrementTimeoutCount()
-					p.logger.zl.Error().Msg(fmt.Sprintf("%v plugin timeout, stopping plugin...", i.cfg.Name))
+					p.logger.zl.Error().Msgf("%v plugin timeout, stopping plugin...", i.cfg.Name)
 					err := i.stop(ctx)
 					if err != nil {
-						p.logger.zl.Error().Msg(fmt.Sprintf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err))
+						p.logger.zl.Error().Msgf("could not gracefully stop the %v plugin: %v", i.cfg.Name, err)
 						i.kill()
 						i.setStopped()
 					}
-					p.logger.zl.Info().Msg(fmt.Sprintf("Restarting %v plugin...", i.cfg.Name))
+					p.logger.zl.Info().Msgf("Restarting %v plugin...", i.cfg.Name)
 					_, err = p.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: i.cfg.Name})
 					if err != nil {
-						p.logger.zl.Error().Msg(fmt.Sprintf("could not restart the %v plugin: %v", i.cfg.Name, err))
+						p.logger.zl.Error().Msgf("could not restart the %v plugin: %v", i.cfg.Name, err)
 						i.setUnresponsive()
 					}
 				}
@@ -215,6 +248,7 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 		outgoingQueue: outQ,
 		logger:        &zLogger,
 		startedAt:     time.Now(),
+		listeners:     make(map[string]*StateListener),
 	}
 	// push fmtd/laniakea version and get plugin version
 	err = newInstance.pushVersion(ctx)
@@ -227,12 +261,12 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 		newInstance.kill()
 		return nil, err
 	}
-	p.logger.zl.Info().Msg(fmt.Sprintf("registered plugin %s version: %v", newInstance.cfg.Name, newInstance.version))
+	p.logger.zl.Info().Msgf("registered plugin %s version: %v", newInstance.cfg.Name, newInstance.version)
 	cleanUp := func() {
 		if newInstance.client != nil {
 			err = newInstance.stop(ctx)
 			if err != nil {
-				newInstance.logger.Error().Msg(fmt.Sprintf("could not safely stop %v plugin: %v", newInstance.cfg.Name, err))
+				newInstance.logger.Error().Msgf("could not safely stop %v plugin: %v", newInstance.cfg.Name, err)
 				newInstance.kill()
 			}
 		}
@@ -281,11 +315,97 @@ func (p *PluginManager) StopRecord(ctx context.Context, req *fmtrpc.PluginReques
 	return &proto.Empty{}, nil
 }
 
+// subscribeDataLoop is the go routine spun up for listening to data streams
+func (p *PluginManager) subscribeDataLoop(name string, wg sync.WaitGroup, dataQ *queue.Queue, quitChan chan struct{}) {
+	defer wg.Done()
+	instance := p.pluginRegistry[name]
+	subscriberName := name + utils.RandSeq(10)
+	q, unregister, err := p.queueManager.RegisterListener(name, subscriberName)
+	if err != nil {
+		instance.logger.Error().Msg(err.Error())
+		return
+	}
+	defer unregister()
+	// subscribe to queue
+	sigChan, unsub, err := q.Subscribe(subscriberName)
+	if err != nil {
+		instance.logger.Error().Msg(err.Error())
+		return
+	}
+	defer unsub()
+	for {
+		select {
+		case qLength := <-sigChan:
+			if qLength == 0 {
+				return
+			}
+			for i := 0; i < qLength-1; i++ {
+				frame := q.Pop()
+				if frame.Type == io.EOF.Error() {
+					instance.logger.Error().Msg(bg.Error(PluginEOF).Error())
+					return
+				}
+				dataQ.Push(frame)
+			}
+		case <-quitChan:
+			return
+		}
+	}
+}
+
 // Subscribe is the PluginAPI command which exposes the data stream of any datasource plugin
 func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribeServer) error {
+	if !p.noMacaroons {
+		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Subscribe")
+		if err != nil {
+			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
 	// if "all" is given as the Plugin name, then we create a stream which sends all active queue content
 	if req.Name == "all" {
-
+		dataQ := queue.NewQueue()
+		var wg sync.WaitGroup
+		quitChans := []chan struct{}{}
+		for name, _ := range p.pluginRegistry {
+			quitChan := make(chan struct{})
+			quitChans = append(quitChans, quitChan)
+			wg.Add(1)
+			go p.subscribeDataLoop(name, wg, dataQ, quitChan)
+		}
+		cleanUp := func() {
+			for _, quitChan := range quitChans {
+				close(quitChan)
+			}
+			wg.Wait()
+		}
+		defer cleanUp()
+		subscriberName := req.Name + utils.RandSeq(10)
+		sigChan, unsub, err := dataQ.Subscribe(subscriberName)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		defer unsub()
+		for {
+			select {
+			case qLength := <-sigChan:
+				if qLength == 0 {
+					return status.Error(codes.OK, io.EOF.Error())
+				}
+				for i := 0; i < qLength-1; i++ {
+					update := dataQ.Pop()
+					if update != nil {
+						if err := stream.Send(update); err != nil {
+							return err
+						}
+					}
+				}
+			case <-stream.Context().Done():
+				if errors.Is(stream.Context().Err(), context.Canceled) {
+					return nil
+				}
+				return stream.Context().Err()
+			}
+		}
 	}
 	// get the plugin instance from the registry
 	_, ok := p.pluginRegistry[req.Name]
@@ -337,7 +457,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 		return nil, status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
 	}
 	// check if plugin is stopped or killed
-	if instance.getState() != fmtrpc.Plugin_STOPPED && instance.getState() != fmtrpc.Plugin_KILLED {
+	if instance.getState() != fmtrpc.PluginState_STOPPED && instance.getState() != fmtrpc.PluginState_KILLED {
 		return nil, status.Error(codes.FailedPrecondition, e.ErrServiceAlreadyStarted.Error())
 	}
 	// create new plugin client
@@ -368,6 +488,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 	instance.setClient(newClient)
 	instance.setLogger(&zLogger)
 	instance.setReady()
+	instance.setStartTime(time.Now())
 	return &proto.Empty{}, nil
 }
 
@@ -390,7 +511,7 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 // AddPlugin is the PluginAPI command to add a new plugin from a formatted plugin string
 func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig) (*fmtrpc.Plugin, error) {
 	// validate plugin config
-	err := ValidatePluginConfig(req, p.pluginDir)
+	err := ValidatePluginConfig(req, p.pluginDir, false)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -438,6 +559,12 @@ func (p *PluginManager) ListPlugins(ctx context.Context, _ *proto.Empty) (*fmtrp
 
 // Command is the PluginAPI command for sending an arbitrary amount of data to a controller service
 func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtrpc.PluginAPI_CommandServer) error {
+	if !p.noMacaroons {
+		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Command")
+		if err != nil {
+			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
@@ -502,4 +629,167 @@ func (p *PluginManager) GetPlugin(ctx context.Context, req *fmtrpc.PluginRequest
 		StoppedAt: instance.stoppedAt.UnixMilli(),
 		Version:   instance.version,
 	}, nil
+}
+
+// subscribeStateLoop is the go routine spun up for listening to state updates
+func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup, stateQ *gux.Queue, quitChan chan struct{}) {
+	defer wg.Done()
+	instance := p.pluginRegistry[pluginName]
+	subscriberName := pluginName + utils.RandSeq(10)
+	sigChan, unsub, err := instance.subscribeState(subscriberName)
+	if err != nil {
+		log.Printf("Unexpected error when subscribing to plugin %v state changes: %v", instance.cfg.Name, err)
+		instance.logger.Error().Msgf("Unexpected error when subscribing to plugin state changes: %v", err)
+		return
+	}
+	defer unsub()
+	lastState := instance.getState()
+	stateQ.Push(&fmtrpc.PluginStateUpdate{
+		Name:  pluginName,
+		State: lastState,
+	})
+	for {
+		select {
+		case currentState := <-sigChan:
+			if currentState != lastState {
+				stateQ.Push(&fmtrpc.PluginStateUpdate{
+					Name:  pluginName,
+					State: currentState,
+				})
+				lastState = currentState
+			}
+		case <-quitChan:
+			return
+		}
+	}
+}
+
+// implementing checkMacaroon here because grpc interceptor doesn't expose the request object for streams
+func (p *PluginManager) checkMacaroon(ctx context.Context, req interface{}, fullMethod string) error {
+	var pluginName string
+	switch request := req.(type) {
+	case *fmtrpc.PluginRequest:
+		pluginName = request.Name
+	case *fmtrpc.ControllerPluginRequest:
+		pluginName = request.Name
+	default:
+		return e.ErrInvalidRequestType
+	}
+	ctx = context.WithValue(ctx, macaroons.PluginContextKey, pluginName)
+	svc := p.svc
+
+	// If the macaroon service is not yet active, we cannot allow
+	// the call.
+	if svc == nil {
+		return e.ErrMacSvcNil
+	}
+
+	uriPermissions, ok := p.permissionMap[fullMethod]
+	if !ok {
+		return e.ErrUnknownPermission
+	}
+
+	// Find out if there is an external validator registered for
+	// this method. Fall back to the internal one if there isn't.
+	validator, ok := svc.ExternalValidators[fullMethod]
+	if !ok {
+		validator = svc
+	}
+	// Now that we know what validator to use, let it do its work.
+	return validator.ValidateMacaroon(ctx, uriPermissions, fullMethod)
+}
+
+// SubscribePluginState implements the gRPC method of the same name. It subscribes a client to the given plugins state updates
+func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribePluginStateServer) error {
+	if !p.noMacaroons {
+		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/SubscribePluginState")
+		if err != nil {
+			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
+	rand.Seed(time.Now().UnixNano())
+	if req.Name == "all" {
+		stateQ := gux.NewQueue()
+		var wg sync.WaitGroup
+		quitChans := []chan struct{}{}
+		for name, _ := range p.pluginRegistry {
+			quitChan := make(chan struct{})
+			quitChans = append(quitChans, quitChan)
+			wg.Add(1)
+			go p.subscribeStateLoop(name, wg, stateQ, quitChan)
+		}
+		cleanUp := func() {
+			for _, quitChan := range quitChans {
+				close(quitChan)
+			}
+			wg.Wait()
+		}
+		defer cleanUp()
+		subscriberName := req.Name + utils.RandSeq(10)
+		sigChan, unsub, err := stateQ.Subscribe(subscriberName)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		defer unsub()
+		for {
+			select {
+			case qLength := <-sigChan:
+				if qLength == 0 {
+					return status.Error(codes.OK, io.EOF.Error())
+				}
+				for i := 0; i < qLength-1; i++ {
+					inter := stateQ.Pop()
+					if inter != nil {
+						update := inter.(*fmtrpc.PluginStateUpdate)
+						if err := stream.Send(update); err != nil {
+							return err
+						}
+					}
+				}
+			case <-stream.Context().Done():
+				if errors.Is(stream.Context().Err(), context.Canceled) {
+					return nil
+				}
+				return stream.Context().Err()
+			}
+		}
+	}
+	_, ok := p.pluginRegistry[req.Name]
+	if !ok {
+		return status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
+	}
+	stateQ := gux.NewQueue()
+	quitChan := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go p.subscribeStateLoop(req.Name, wg, stateQ, quitChan)
+	defer close(quitChan)
+	subscriberName := req.Name + utils.RandSeq(10)
+	sigChan, unsub, err := stateQ.Subscribe(subscriberName)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	defer unsub()
+	for {
+		select {
+		case qLength := <-sigChan:
+			if qLength == 0 {
+				return status.Error(codes.OK, io.EOF.Error())
+			}
+			for i := 0; i < qLength-1; i++ {
+				inter := stateQ.Pop()
+				if inter != nil {
+					update := inter.(*fmtrpc.PluginStateUpdate)
+					if err := stream.Send(update); err != nil {
+						return err
+					}
+				}
+			}
+		case <-stream.Context().Done():
+			if errors.Is(stream.Context().Err(), context.Canceled) {
+				return nil
+			}
+			return stream.Context().Err()
+		}
+	}
 }

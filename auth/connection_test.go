@@ -14,9 +14,11 @@ import (
 	"os"
 	"path"
 	"testing"
+
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
@@ -56,7 +58,7 @@ func TestGetClientConnNoMac(t *testing.T) {
 		t.Fatalf("Failed to listen at %v:%v: %v", defaultTestGrpcAddr, defaultTestGrpcPort, err)
 	}
 	// goroutine for gRPC serve
-	go func (listener net.Listener) {
+	go func(listener net.Listener) {
 		_ = grpcServer.Serve(listener)
 	}(lis)
 	// Now we get gRPC Client
@@ -107,7 +109,7 @@ func TestGetClientConnWithMac(t *testing.T) {
 	}
 	defer db.Close()
 	// macaroon service
-	macaroonService, err := macaroons.InitService(*db, "fmtd")
+	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating macaroon service: %v", err)
 	}
@@ -121,7 +123,6 @@ func TestGetClientConnWithMac(t *testing.T) {
 	mac, err := macaroonService.NewMacaroon(
 		ctx,
 		macaroons.DefaultRootKeyID,
-		false,
 		[]checkers.Caveat{macaroons.TimeoutCaveat(int64(0))},
 		[]bakery.Op{
 			{
@@ -150,7 +151,7 @@ func TestGetClientConnWithMac(t *testing.T) {
 		t.Fatalf("Failed to listen at %v:%v: %v", defaultTestGrpcAddr, defaultTestGrpcPort, err)
 	}
 	// goroutine for gRPC serve
-	go func (listener net.Listener) {
+	go func(listener net.Listener) {
 		_ = grpcServer.Serve(listener)
 	}(lis)
 	// Now we get gRPC Client

@@ -49,11 +49,24 @@ service PluginAPI {
     GetPlugin will retrieve the information for the given plugin.
     */
     rpc GetPlugin(PluginRequest) returns (Plugin);
+    /*
+    SubscribePluginState will create a stream which pushes plugin state updates to client
+    */
+    rpc SubscribePluginState(PluginRequest) returns (stream PluginStateUpdate);
 }
 
 message PluginRequest {
     // The name of the plugin we want to interact with
     string name = 1;
+}
+enum PluginState {
+    READY = 0;
+    BUSY = 1;
+    STOPPING = 2;
+    STOPPED = 3;
+    UNKNOWN = 4;
+    UNRESPONSIVE = 5;
+    KILLED = 6;
 }
 message Plugin {
     // The name of the plugin
@@ -64,15 +77,6 @@ message Plugin {
     }
     // The plugin type (either Datasource or Controller)
     PluginType type = 2;
-    enum PluginState {
-        READY = 0;
-        BUSY = 1;
-        STOPPING = 2;
-        STOPPED = 3;
-        UNKNOWN = 4;
-        UNRESPONSIVE = 5;
-        KILLED = 6;
-    }
     // the current state of the plugin
     PluginState state = 3;
     // Unix milli timestamp of when the plugin was started
@@ -110,4 +114,11 @@ message PluginConfig {
     // the maximum number of times a plugin can timeout
     int64 max_timeouts = 5;
 
+}
+message PluginStateUpdate {
+    // the name of the plugin
+    string name = 1;
+
+    // the current state of the plugin
+    PluginState state = 2;
 }
