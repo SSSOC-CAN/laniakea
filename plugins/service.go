@@ -315,12 +315,96 @@ func (p *PluginManager) StopRecord(ctx context.Context, req *fmtrpc.PluginReques
 	return &proto.Empty{}, nil
 }
 
+// subscribeDataLoop is the go routine spun up for listening to data streams
+func (p *PluginManager) subscribeDataLoop(name string, wg sync.WaitGroup, dataQ *queue.Queue, quitChan chan struct{}) {
+	defer wg.Done()
+	instance := p.pluginRegistry[name]
+	subscriberName := name + utils.RandSeq(10)
+	q, unregister, err := p.queueManager.RegisterListener(name, subscriberName)
+	if err != nil {
+		instance.logger.Error().Msg(err.Error())
+		return
+	}
+	defer unregister()
+	// subscribe to queue
+	sigChan, unsub, err := q.Subscribe(subscriberName)
+	if err != nil {
+		instance.logger.Error().Msg(err.Error())
+		return
+	}
+	defer unsub()
+	for {
+		select {
+		case qLength := <-sigChan:
+			if qLength == 0 {
+				return
+			}
+			for i := 0; i < qLength-1; i++ {
+				frame := q.Pop()
+				if frame.Type == io.EOF.Error() {
+					instance.logger.Error().Msg(bg.Error(PluginEOF).Error())
+					return
+				}
+				dataQ.Push(frame)
+			}
+		case <-quitChan:
+			return
+		}
+	}
+}
+
 // Subscribe is the PluginAPI command which exposes the data stream of any datasource plugin
 func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribeServer) error {
 	if !p.noMacaroons {
 		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Subscribe")
 		if err != nil {
 			return status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
+	// if "all" is given as the Plugin name, then we create a stream which sends all active queue content
+	if req.Name == "all" {
+		dataQ := queue.NewQueue()
+		var wg sync.WaitGroup
+		quitChans := []chan struct{}{}
+		for name, _ := range p.pluginRegistry {
+			quitChan := make(chan struct{})
+			quitChans = append(quitChans, quitChan)
+			wg.Add(1)
+			go p.subscribeDataLoop(name, wg, dataQ, quitChan)
+		}
+		cleanUp := func() {
+			for _, quitChan := range quitChans {
+				close(quitChan)
+			}
+			wg.Wait()
+		}
+		defer cleanUp()
+		subscriberName := req.Name + utils.RandSeq(10)
+		sigChan, unsub, err := dataQ.Subscribe(subscriberName)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		defer unsub()
+		for {
+			select {
+			case qLength := <-sigChan:
+				if qLength == 0 {
+					return status.Error(codes.OK, io.EOF.Error())
+				}
+				for i := 0; i < qLength-1; i++ {
+					update := dataQ.Pop()
+					if update != nil {
+						if err := stream.Send(update); err != nil {
+							return err
+						}
+					}
+				}
+			case <-stream.Context().Done():
+				if errors.Is(stream.Context().Err(), context.Canceled) {
+					return nil
+				}
+				return stream.Context().Err()
+			}
 		}
 	}
 	// get the plugin instance from the registry
