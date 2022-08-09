@@ -10,6 +10,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/rs/zerolog"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )
@@ -55,14 +56,14 @@ func TestAddPermissions(t *testing.T) {
 	// invalid add permissions
 	t.Run("Invalid Add Permissions", func(t *testing.T) {
 		err := grpcInterceptor.AddPermissions(defaultTestingPermissions)
-		if err != ErrDuplicateMacConstraints {
+		if err != errors.ErrDuplicateMacConstraints {
 			t.Errorf("Unexpected error when adding permissions: %v", err)
 		}
 	})
 	// invalid add permission
 	t.Run("Invalid Add Permission", func(t *testing.T) {
 		err := grpcInterceptor.AddPermission(duplicatePermissionMethod, duplicatePermission)
-		if err != ErrDuplicateMacConstraints {
+		if err != errors.ErrDuplicateMacConstraints {
 			t.Errorf("Unexpected error when adding permissions: %v", err)
 		}
 	})

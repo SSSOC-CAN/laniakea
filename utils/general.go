@@ -31,6 +31,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -42,7 +43,9 @@ const (
 )
 
 var (
-	letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	letters         = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	pluginNameRegex = `^[a-zA-Z0-9_-]+$`
+	pluginExecRegex = `^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9]+)?$`
 )
 
 // FileExists reports whether the named file or directory exists.
@@ -119,4 +122,26 @@ func NumDecPlaces(v float64) int {
 		return len(s) - i - 1
 	}
 	return 1
+}
+
+// ValidatePluginName validates the plugin name
+func ValidatePluginName(name string) bool {
+	match, _ := regexp.MatchString(pluginNameRegex, name)
+	return match
+}
+
+// ValidatePluginExec validates the plugin executable
+func ValidatePluginExec(exec string) bool {
+	match, _ := regexp.MatchString(pluginExecRegex, exec)
+	return match
+}
+
+// StrInStrSlice checks if a given string is in a string slice
+func StrInStrSlice(strSlice []string, str string) bool {
+	for _, s := range strSlice {
+		if str == s {
+			return true
+		}
+	}
+	return false
 }

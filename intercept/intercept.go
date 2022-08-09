@@ -27,7 +27,6 @@ THE SOFTWARE.
 package intercept
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -77,7 +76,7 @@ func (interceptor *Interceptor) mainInterruptHandler() {
 		select {
 		case signal := <-interceptor.interruptChannel:
 			if interceptor.Logger != nil {
-				interceptor.Logger.Info().Msg(fmt.Sprintf("Received %v", signal))
+				interceptor.Logger.Info().Msgf("Received %v", signal)
 			} else {
 				log.Printf("Received %v", signal)
 			}

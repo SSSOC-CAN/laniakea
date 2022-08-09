@@ -7,6 +7,7 @@ Last Date Changed: 2022/06/10
 package utils
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -66,6 +67,7 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+// TestNormalizeToNDecimalPlace tests the TestNormalizeToNDecimalPlace function
 func TestNormalizeToNDecimalPlace(t *testing.T) {
 	t.Run("test value greater than 1", func(t *testing.T) {
 		_, err := NormalizeToNDecimalPlace(2.0)
@@ -97,4 +99,40 @@ func TestNormalizeToNDecimalPlace(t *testing.T) {
 			t.Errorf("Unexpected result calling NormalizeToNDecimalPlace: %f", v)
 		}
 	})
+}
+
+// TestValidatePluginName tests the ValidatePluginName function
+func TestValidatePluginName(t *testing.T) {
+	cases := map[string]bool{
+		"My-Plugin_124":       true,
+		"myplugin.test":       false,
+		"myplugin123":         true,
+		"myplugin_-123sdaASD": true,
+	}
+	for name, c := range cases {
+		t.Run(fmt.Sprintf("test %v", name), func(t *testing.T) {
+			if ValidatePluginName(name) != c {
+				t.Errorf("Unexpected result: case %v\texpected %v", name, c)
+			}
+		})
+	}
+}
+
+// TestValidatePluginExec tests the ValidatePluginExec function
+func TestValidatePluginExec(t *testing.T) {
+	cases := map[string]bool{
+		"plugin.exe":               true,
+		"pLgste_sdaA-1234.exe_":    false,
+		"pLgste_sdaA-1234.ex_e":    false,
+		"pLgste_sdaA-1234.ex-e":    false,
+		"pLgste_sdaA-1234.ex231e4": true,
+		"pLgste_sdaA-1234":         true,
+	}
+	for name, c := range cases {
+		t.Run(fmt.Sprintf("test %v", name), func(t *testing.T) {
+			if ValidatePluginExec(name) != c {
+				t.Errorf("Unexpected result: case %v\texpected %v", name, c)
+			}
+		})
+	}
 }
