@@ -69,9 +69,10 @@ func getContext() context.Context {
 // printRespJSON will convert a proto response as a string and print it
 func printRespJSON(resp proto.Message) {
 	jsonMarshaler := &protojson.MarshalOptions{
-		Multiline:     true,
-		UseProtoNames: true,
-		Indent:        "    ",
+		Multiline:       true,
+		UseProtoNames:   true,
+		Indent:          "    ",
+		EmitUnpopulated: true,
 	}
 	jsonStr := jsonMarshaler.Format(resp)
 	fmt.Println(jsonStr)
@@ -140,246 +141,6 @@ func test(ctx *cli.Context) error {
 	return nil
 }
 
-var startRecording = cli.Command{
-	Name:      "start-record",
-	Usage:     "Start recording data in realtime.",
-	ArgsUsage: "service-name",
-	Description: `
-	This command starts the process of recording data for the given service into a timestamped csv file. Service-name must be one the following:
-	    - telemetry
-		- rga`,
-	Flags: []cli.Flag{
-		cli.Int64Flag{
-			Name:  "polling_interval",
-			Usage: "If set, then the time between polls to the DAQ will be set to the specified amount in seconds.",
-		},
-		cli.StringFlag{
-			Name:  "org_name",
-			Usage: "Required. Name of the influx organization",
-		},
-		cli.StringFlag{
-			Name:  "record_name",
-			Usage: "Required for telemetry. Name given to the recording",
-		},
-	},
-	Action: startRecord,
-}
-
-// startRecord is the CLI wrapper around the TelemetryService StartRecording method
-func startRecord(ctx *cli.Context) error {
-	ctxc := getContext()
-	if ctx.NArg() != 1 || ctx.NumFlags() > 3 || ctx.String("org_name") == "" {
-		return cli.ShowCommandHelp(ctx, "start-record")
-	}
-	client, cleanUp := getDataCollectorClient(ctx)
-	defer cleanUp()
-	var polling_interval int64
-	serviceNameStr := ctx.Args().First()
-	if serviceNameStr == "telemetry" && ctx.String("record_name") == "" {
-		return cli.ShowCommandHelp(ctx, "start-record")
-	}
-	var serviceName fmtrpc.RecordService
-	if ctx.NumFlags() != 0 {
-		polling_interval = ctx.Int64("polling_interval")
-	}
-	switch serviceNameStr {
-	case "telemetry":
-		serviceName = fmtrpc.RecordService_TELEMETRY
-	case "rga":
-		serviceName = fmtrpc.RecordService_RGA
-	default:
-		return ErrInvalidServiceName
-	}
-	recordRequest := &fmtrpc.RecordRequest{
-		PollingInterval: polling_interval,
-		Type:            serviceName,
-		OrgName:         ctx.String("org_name"),
-		BucketName:      ctx.String("record_name"),
-	}
-	recordResponse, err := client.StartRecording(ctxc, recordRequest)
-	if err != nil {
-		return err
-	}
-	printRespJSON(recordResponse)
-	return nil
-}
-
-var stopRecording = cli.Command{
-	Name:      "stop-record",
-	Usage:     "Stop recording data.",
-	ArgsUsage: "service-name",
-	Description: `
-	This command stops the process of recording data from the given service into a timestamped csv file. Service-name must be one the following:
-	- telemetry
-	- rga`,
-	Action: stopRecord,
-}
-
-// stopRecord is the CLI wrapper around the TelemetryService StopRecording method
-func stopRecord(ctx *cli.Context) error {
-	ctxc := getContext()
-	if ctx.NArg() != 1 || ctx.NumFlags() > 1 {
-		return cli.ShowCommandHelp(ctx, "stop-record")
-	}
-	client, cleanUp := getDataCollectorClient(ctx)
-	defer cleanUp()
-	serviceNameStr := ctx.Args().First()
-	var serviceName fmtrpc.RecordService
-	switch serviceNameStr {
-	case "telemetry":
-		serviceName = fmtrpc.RecordService_TELEMETRY
-	case "rga":
-		serviceName = fmtrpc.RecordService_RGA
-	default:
-		return ErrInvalidServiceName
-	}
-	recordResponse, err := client.StopRecording(ctxc, &fmtrpc.StopRecRequest{Type: serviceName})
-	if err != nil {
-		return err
-	}
-	printRespJSON(recordResponse)
-	return nil
-}
-
-var loadTestPlan = cli.Command{
-	Name:      "load-testplan",
-	Usage:     "Load a test plan file.",
-	ArgsUsage: "path-to-testplan",
-	Description: `
-	This command loads a given test plan file. The absolute path must be given. Ex: C:\Users\User\Downloads\testplan.yaml`,
-	Action: loadPlan,
-}
-
-// loadPlan is the CLI wrapper for the Test Plan Executor method LoadTestPlan
-func loadPlan(ctx *cli.Context) error {
-	ctxc := getContext()
-	if ctx.NArg() != 1 {
-		return cli.ShowCommandHelp(ctx, "load-testplan")
-	}
-	client, cleanUp := getTestPlanExecutorClient(ctx)
-	defer cleanUp()
-	testPlanFilePath := ctx.Args().First()
-	loadPlanReq := &fmtrpc.LoadTestPlanRequest{
-		PathToFile: testPlanFilePath,
-	}
-	loadPlanResponse, err := client.LoadTestPlan(ctxc, loadPlanReq)
-	if err != nil {
-		return err
-	}
-	printRespJSON(loadPlanResponse)
-	return nil
-}
-
-var startTestPlan = cli.Command{
-	Name:  "start-testplan",
-	Usage: "Start a loaded test plan file.",
-	Description: `
-	This command starts a loaded test plan file. If no test plan has been loaded, an error will be raised.`,
-	Action: startPlan,
-}
-
-// startPlan is the CLI wrapper for the Test Plan Executor method StartTestPlan
-func startPlan(ctx *cli.Context) error {
-	ctxc := getContext()
-	client, cleanUp := getTestPlanExecutorClient(ctx)
-	defer cleanUp()
-	startPlanResponse, err := client.StartTestPlan(ctxc, &fmtrpc.StartTestPlanRequest{})
-	if err != nil {
-		return err
-	}
-	printRespJSON(startPlanResponse)
-	return nil
-}
-
-var stopTestPlan = cli.Command{
-	Name:  "stop-testplan",
-	Usage: "Stops a currently executing test plan",
-	Description: `
-	This command stops a running test plan. If no test plan is being executed, an error will be raised.`,
-	Action: stopPlan,
-}
-
-// stopPlan is the CLI wrapper for the Test Plan Executor method StopTestPlan
-func stopPlan(ctx *cli.Context) error {
-	ctxc := getContext()
-	client, cleanUp := getTestPlanExecutorClient(ctx)
-	defer cleanUp()
-	stopPlanResponse, err := client.StopTestPlan(ctxc, &fmtrpc.StopTestPlanRequest{})
-	if err != nil {
-		return err
-	}
-	printRespJSON(stopPlanResponse)
-	return nil
-}
-
-var insertROIMarker = cli.Command{
-	Name:      "insert-roi",
-	Usage:     "Inserts a Region of Interest marker in the test plan report",
-	ArgsUsage: "message",
-	Description: `
-	This command inserts a Region of Interest marker in the test plan report. If no test plan is currently running, an error is raised.`,
-	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name: "report_lvl",
-			Usage: `If set, then the entries level of importance in the report file will be marked accordingly. Must be one of the following:
-			- INFO
-			- ERROR
-			- DEBUG
-			- WARN
-			- FATAL
-			INFO by default.`,
-		},
-		cli.StringFlag{
-			Name:  "author",
-			Usage: "If set, the author of the entry will be marked accordingly. FMT by default.",
-		},
-	},
-	Action: insertROI,
-}
-
-// insertROI is the CLI wrapper for the Test Plan Executor method InsertROIMarker
-func insertROI(ctx *cli.Context) error {
-	ctxc := getContext()
-	if ctx.NArg() != 1 || ctx.NumFlags() > 2 {
-		return cli.ShowCommandHelp(ctx, "insert-roi")
-	}
-	client, cleanUp := getTestPlanExecutorClient(ctx)
-	defer cleanUp()
-	markerText := ctx.Args().First()
-	reportLvl := fmtrpc.ReportLvl_INFO
-	author := "FMT"
-	if ctx.String("report_lvl") != "" {
-		switch ctx.String("report_lvl") {
-		case "INFO":
-			reportLvl = fmtrpc.ReportLvl_INFO
-		case "ERROR":
-			reportLvl = fmtrpc.ReportLvl_ERROR
-		case "DEBUG":
-			reportLvl = fmtrpc.ReportLvl_DEBUG
-		case "WARN":
-			reportLvl = fmtrpc.ReportLvl_WARN
-		case "FATAL":
-			reportLvl = fmtrpc.ReportLvl_FATAL
-		default:
-			return cli.ShowCommandHelp(ctx, "insert-roi")
-		}
-	}
-	if ctx.String("author") != "" {
-		author = ctx.String("author")
-	}
-	insertROIReq := &fmtrpc.InsertROIRequest{
-		Text:      markerText,
-		ReportLvl: reportLvl,
-		Author:    author,
-	}
-	insertROIResponse, err := client.InsertROIMarker(ctxc, insertROIReq)
-	if err != nil {
-		return err
-	}
-	printRespJSON(insertROIResponse)
-	return nil
-}
-
 var bakeMacaroon = cli.Command{
 	Name:      "bake-macaroon",
 	Usage:     "Bakes a new macaroon",
@@ -406,13 +167,17 @@ var bakeMacaroon = cli.Command{
 			Name:  "save_to",
 			Usage: "If set, the macaroon will be saved as a .macaroon file at the specified path. The hex encoded macaroon is printed to the console by default",
 		},
+		cli.StringFlag{
+			Name:  "plugins",
+			Usage: "If set, the macaroon will be locked to specified plugins. Enter plugin names, spaced with a colon (e.g. plugin-1:plugin_TWO:PlUgIn-_3Thousand)",
+		},
 	},
 	Action: bakeMac,
 }
 
 func bakeMac(ctx *cli.Context) error {
 	ctxc := getContext()
-	if ctx.NArg() < 1 || ctx.NumFlags() > 3 {
+	if ctx.NArg() < 1 || ctx.NumFlags() > 4 {
 		return cli.ShowCommandHelp(ctx, "bake-macaroon")
 	}
 	client, cleanUp := getFmtClient(ctx)
@@ -448,10 +213,16 @@ func bakeMac(ctx *cli.Context) error {
 			Action: action,
 		})
 	}
+	var parsedPlugins []string
+	if pluginNames := ctx.String("plugins"); pluginNames != "" {
+		parsedPlugins = strings.Split(pluginNames, ":")
+	}
+
 	bakeMacReq := &fmtrpc.BakeMacaroonRequest{
 		Timeout:     timeout,
 		TimeoutType: timeoutType,
 		Permissions: parsedPerms,
+		Plugins:     parsedPlugins,
 	}
 	bakeMacResponse, err := client.BakeMacaroon(ctxc, bakeMacReq)
 	if err != nil {
