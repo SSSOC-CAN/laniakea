@@ -52,6 +52,7 @@ func (m *QueueManager) RegisterSource(name string) (*Queue, func(), error) {
 		sigChan, unsub, err := newQ.Subscribe(queueManagerName)
 		if err != nil {
 			m.Logger.Error().Msgf("could not subscribe to %v queue: %v", name, err)
+			return
 		}
 		defer unsub()
 		for {
