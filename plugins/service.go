@@ -358,10 +358,6 @@ func (p *PluginManager) subscribeDataLoop(name string, wg sync.WaitGroup, dataQ 
 			}
 			for i := 0; i < qLength-1; i++ {
 				frame := q.Pop()
-				// if frame.Type == io.EOF.Error() {
-				// 	instance.logger.Error().Msg(bg.Error(PluginEOF).Error())
-				// 	return
-				// }
 				dataQ.Push(frame)
 			}
 		case <-quitChan:

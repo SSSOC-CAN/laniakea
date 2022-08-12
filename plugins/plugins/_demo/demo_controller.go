@@ -84,7 +84,6 @@ func (e *DemoController) Command(req *proto.Frame) (chan *proto.Frame, error) {
 								Timestamp: time.Now().UnixMilli(),
 								Payload:   []byte(fmt.Sprintf(`{ "average_temperature": %f, "current_set_point": %f}`, e.avgTemp, e.tempSetPoint)),
 							}
-							log.Println("Done setting temperature")
 						}()
 						return frameChan, nil
 					}
@@ -100,6 +99,7 @@ func (e *DemoController) Command(req *proto.Frame) (chan *proto.Frame, error) {
 			go func() {
 				defer e.Done()
 				defer close(frameChan)
+				defer log.Println("Exiting rng data loop")
 				time.Sleep(1 * time.Second) // sleep for a second while laniakea sets up the plugin
 				for {
 					select {
