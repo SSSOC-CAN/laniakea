@@ -29,6 +29,7 @@ type DemoController struct {
 	avgTemp      float64
 	recording    int32 // used atomically
 	sync.WaitGroup
+	sync.RWMutex
 }
 
 type DemoPayload struct {
@@ -71,19 +72,25 @@ func (e *DemoController) Command(req *proto.Frame) (chan *proto.Frame, error) {
 							defer e.Done()
 							defer close(frameChan)
 							time.Sleep(1 * time.Second)
+							e.RLock()
 							frameChan <- &proto.Frame{
 								Source:    pluginName,
 								Type:      "application/json",
 								Timestamp: time.Now().UnixMilli(),
 								Payload:   []byte(fmt.Sprintf(`{ "average_temperature": %f, "current_set_point": %f}`, e.avgTemp, e.tempSetPoint)),
 							}
+							e.RUnlock()
+							e.Lock()
 							e.tempSetPoint = v
+							e.Unlock()
+							e.RLock()
 							frameChan <- &proto.Frame{
 								Source:    pluginName,
 								Type:      "application/json",
 								Timestamp: time.Now().UnixMilli(),
 								Payload:   []byte(fmt.Sprintf(`{ "average_temperature": %f, "current_set_point": %f}`, e.avgTemp, e.tempSetPoint)),
 							}
+							e.RUnlock()
 						}()
 						return frameChan, nil
 					}
@@ -110,12 +117,16 @@ func (e *DemoController) Command(req *proto.Frame) (chan *proto.Frame, error) {
 						df := DemoFrame{}
 						var cumTemp float64
 						for i := 0; i < 96; i++ {
+							e.RLock()
 							v := (rand.Float64()*1 + e.tempSetPoint)
+							e.RUnlock()
 							n := fmt.Sprintf("Temperature: %v", i+1)
 							data = append(data, DemoPayload{Name: n, Value: v})
 							cumTemp += v
 						}
+						e.Lock()
 						e.avgTemp = cumTemp / float64(len(data))
+						e.Unlock()
 						df.Data = data[:]
 						// transform to json string
 						b, err := json.Marshal(&df)
