@@ -11,6 +11,8 @@ const (
 	ErrSourceAlreadyRegistered   = bg.Error("source already registered")
 	ErrListenerAlreadyRegistered = bg.Error("listener already registered")
 	queueManagerName             = "queue-manager"
+	defaultSrcQueueSize          = 10
+	defaultLisQueueSize          = 20
 )
 
 type QueueManager struct {
@@ -38,7 +40,7 @@ func (m *QueueManager) RegisterSource(name string) (*Queue, func(), error) {
 	if _, ok := m.incomingQueues[name]; ok {
 		return nil, nil, ErrSourceAlreadyRegistered
 	}
-	newQ := NewQueue()
+	newQ := NewQueue(defaultSrcQueueSize)
 	quitChan := make(chan struct{})
 	var wg sync.WaitGroup
 	m.Lock()
@@ -93,7 +95,7 @@ func (m *QueueManager) RegisterListener(source, name string) (*Queue, func(), er
 	if _, ok := m.outgoingQueues[source][name]; ok {
 		return nil, nil, ErrListenerAlreadyRegistered
 	}
-	newQ := NewQueue()
+	newQ := NewQueue(defaultLisQueueSize)
 	m.Lock()
 	m.outgoingQueues[source][name] = newQ
 	m.Unlock()
