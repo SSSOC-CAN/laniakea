@@ -29,7 +29,12 @@ message HealthRequest {
     string service = 1;
 }
 
+message HealthUpdate {
+    string name = 1;
+    HealthState state = 2;
+}
+
 message HealthResponse {
     // the current states of all given services/plugins
-    repeated HealthState state = 1;
+    repeated HealthUpdate status = 1;
 }
