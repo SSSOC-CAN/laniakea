@@ -17,12 +17,7 @@ service Health {
     rpc Check(HealthRequest) returns (HealthResponse);
 }
 
-enum HealthState {
-    UNKNOWN = 0;
-    SERVING = 1;
-    NOT_SERVING = 2;
-    SERVICE_UNKNOWN = 3;
-}
+
 
 message HealthRequest {
     // the name of the service or plugin for which we want health information. Leave blank or put all to get all health information
@@ -30,7 +25,16 @@ message HealthRequest {
 }
 
 message HealthUpdate {
+    // the name of the service
     string name = 1;
+    
+    enum HealthState {
+        UNKNOWN = 0;
+        SERVING = 1;
+        NOT_SERVING = 2;
+        SERVICE_UNKNOWN = 3;
+    }
+    // the current state of the service
     HealthState state = 2;
 }
 

@@ -8,10 +8,13 @@ import (
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
 	ErrHealthServiceAlreadyRegistered = bg.Error("health service already registered")
+	ErrUnregisteredHealthService      = bg.Error("unregistered health service")
 )
 
 var (
@@ -56,10 +59,51 @@ func (h *HealthService) RegisterHealthService(name string, s RegisteredHealthSer
 func (h *HealthService) Check(ctx context.Context, req *fmtrpc.HealthRequest) (*fmtrpc.HealthResponse, error) {
 	if req.Service == "" || req.Service == "all" {
 		// perform health checks on all registered services
-		for _, service := range h.registeredServices {
-			ctx, cancel := context.WithTimeout()
-			service.Ping()
+		statuses := []*fmtrpc.HealthUpdate{}
+		for name, service := range h.registeredServices {
+			newCtx, _ := context.WithTimeout(ctx, defaultCheckTimeout)
+			errChan := make(chan error)
+			go func(errChan chan error) {
+				errChan <- service.Ping(newCtx)
+			}(errChan)
+			status := &fmtrpc.HealthUpdate{
+				Name:  name,
+				State: fmtrpc.HealthUpdate_SERVING,
+			}
+			select {
+			case err := <-errChan:
+				if err != nil {
+					status.State = fmtrpc.HealthUpdate_NOT_SERVING
+				}
+			case <-newCtx.Done():
+				status.State = fmtrpc.HealthUpdate_UNKNOWN
+			}
+			statuses = append(statuses, status)
 		}
+		return &fmtrpc.HealthResponse{
+			Status: statuses,
+		}, nil
 	}
-	return nil, nil
+	if _, ok := h.registeredServices[req.Service]; !ok {
+		return nil, status.Error(codes.InvalidArgument, ErrUnregisteredHealthService.Error())
+	}
+	service := h.registeredServices[req.Service]
+	newCtx, _ := context.WithTimeout(ctx, defaultCheckTimeout)
+	errChan := make(chan error)
+	go func(errChan chan error) {
+		errChan <- service.Ping(newCtx)
+	}(errChan)
+	status := &fmtrpc.HealthUpdate{
+		Name:  req.Service,
+		State: fmtrpc.HealthUpdate_SERVING,
+	}
+	select {
+	case err := <-errChan:
+		if err != nil {
+			status.State = fmtrpc.HealthUpdate_NOT_SERVING
+		}
+	case <-newCtx.Done():
+		status.State = fmtrpc.HealthUpdate_UNKNOWN
+	}
+	return &fmtrpc.HealthResponse{Status: []*fmtrpc.HealthUpdate{status}}, nil
 }

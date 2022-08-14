@@ -35,6 +35,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/health"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -165,6 +166,10 @@ func MainGrpcServerPermissions() map[string][]bakery.Op {
 		}},
 		"/fmtrpc.PluginAPI/SubscribePluginState": {{
 			Entity: "plugins",
+			Action: "read",
+		}},
+		"/fmtrpc.Health/Check": {{
+			Entity: "fmtd",
 			Action: "read",
 		}},
 	}
@@ -364,4 +369,12 @@ func (s *RpcServer) StopTestPlan(ctx context.Context, _ *proto.Empty) (*proto.Em
 // InsertROIMarker is a deprecated Executor API rpc command
 func (s *RpcServer) InsertROIMarker(ctx context.Context, _ *proto.Empty) (*proto.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, ErrDeprecatedAction.Error())
+}
+
+var _ health.RegisteredHealthService = (*RpcServer)(nil)
+
+// Ping implements the health package RegisteredHealthService interface
+// TODO:SSSOCPaulCote - This should do more, it should actually probe the service to make sure everything is operating nominally
+func (s *RpcServer) Ping(ctx context.Context) error {
+	return nil
 }
