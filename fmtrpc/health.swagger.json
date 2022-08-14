@@ -53,10 +53,10 @@
     "fmtrpcHealthResponse": {
       "type": "object",
       "properties": {
-        "state": {
+        "status": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/fmtrpcHealthState"
+            "$ref": "#/definitions/fmtrpcHealthUpdate"
           },
           "title": "the current states of all given services/plugins"
         }
@@ -71,6 +71,17 @@
         "SERVICE_UNKNOWN"
       ],
       "default": "UNKNOWN"
+    },
+    "fmtrpcHealthUpdate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/definitions/fmtrpcHealthState"
+        }
+      }
     },
     "protobufAny": {
       "type": "object",
