@@ -50,6 +50,16 @@
     }
   },
   "definitions": {
+    "HealthUpdateHealthState": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN",
+        "SERVING",
+        "NOT_SERVING",
+        "SERVICE_UNKNOWN"
+      ],
+      "default": "UNKNOWN"
+    },
     "fmtrpcHealthResponse": {
       "type": "object",
       "properties": {
@@ -62,24 +72,16 @@
         }
       }
     },
-    "fmtrpcHealthState": {
-      "type": "string",
-      "enum": [
-        "UNKNOWN",
-        "SERVING",
-        "NOT_SERVING",
-        "SERVICE_UNKNOWN"
-      ],
-      "default": "UNKNOWN"
-    },
     "fmtrpcHealthUpdate": {
       "type": "object",
       "properties": {
         "name": {
-          "type": "string"
+          "type": "string",
+          "title": "the name of the service"
         },
         "state": {
-          "$ref": "#/definitions/fmtrpcHealthState"
+          "$ref": "#/definitions/HealthUpdateHealthState",
+          "title": "the current state of the service"
         }
       }
     },

@@ -20,6 +20,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	e "github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/health"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -807,4 +808,12 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 			return stream.Context().Err()
 		}
 	}
+}
+
+var _ health.RegisteredHealthService = (*PluginManager)(nil)
+
+// Ping implements the health package RegisteredHealthService interface
+// TODO:SSSOCPaulCote - This should do more, it should actually probe the service to make sure everything is operating nominally
+func (p *PluginManager) Ping(ctx context.Context) error {
+	return nil
 }

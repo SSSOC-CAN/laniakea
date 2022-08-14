@@ -72,6 +72,7 @@ var (
 		"/fmtrpc.Fmt/StartTestPlan":       {},
 		"/fmtrpc.Fmt/StopTestPlan":        {},
 		"/fmtrpc.Fmt/InsertROIMarker":     {},
+		"/fmtrpc.Health/Check":            {},
 	}
 	pluginMethodNames = []string{
 		"/fmtrpc.PluginAPI/StartRecord",
