@@ -426,9 +426,6 @@ func TestDatasourcePlugin(t *testing.T) {
 				return
 			}()
 		}
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
-		t.Logf("Alloc=%vMiB TotalAlloc=%vMiB Sys=%vMiB NumGC=%v", m.Alloc/1024/1024, m.TotalAlloc/1024/1024, m.Sys/1024/1024, m.NumGC)
 		wg.Wait()
 	})
 	t.Run("start plugin-unregistered plugin", func(t *testing.T) {
