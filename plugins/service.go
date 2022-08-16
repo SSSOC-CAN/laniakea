@@ -52,6 +52,8 @@ var (
 	timeoutChecker         time.Duration = 10 * time.Second // time for when to check if plugins are unresponsive
 	windowsExecExt                       = ".exe"
 	macExecNameExt                       = "_macos"
+	allQueueSize                         = 20
+	defaultQueueSize                     = 10
 )
 
 func ChangeCfgExec(os string, cfgs []*fmtrpc.PluginConfig) []*fmtrpc.PluginConfig {
@@ -358,10 +360,6 @@ func (p *PluginManager) subscribeDataLoop(name string, wg sync.WaitGroup, dataQ 
 			}
 			for i := 0; i < qLength-1; i++ {
 				frame := q.Pop()
-				if frame.Type == io.EOF.Error() {
-					instance.logger.Error().Msg(bg.Error(PluginEOF).Error())
-					return
-				}
 				dataQ.Push(frame)
 			}
 		case <-quitChan:
@@ -380,7 +378,7 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 	}
 	// if "all" is given as the Plugin name, then we create a stream which sends all active queue content
 	if req.Name == "all" {
-		dataQ := queue.NewQueue()
+		dataQ := queue.NewQueue(allQueueSize)
 		var wg sync.WaitGroup
 		quitChans := []chan struct{}{}
 		for name, _ := range p.pluginRegistry {
@@ -726,7 +724,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 	}
 	rand.Seed(time.Now().UnixNano())
 	if req.Name == "all" {
-		stateQ := gux.NewQueue()
+		stateQ := gux.NewQueue(allQueueSize)
 		var wg sync.WaitGroup
 		quitChans := []chan struct{}{}
 		for name, _ := range p.pluginRegistry {
@@ -775,7 +773,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 	if !ok {
 		return status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
 	}
-	stateQ := gux.NewQueue()
+	stateQ := gux.NewQueue(defaultQueueSize)
 	quitChan := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
