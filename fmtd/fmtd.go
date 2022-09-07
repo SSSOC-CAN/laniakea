@@ -39,6 +39,7 @@ import (
 	"github.com/SSSOC-CAN/fmtd/api"
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/health"
 	"github.com/SSSOC-CAN/fmtd/intercept"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
@@ -113,6 +114,15 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	rpcServer.RegisterWithGrpcServer(grpc_server)
 	rpcServer.AddGrpcInterceptor(grpc_interceptor)
 
+	// Initialize Health Checker
+	healthChecker := health.NewHealthService()
+	healthChecker.RegisterWithGrpcServer(grpc_server)
+	err = healthChecker.RegisterHealthService("main", rpcServer)
+	if err != nil {
+		server.logger.Error().Msgf("could not register RPC server with health check server: %v", err)
+		return err
+	}
+
 	// Initialize Plugin Manager
 	server.logger.Info().Msg("Initializing plugins...")
 	pluginManager := plugins.NewPluginManager(server.cfg.PluginDir, server.cfg.Plugins, NewSubLogger(server.logger, "PLGN").SubLogger, false)
@@ -129,6 +139,11 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 	}
 	defer pluginManager.Stop()
 	server.logger.Info().Msg("Plugins initialized")
+	err = healthChecker.RegisterHealthService("plugins", pluginManager)
+	if err != nil {
+		server.logger.Error().Msgf("could not register plugin manager with health check server: %v", err)
+		return err
+	}
 	server.logger.Info().Msg("RPC subservices instantiated and registered successfully.")
 
 	// Starting kvdb
@@ -175,6 +190,7 @@ func Main(interceptor *intercept.Interceptor, server *Server) error {
 			rpcServer,
 			unlockerService,
 			pluginManager,
+			healthChecker,
 		},
 		restDialOpts,
 		restListen,
