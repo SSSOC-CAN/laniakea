@@ -273,11 +273,13 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 	// push fmtd/laniakea version and get plugin version
 	err = newInstance.pushVersion(ctx)
 	if err != nil {
+		p.logger.zl.Debug().Msgf("could not push version to plugin: %v", err)
 		newInstance.kill()
 		return nil, err
 	}
 	err = newInstance.getVersion(ctx)
 	if err != nil {
+		p.logger.zl.Debug().Msgf("could not get version from plugin: %v", err)
 		newInstance.kill()
 		return nil, err
 	}

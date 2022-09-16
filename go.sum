@@ -36,6 +36,8 @@ github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220713081125-e717dddd1348 h1:gnGfHhQ171LJG8zRjlJoEllKrhiHLT4P0TAL/lApcns=
 github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220713081125-e717dddd1348/go.mod h1:Yks9Y+b+H6aSTyv3jGsefv+mngwbRn+QT9iTLMOclvY=
+github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220915220231-4812cf32fb62 h1:YeeM4/TZNABBzwPTnqPk8dbyJa2d1CPPdeJnTv6mBlw=
+github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220915220231-4812cf32fb62/go.mod h1:Yks9Y+b+H6aSTyv3jGsefv+mngwbRn+QT9iTLMOclvY=
 github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a h1:lloMlsBR6U0EIx/KuVkwsP6/I3Ci6M4jiKjZAKOQTks=
 github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a/go.mod h1:QmPQSk28XTjXldnFMmKGnYtux+oAI7n4h+VmXqi6Edg=
 github.com/SSSOCPaulCote/gux v0.0.0-20220630051244-9dcaa23fcf84 h1:wkb9an2NJ/jnq/jAsb17ebwsxc/MtzgHC9AVoIah6Gw=
