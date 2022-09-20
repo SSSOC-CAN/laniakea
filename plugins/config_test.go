@@ -1,14 +1,20 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
 package plugins
 
 import (
 	"testing"
 
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 )
 
 var (
-	invalidPluginNameCfgs = []*fmtrpc.PluginConfig{
+	invalidPluginNameCfgs = []*lanirpc.PluginConfig{
 		{
 			Name: "bing bong",
 		},
@@ -19,7 +25,7 @@ var (
 			Name: "%$%sad",
 		},
 	}
-	invalidPluginExecCfgs = []*fmtrpc.PluginConfig{
+	invalidPluginExecCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:     "valid-plugin-name",
 			ExecName: "love you.exe",
@@ -37,12 +43,12 @@ var (
 			ExecName: "love-you.ex#$",
 		},
 	}
-	invalidPluginTypeCfg = &fmtrpc.PluginConfig{
+	invalidPluginTypeCfg = &lanirpc.PluginConfig{
 		Name:     "valid-plugin-name",
 		ExecName: "Valid-executable.exe",
 		Type:     "not-a-valid-plugin-type",
 	}
-	invalidPluginExecFile = &fmtrpc.PluginConfig{
+	invalidPluginExecFile = &lanirpc.PluginConfig{
 		Name:     "valid-plugin-name",
 		ExecName: "Valid-executable.exe",
 		Type:     DATASOURCE_STR,

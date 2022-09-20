@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 */
 
 package intercept
@@ -17,26 +17,26 @@ import (
 
 var (
 	defaultTestingPermissions = map[string][]bakery.Op{
-		"/fmtrpc.Fmt/StopDaemon": {{
-			Entity: "fmtd",
+		"/lanirpc.Lani/StopDaemon": {{
+			Entity: "laniakea",
 			Action: "write",
 		}},
-		"/fmtrpc.Fmt/AdminTest": {{
-			Entity: "fmtd",
+		"/lanirpc.Lani/AdminTest": {{
+			Entity: "laniakea",
 			Action: "read",
 		}},
 	}
-	duplicatePermissionMethod = "/fmtrpc.Fmt/StopDaemon"
+	duplicatePermissionMethod = "/lanirpc.Lani/StopDaemon"
 	duplicatePermission       = []bakery.Op{
 		{
 			Entity: "uri",
 			Action: "test",
 		},
 	}
-	newPermissionMethod = "/fmtrpc.Fmt/TestCommand"
+	newPermissionMethod = "/lanirpc.Lani/TestCommand"
 	newPermission       = []bakery.Op{
 		{
-			Entity: "fmtd",
+			Entity: "laniakea",
 			Action: "read",
 		},
 	}

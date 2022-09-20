@@ -37,7 +37,7 @@ import (
 var (
 	testRootKey                 = []byte("dummyRootKey")
 	testID                      = []byte("dummyId")
-	testLocation                = "fmtd"
+	testLocation                = "laniakea"
 	testVersion                 = macaroon.LatestVersion
 	expectedTimeCaveatSubstring = fmt.Sprintf("time-before %d", time.Now().Year())
 )

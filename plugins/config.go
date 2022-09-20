@@ -1,10 +1,16 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
 package plugins
 
 import (
 	"path/filepath"
 
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 )
@@ -21,7 +27,7 @@ var (
 )
 
 // ValidatePluginConfig takes a PluginConfig and validates the parameters
-func ValidatePluginConfig(cfg *fmtrpc.PluginConfig, pluginDir string, isTesting bool) error {
+func ValidatePluginConfig(cfg *lanirpc.PluginConfig, pluginDir string, isTesting bool) error {
 	// checks that the plugin has a valid name and executable
 	if !utils.ValidatePluginName(cfg.Name) {
 		return errors.ErrInvalidPluginName

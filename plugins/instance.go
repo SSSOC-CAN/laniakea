@@ -1,3 +1,9 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
 package plugins
 
 import (
@@ -8,7 +14,7 @@ import (
 	"time"
 
 	e "github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
@@ -32,13 +38,13 @@ const (
 
 type StateListener struct {
 	IsConnected bool
-	Signal      chan fmtrpc.PluginState
+	Signal      chan lanirpc.PluginState
 }
 
 type PluginInstance struct {
-	cfg           *fmtrpc.PluginConfig
+	cfg           *lanirpc.PluginConfig
 	client        *plugin.Client
-	state         fmtrpc.PluginState
+	state         lanirpc.PluginState
 	timeoutCnt    int
 	outgoingQueue *queue.Queue
 	cleanUp       func()
@@ -52,7 +58,7 @@ type PluginInstance struct {
 }
 
 // updateListeners will send an update to all listeners, removing any that are not listening any longer
-func (i *PluginInstance) updateListeners(newState fmtrpc.PluginState) {
+func (i *PluginInstance) updateListeners(newState lanirpc.PluginState) {
 	newListenerMap := make(map[string]*StateListener)
 	for n, l := range i.listeners {
 		if !l.IsConnected {
@@ -69,56 +75,56 @@ func (i *PluginInstance) updateListeners(newState fmtrpc.PluginState) {
 func (i *PluginInstance) setReady() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_READY
-	i.updateListeners(fmtrpc.PluginState_READY)
+	i.state = lanirpc.PluginState_READY
+	i.updateListeners(lanirpc.PluginState_READY)
 }
 
 // setBusy changes the plugin instance state to Busy
 func (i *PluginInstance) setBusy() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_BUSY
-	i.updateListeners(fmtrpc.PluginState_BUSY)
+	i.state = lanirpc.PluginState_BUSY
+	i.updateListeners(lanirpc.PluginState_BUSY)
 }
 
 // setStopping changes the plugin instance state to stopping
 func (i *PluginInstance) setStopping() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_STOPPING
-	i.updateListeners(fmtrpc.PluginState_STOPPING)
+	i.state = lanirpc.PluginState_STOPPING
+	i.updateListeners(lanirpc.PluginState_STOPPING)
 }
 
 // setStopped changes the plugin instance state to stopped
 func (i *PluginInstance) setStopped() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_STOPPED
-	i.updateListeners(fmtrpc.PluginState_STOPPED)
+	i.state = lanirpc.PluginState_STOPPED
+	i.updateListeners(lanirpc.PluginState_STOPPED)
 }
 
 // setUnknown changes the plugin instance state to unknown
 func (i *PluginInstance) setUnknown() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_UNKNOWN
-	i.updateListeners(fmtrpc.PluginState_UNKNOWN)
+	i.state = lanirpc.PluginState_UNKNOWN
+	i.updateListeners(lanirpc.PluginState_UNKNOWN)
 }
 
 // setUnresponsive changes the plugin instance state to unresponsive
 func (i *PluginInstance) setUnresponsive() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_UNRESPONSIVE
-	i.updateListeners(fmtrpc.PluginState_UNRESPONSIVE)
+	i.state = lanirpc.PluginState_UNRESPONSIVE
+	i.updateListeners(lanirpc.PluginState_UNRESPONSIVE)
 }
 
 // setKilled changes the plugin instance state to killed
 func (i *PluginInstance) setKilled() {
 	i.Lock()
 	defer i.Unlock()
-	i.state = fmtrpc.PluginState_KILLED
-	i.updateListeners(fmtrpc.PluginState_KILLED)
+	i.state = lanirpc.PluginState_KILLED
+	i.updateListeners(lanirpc.PluginState_KILLED)
 }
 
 // setRecording changes the plugin recording state to recording
@@ -152,7 +158,7 @@ func (i *PluginInstance) resetTimeoutCount() {
 // startRecord is the method that starts the data recording process if this plugin is a datasource
 func (i *PluginInstance) startRecord(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
+	if i.getState() != lanirpc.PluginState_READY && i.getState() != lanirpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// check if we're already recording
@@ -243,7 +249,7 @@ func (i *PluginInstance) startRecord(ctx context.Context) error {
 // stopRecord stops the recording process of the datasource plugin
 func (i *PluginInstance) stopRecord(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
+	if i.getState() != lanirpc.PluginState_READY && i.getState() != lanirpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	// check if plugin is recording
@@ -319,7 +325,7 @@ func (i *PluginInstance) kill() {
 
 // stop will send the signal to kill the plugin
 func (i *PluginInstance) stop(ctx context.Context) error {
-	if i.getState() == fmtrpc.PluginState_STOPPING || i.getState() == fmtrpc.PluginState_STOPPED || i.getState() == fmtrpc.PluginState_KILLED {
+	if i.getState() == lanirpc.PluginState_STOPPING || i.getState() == lanirpc.PluginState_STOPPED || i.getState() == lanirpc.PluginState_KILLED {
 		return e.ErrServiceAlreadyStopped
 	}
 	if i.client == nil {
@@ -420,7 +426,7 @@ func (i *PluginInstance) setLogger(logger *zerolog.Logger) {
 // command will pass along a command frame to a controller plugin and store the streamed data in the queue
 func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
+	if i.getState() != lanirpc.PluginState_READY && i.getState() != lanirpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	if i.client == nil {
@@ -498,10 +504,10 @@ func (i *PluginInstance) command(ctx context.Context, frame *proto.Frame) error 
 	}
 }
 
-// pushVersion will push the fmtd/laniakea version to the plugin for compatibility reasons
+// pushVersion will push the laniakea version to the plugin for compatibility reasons
 func (i *PluginInstance) pushVersion(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
+	if i.getState() != lanirpc.PluginState_READY && i.getState() != lanirpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	if i.client == nil {
@@ -572,7 +578,7 @@ func (i *PluginInstance) setVersion(v string) {
 // getVersion will get the plugin version for compatibility reasons
 func (i *PluginInstance) getVersion(ctx context.Context) error {
 	// check if plugin is ready
-	if i.getState() != fmtrpc.PluginState_READY && i.getState() != fmtrpc.PluginState_UNKNOWN {
+	if i.getState() != lanirpc.PluginState_READY && i.getState() != lanirpc.PluginState_UNKNOWN {
 		return ErrPluginNotReady
 	}
 	if i.client == nil {
@@ -658,7 +664,7 @@ func (i *PluginInstance) getVersion(ctx context.Context) error {
 }
 
 // getState is a goroutine safe way to read the current plugin state
-func (i *PluginInstance) getState() fmtrpc.PluginState {
+func (i *PluginInstance) getState() lanirpc.PluginState {
 	i.RLock()
 	defer i.RUnlock()
 	return i.state
@@ -679,13 +685,13 @@ func (i *PluginInstance) getTimeoutCount() int {
 }
 
 // SubscribeState returns a channel which will have signals sent when a the state is changed as well as an unsub function
-func (i *PluginInstance) subscribeState(name string) (chan fmtrpc.PluginState, func(), error) {
+func (i *PluginInstance) subscribeState(name string) (chan lanirpc.PluginState, func(), error) {
 	i.Lock()
 	defer i.Unlock()
 	if _, ok := i.listeners[name]; ok {
 		return nil, nil, e.ErrAlreadySubscribed
 	}
-	i.listeners[name] = &StateListener{IsConnected: true, Signal: make(chan fmtrpc.PluginState, 2)}
+	i.listeners[name] = &StateListener{IsConnected: true, Signal: make(chan lanirpc.PluginState, 2)}
 	unsub := func() {
 		i.Lock()
 		defer i.Unlock()

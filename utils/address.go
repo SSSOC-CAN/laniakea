@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
@@ -72,7 +72,7 @@ func NormalizeAddresses(addrs []string, defaultPort string,
 }
 
 // ParseAddressString converts an address in string format to a net.Addr that is
-// compatible with fmtd. UDP is not supported because fmtd needs reliable
+// compatible with laniakea. UDP is not supported because laniakea needs reliable
 // connections. We accept a custom function to resolve any TCP addresses so
 // that caller is able control exactly how resolution is performed.
 func ParseAddressString(strAddress string, defaultPort string,
