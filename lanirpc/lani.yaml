@@ -1,0 +1,37 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/09/20
+
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: lanirpc.Lani.StopDaemon
+      post: "/v1/stop"
+      body: "*"
+    - selector: lanirpc.Lani.AdminTest
+      get: "/v1/admin/test"
+    - selector: lanirpc.Lani.TestCommand
+      get: "/v1/test"
+    - selector: lanirpc.Lani.BakeMacaroon
+      post: "/v1/bake/macaroon"
+      body: "*"
+    - selector: lanirpc.Lani.SetTemperature
+      get: "/v1/set/temperature"
+    - selector: lanirpc.Lani.SetPressure
+      get: "/v1/set/pressure"
+    - selector: lanirpc.Lani.StartRecording
+      get: "/v1/start/recording"
+    - selector: lanirpc.Lani.StopRecording
+      get: "/v1/stop/recording"
+    - selector: lanirpc.Lani.SubscribeDataStream
+      get: "/v1/subscribe/datastream"
+    - selector: lanirpc.Lani.LoadTestPlan
+      get: "/v1/load/testplan"
+    - selector: lanirpc.Lani.StartTestPlan
+      get: "/v1/start/testplan"
+    - selector: lanirpc.Lani.StopTestPlan
+      get: "/v1/stop/testplan"
+    - selector: lanirpc.Lani.InsertROIMarker
+      get: "/v1/insert/roi"

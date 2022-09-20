@@ -1,0 +1,29 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/09/20
+
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: lanirpc.PluginAPI.StartRecord
+      put: "/v2/plugin/start/record/{name}"
+    - selector: lanirpc.PluginAPI.StopRecord
+      put: "/v2/plugin/stop/record/{name}"
+    - selector: lanirpc.PluginAPI.Subscribe
+      get: "/v2/plugin/subscribe/{name}"
+    - selector: lanirpc.PluginAPI.StartPlugin
+      put: "/v2/plugin/start/{name}"
+    - selector: lanirpc.PluginAPI.StopPlugin
+      put: "/v2/plugin/stop/{name}"
+    - selector: lanirpc.PluginAPI.Command
+      post: "/v2/plugin/command"
+      body: "*"
+    - selector: lanirpc.PluginAPI.ListPlugins
+      get: "/v2/plugins"
+    - selector: lanirpc.PluginAPI.AddPlugin
+      post: "/v2/plugin/add"
+      body: "*"
+    - selector: lanirpc.PluginAPI.GetPlugin
+      get: "/v2/plugin/{name}"

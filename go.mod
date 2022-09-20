@@ -3,7 +3,7 @@ module github.com/SSSOC-CAN/fmtd
 go 1.17
 
 require (
-	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220916202250-cdbc71d71f25
+	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220920085338-f8d7589d5935
 	github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a
 	github.com/SSSOCPaulCote/gux v0.0.0-20220813092205-97a703b3f636
 	github.com/btcsuite/btcwallet v0.12.0
@@ -21,9 +21,9 @@ require (
 	github.com/urfave/cli v1.22.5
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
-	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d
-	google.golang.org/grpc v1.47.0
-	google.golang.org/protobuf v1.27.1
+	golang.org/x/net v0.0.0-20220920191752-2e0b12c274b7
+	google.golang.org/grpc v1.49.0
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/macaroon-bakery.v2 v2.3.0
 	gopkg.in/macaroon.v2 v2.1.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -42,10 +42,10 @@ require (
 	github.com/rogpeppe/fastuuid v1.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.0.1 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
-	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6 // indirect
-	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
-	golang.org/x/text v0.3.6 // indirect
-	google.golang.org/genproto v0.0.0-20210909211513-a8c4777a87af // indirect
+	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8 // indirect
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
+	golang.org/x/text v0.3.7 // indirect
+	google.golang.org/genproto v0.0.0-20220920164045-a2a065f3c118 // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/errgo.v1 v1.0.1 // indirect
 )

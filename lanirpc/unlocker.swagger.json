@@ -1,0 +1,196 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "unlocker.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Unlocker"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/changepassword": {
+      "post": {
+        "summary": "lanicli: `changepassword`\nChangePassword prompts the user to enter the current password and enter a new password.",
+        "operationId": "Unlocker_ChangePassword",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcChangePwdResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcChangePwdRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Unlocker"
+        ]
+      }
+    },
+    "/v1/login": {
+      "post": {
+        "summary": "lanicli: `login`\nLogin will prompt the user to provide a password and send the response to the unlocker service for authentication.",
+        "operationId": "Unlocker_Login",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcLoginResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcLoginRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Unlocker"
+        ]
+      }
+    },
+    "/v1/setpassword": {
+      "post": {
+        "summary": "lanicli: `setpassword`\nSetPassword prompts the user to set a password on first startup if no password has already been set.",
+        "operationId": "Unlocker_SetPassword",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcSetPwdResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcSetPwdRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Unlocker"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "lanirpcChangePwdRequest": {
+      "type": "object",
+      "properties": {
+        "current_password": {
+          "type": "string",
+          "format": "byte",
+          "description": "current_password should be the current valid password used to unlock the\ndaemon. When using REST, this field must be encoded as base64."
+        },
+        "new_password": {
+          "type": "string",
+          "format": "byte",
+          "description": "new_password should be the desired, new password used to unlock the\ndaemon. When using REST, this field must be encoded as base64."
+        },
+        "new_macaroon_root_key": {
+          "type": "boolean",
+          "description": "new_macaroon_root_key is an optional argument instructing the daemon to\nrotate the macaroon root key when set to true. This will invalidate all\npreviously generated macaroons."
+        }
+      }
+    },
+    "lanirpcChangePwdResponse": {
+      "type": "object"
+    },
+    "lanirpcLoginRequest": {
+      "type": "object",
+      "properties": {
+        "password": {
+          "type": "string",
+          "format": "byte",
+          "description": "The password should be the current valid password for the daemon. This\nwill be required to decrypt on-disk material that the daemon requires to\nfunction properly. When using REST, this field must be encoded as base64."
+        }
+      }
+    },
+    "lanirpcLoginResponse": {
+      "type": "object"
+    },
+    "lanirpcSetPwdRequest": {
+      "type": "object",
+      "properties": {
+        "password": {
+          "type": "string",
+          "format": "byte",
+          "description": "The password is the password that should be used to encrypt on-disk material \nthat the daemon requires to function properly. After creation, this\npassword is required to unlock the daemon. When using REST, this field\nmust be encoded as base64."
+        }
+      }
+    },
+    "lanirpcSetPwdResponse": {
+      "type": "object"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

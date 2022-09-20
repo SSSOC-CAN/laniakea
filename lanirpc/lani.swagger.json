@@ -1,0 +1,455 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "lani.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "Lani"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v1/admin/test": {
+      "get": {
+        "summary": "lanicli: `admin-test`\nAdminTest will send a string response if the proper macaroon is provided.",
+        "operationId": "Lani_AdminTest",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcAdminTestResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/bake/macaroon": {
+      "post": {
+        "summary": "lanicli: `bake-macaroon`\nBakeMacaroon will bake a new macaroon based on input permissions and constraints.",
+        "operationId": "Lani_BakeMacaroon",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcBakeMacaroonResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcBakeMacaroonRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/insert/roi": {
+      "get": {
+        "summary": "Deprecated! InsertROIMarker will no longer be supported",
+        "operationId": "Lani_InsertROIMarker",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/load/testplan": {
+      "get": {
+        "summary": "Deprecated! LoadTestPlan will no longer be supported",
+        "operationId": "Lani_LoadTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/set/pressure": {
+      "get": {
+        "summary": "Deprecated! SetPressure will now be a demo controller plugin which uses PluginAPI Command",
+        "operationId": "Lani_SetPressure",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/set/temperature": {
+      "get": {
+        "summary": "Deprecated! SetTemperature will now be a demo controller plugin which uses PluginAPI Command",
+        "operationId": "Lani_SetTemperature",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/start/recording": {
+      "get": {
+        "summary": "Deprecated! StartRecording is now /lanirpc.PluginAPI/StartRecord",
+        "operationId": "Lani_StartRecording",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/start/testplan": {
+      "get": {
+        "summary": "Deprecated! StartTestPlan will no longer be supported",
+        "operationId": "Lani_StartTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/stop": {
+      "post": {
+        "summary": "lanicli: `stop`\nStopDaemon will send a shutdown request to the interrupt handler, triggering\na graceful shutdown of the daemon.",
+        "operationId": "Lani_StopDaemon",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcStopResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcStopRequest"
+            }
+          }
+        ],
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/stop/recording": {
+      "get": {
+        "summary": "Deprecated! StopRecording is now /lanirpc.PluginAPI/StopRecord",
+        "operationId": "Lani_StopRecording",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/stop/testplan": {
+      "get": {
+        "summary": "Deprecated! StopTestPlan will no longer be supported",
+        "operationId": "Lani_StopTestPlan",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/subscribe/datastream": {
+      "get": {
+        "summary": "Deprecated! SubscribeDataStream is now /lanirpc.PluginAPI/Subscribe",
+        "operationId": "Lani_SubscribeDataStream",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    },
+    "/v1/test": {
+      "get": {
+        "summary": "lanicli: `test`\nTestCommand will send a string response regardless if a macaroon is provided or not.",
+        "operationId": "Lani_TestCommand",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcTestResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "Lani"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "lanirpcAdminTestResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string",
+          "title": "A short message indicating success or failure"
+        }
+      }
+    },
+    "lanirpcBakeMacaroonRequest": {
+      "type": "object",
+      "properties": {
+        "timeout": {
+          "type": "string",
+          "format": "int64",
+          "title": "The length of time for which this macaroon is valid"
+        },
+        "timeout_type": {
+          "$ref": "#/definitions/lanirpcTimeoutType",
+          "title": "The unit for the macaroon timeout. Choose from `SECOND`, `MINUTE`, `HOUR` or `DAY`"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/lanirpcMacaroonPermission"
+          },
+          "title": "The list of permissions the new macaroon should grant"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "The list of plugin names to be included in the macaroon"
+        }
+      }
+    },
+    "lanirpcBakeMacaroonResponse": {
+      "type": "object",
+      "properties": {
+        "macaroon": {
+          "type": "string",
+          "title": "The hex-encoded macaroon, serialized in binary format"
+        }
+      }
+    },
+    "lanirpcMacaroonPermission": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "type": "string",
+          "title": "The entity a permission grants access to"
+        },
+        "action": {
+          "type": "string",
+          "title": "The action that is granted"
+        }
+      }
+    },
+    "lanirpcStopRequest": {
+      "type": "object"
+    },
+    "lanirpcStopResponse": {
+      "type": "object"
+    },
+    "lanirpcTestResponse": {
+      "type": "object",
+      "properties": {
+        "msg": {
+          "type": "string",
+          "title": "A short message indicating success or failure"
+        }
+      }
+    },
+    "lanirpcTimeoutType": {
+      "type": "string",
+      "enum": [
+        "SECOND",
+        "MINUTE",
+        "HOUR",
+        "DAY"
+      ],
+      "default": "SECOND"
+    },
+    "protoEmpty": {
+      "type": "object"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

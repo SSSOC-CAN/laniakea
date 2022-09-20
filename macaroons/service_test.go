@@ -80,7 +80,7 @@ func TestNewService(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{})
+	service, err := InitService(*db, "laniakea", zerolog.Nop(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestValidateMacaroon(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd", zerolog.Nop(), valPluginNames)
+	service, err := InitService(*db, "laniakea", zerolog.Nop(), valPluginNames)
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestListMacaroonIDs(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{})
+	service, err := InitService(*db, "laniakea", zerolog.Nop(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestDeleteMacaroonID(t *testing.T) {
 	tempDir, db := createDummyRootKeyStore(t)
 	defer db.Close()
 	defer os.RemoveAll(tempDir)
-	service, err := InitService(*db, "fmtd", zerolog.Nop(), []string{})
+	service, err := InitService(*db, "laniakea", zerolog.Nop(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating new service: %v", err)
 	}

@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/07/07
+Last Date Changed: 2022/09/20
 */
 
 package plugins
@@ -19,8 +19,8 @@ import (
 
 	"github.com/SSSOC-CAN/fmtd/api"
 	e "github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/health"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/queue"
 	"github.com/SSSOC-CAN/fmtd/utils"
@@ -57,7 +57,7 @@ var (
 	defaultQueueSize                     = 10
 )
 
-func ChangeCfgExec(os string, cfgs []*fmtrpc.PluginConfig) []*fmtrpc.PluginConfig {
+func ChangeCfgExec(os string, cfgs []*lanirpc.PluginConfig) []*lanirpc.PluginConfig {
 	newCfgs := cfgs[:]
 	switch os {
 	case "windows":
@@ -73,9 +73,9 @@ func ChangeCfgExec(os string, cfgs []*fmtrpc.PluginConfig) []*fmtrpc.PluginConfi
 }
 
 type PluginManager struct {
-	fmtrpc.UnimplementedPluginAPIServer
+	lanirpc.UnimplementedPluginAPIServer
 	pluginDir      string
-	pluginCfgs     []*fmtrpc.PluginConfig
+	pluginCfgs     []*lanirpc.PluginConfig
 	logger         *PluginLogger
 	pluginRegistry map[string]*PluginInstance
 	queueManager   *queue.QueueManager
@@ -90,7 +90,7 @@ type PluginManager struct {
 var _ api.RestProxyService = (*PluginManager)(nil)
 
 // NewPluginManager takes a list of plugins, parses those plugin strings and instantiates a PluginManager
-func NewPluginManager(pluginDir string, pluginCfgs []*fmtrpc.PluginConfig, zl zerolog.Logger, noMacaroons bool) *PluginManager {
+func NewPluginManager(pluginDir string, pluginCfgs []*lanirpc.PluginConfig, zl zerolog.Logger, noMacaroons bool) *PluginManager {
 	l := NewPluginLogger("PLGN", &zl)
 	ql := l.zl.With().Str("subsystem", "QMGR").Logger()
 	return &PluginManager{
@@ -131,13 +131,13 @@ func (p *PluginManager) AddPermission(method string, ops []bakery.Op) error {
 
 // RegisterWithGrpcServer registers the PluginManager with the root gRPC server.
 func (p *PluginManager) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
-	fmtrpc.RegisterPluginAPIServer(grpcServer, p)
+	lanirpc.RegisterPluginAPIServer(grpcServer, p)
 	return nil
 }
 
 // RegisterWithRestProxy registers the RPC Server with the REST proxy
 func (p *PluginManager) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
-	err := fmtrpc.RegisterPluginAPIHandlerFromEndpoint(
+	err := lanirpc.RegisterPluginAPIHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
 	if err != nil {
@@ -176,7 +176,7 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 		case <-ticker.C:
 			for _, i := range p.pluginRegistry {
 				// if the plugin is in the unresponsive state, we will try to restart
-				if i.getState() == fmtrpc.PluginState_UNRESPONSIVE {
+				if i.getState() == lanirpc.PluginState_UNRESPONSIVE {
 					// check if the plugin has exceeded the maximum number of times it can timeout
 					if int64(i.getTimeoutCount()) >= i.cfg.MaxTimeouts {
 						p.logger.zl.Error().Msgf("Maximum timeouts reached for %v plugin, stopping plugin...", i.cfg.Name)
@@ -197,7 +197,7 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 						i.setStopped()
 					}
 					p.logger.zl.Info().Msgf("Restarting %v plugin...", i.cfg.Name)
-					_, err = p.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: i.cfg.Name})
+					_, err = p.StartPlugin(ctx, &lanirpc.PluginRequest{Name: i.cfg.Name})
 					if err != nil {
 						p.logger.zl.Error().Msgf("could not restart the %v plugin: %v", i.cfg.Name, err)
 						i.setUnresponsive()
@@ -211,16 +211,16 @@ func (p *PluginManager) monitorPlugins(ctx context.Context) {
 }
 
 // getPluginCodeFromType gets the rpc plugin code from the type
-func getPluginCodeFromType(typeStr string) (fmtrpc.Plugin_PluginType, error) {
+func getPluginCodeFromType(typeStr string) (lanirpc.Plugin_PluginType, error) {
 	var (
-		plug fmtrpc.Plugin_PluginType
+		plug lanirpc.Plugin_PluginType
 		err  error
 	)
 	switch typeStr {
 	case DATASOURCE_STR:
-		plug = fmtrpc.Plugin_DATASOURCE
+		plug = lanirpc.Plugin_DATASOURCE
 	case CONTROLLER_STR:
-		plug = fmtrpc.Plugin_CONTROLLER
+		plug = lanirpc.Plugin_CONTROLLER
 	default:
 		err = ErrInvalidPluginType
 	}
@@ -228,7 +228,7 @@ func getPluginCodeFromType(typeStr string) (fmtrpc.Plugin_PluginType, error) {
 }
 
 // createPluginInstance creates a new plugin instance from the given plugin name and type
-func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.PluginConfig) (*PluginInstance, error) {
+func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *lanirpc.PluginConfig) (*PluginInstance, error) {
 	// create new plugin clients
 	zLogger := p.logger.zl.With().Str("plugin", cfg.Name).Logger()
 	// assert plugin type
@@ -270,7 +270,7 @@ func (p *PluginManager) createPluginInstance(ctx context.Context, cfg *fmtrpc.Pl
 		startedAt:     time.Now(),
 		listeners:     make(map[string]*StateListener),
 	}
-	// push fmtd/laniakea version and get plugin version
+	// push laniakea version and get plugin version
 	err = newInstance.pushVersion(ctx)
 	if err != nil {
 		p.logger.zl.Debug().Msgf("could not push version to plugin: %v", err)
@@ -310,7 +310,7 @@ func (p *PluginManager) Stop() error {
 }
 
 // StartRecord is the PluginAPI command which exposes the StartRecord method of all registered datasource plugins
-func (p *PluginManager) StartRecord(ctx context.Context, req *fmtrpc.PluginRequest) (*proto.Empty, error) {
+func (p *PluginManager) StartRecord(ctx context.Context, req *lanirpc.PluginRequest) (*proto.Empty, error) {
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
@@ -324,7 +324,7 @@ func (p *PluginManager) StartRecord(ctx context.Context, req *fmtrpc.PluginReque
 }
 
 // StopRecord is the PluginAPI command which exposes the StopRecord method of all registered datasource plugins
-func (p *PluginManager) StopRecord(ctx context.Context, req *fmtrpc.PluginRequest) (*proto.Empty, error) {
+func (p *PluginManager) StopRecord(ctx context.Context, req *lanirpc.PluginRequest) (*proto.Empty, error) {
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
@@ -372,9 +372,9 @@ func (p *PluginManager) subscribeDataLoop(name string, wg sync.WaitGroup, dataQ 
 }
 
 // Subscribe is the PluginAPI command which exposes the data stream of any datasource plugin
-func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribeServer) error {
+func (p *PluginManager) Subscribe(req *lanirpc.PluginRequest, stream lanirpc.PluginAPI_SubscribeServer) error {
 	if !p.noMacaroons {
-		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Subscribe")
+		err := p.checkMacaroon(stream.Context(), req, "/lanirpc.PluginAPI/Subscribe")
 		if err != nil {
 			return status.Error(codes.PermissionDenied, err.Error())
 		}
@@ -468,14 +468,14 @@ func (p *PluginManager) Subscribe(req *fmtrpc.PluginRequest, stream fmtrpc.Plugi
 }
 
 // StartPlugin is the PluginAPI command to start an existiing plugin
-func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*proto.Empty, error) {
+func (p *PluginManager) StartPlugin(ctx context.Context, req *lanirpc.PluginRequest) (*proto.Empty, error) {
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
 	}
 	// check if plugin is stopped or killed
-	if instance.getState() != fmtrpc.PluginState_STOPPED && instance.getState() != fmtrpc.PluginState_KILLED {
+	if instance.getState() != lanirpc.PluginState_STOPPED && instance.getState() != lanirpc.PluginState_KILLED {
 		return nil, status.Error(codes.FailedPrecondition, e.ErrServiceAlreadyStarted.Error())
 	}
 	// create new plugin client
@@ -511,7 +511,7 @@ func (p *PluginManager) StartPlugin(ctx context.Context, req *fmtrpc.PluginReque
 }
 
 // StopPlugin is the PluginAPI command to stop a given plugin gracefully
-func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*proto.Empty, error) {
+func (p *PluginManager) StopPlugin(ctx context.Context, req *lanirpc.PluginRequest) (*proto.Empty, error) {
 	// get the plugin instance from the registry
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
@@ -527,7 +527,7 @@ func (p *PluginManager) StopPlugin(ctx context.Context, req *fmtrpc.PluginReques
 }
 
 // AddPlugin is the PluginAPI command to add a new plugin from a formatted plugin string
-func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig) (*fmtrpc.Plugin, error) {
+func (p *PluginManager) AddPlugin(ctx context.Context, req *lanirpc.PluginConfig) (*lanirpc.Plugin, error) {
 	// validate plugin config
 	err := ValidatePluginConfig(req, p.pluginDir, false)
 	if err != nil {
@@ -546,7 +546,7 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	p.pluginRegistry[req.Name] = newInstance
-	return &fmtrpc.Plugin{
+	return &lanirpc.Plugin{
 		Name:      newInstance.cfg.Name,
 		Type:      rpcPlugType,
 		State:     newInstance.getState(),
@@ -556,14 +556,14 @@ func (p *PluginManager) AddPlugin(ctx context.Context, req *fmtrpc.PluginConfig)
 }
 
 // ListPlugins is the PluginAPI command for listing all plugins in the plugin registry along with pertinent information about each one
-func (p *PluginManager) ListPlugins(ctx context.Context, _ *proto.Empty) (*fmtrpc.PluginsList, error) {
-	var plugins []*fmtrpc.Plugin
+func (p *PluginManager) ListPlugins(ctx context.Context, _ *proto.Empty) (*lanirpc.PluginsList, error) {
+	var plugins []*lanirpc.Plugin
 	for _, plug := range p.pluginRegistry {
 		plugType, err := getPluginCodeFromType(plug.cfg.Type)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
-		plugins = append(plugins, &fmtrpc.Plugin{
+		plugins = append(plugins, &lanirpc.Plugin{
 			Name:      plug.cfg.Name,
 			Type:      plugType,
 			State:     plug.getState(),
@@ -572,13 +572,13 @@ func (p *PluginManager) ListPlugins(ctx context.Context, _ *proto.Empty) (*fmtrp
 			Version:   plug.version,
 		})
 	}
-	return &fmtrpc.PluginsList{Plugins: plugins}, nil
+	return &lanirpc.PluginsList{Plugins: plugins}, nil
 }
 
 // Command is the PluginAPI command for sending an arbitrary amount of data to a controller service
-func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtrpc.PluginAPI_CommandServer) error {
+func (p *PluginManager) Command(req *lanirpc.ControllerPluginRequest, stream lanirpc.PluginAPI_CommandServer) error {
 	if !p.noMacaroons {
-		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/Command")
+		err := p.checkMacaroon(stream.Context(), req, "/lanirpc.PluginAPI/Command")
 		if err != nil {
 			return status.Error(codes.PermissionDenied, err.Error())
 		}
@@ -630,7 +630,7 @@ func (p *PluginManager) Command(req *fmtrpc.ControllerPluginRequest, stream fmtr
 }
 
 // GetPlugin will retrieve the plugin information for a given plugin if it exists
-func (p *PluginManager) GetPlugin(ctx context.Context, req *fmtrpc.PluginRequest) (*fmtrpc.Plugin, error) {
+func (p *PluginManager) GetPlugin(ctx context.Context, req *lanirpc.PluginRequest) (*lanirpc.Plugin, error) {
 	instance, ok := p.pluginRegistry[req.Name]
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, ErrUnregsiteredPlugin.Error())
@@ -639,7 +639,7 @@ func (p *PluginManager) GetPlugin(ctx context.Context, req *fmtrpc.PluginRequest
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	return &fmtrpc.Plugin{
+	return &lanirpc.Plugin{
 		Name:      instance.cfg.Name,
 		Type:      plugType,
 		State:     instance.getState(),
@@ -662,7 +662,7 @@ func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup,
 	}
 	defer unsub()
 	lastState := instance.getState()
-	stateQ.Push(&fmtrpc.PluginStateUpdate{
+	stateQ.Push(&lanirpc.PluginStateUpdate{
 		Name:  pluginName,
 		State: lastState,
 	})
@@ -670,7 +670,7 @@ func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup,
 		select {
 		case currentState := <-sigChan:
 			if currentState != lastState {
-				stateQ.Push(&fmtrpc.PluginStateUpdate{
+				stateQ.Push(&lanirpc.PluginStateUpdate{
 					Name:  pluginName,
 					State: currentState,
 				})
@@ -686,9 +686,9 @@ func (p *PluginManager) subscribeStateLoop(pluginName string, wg sync.WaitGroup,
 func (p *PluginManager) checkMacaroon(ctx context.Context, req interface{}, fullMethod string) error {
 	var pluginName string
 	switch request := req.(type) {
-	case *fmtrpc.PluginRequest:
+	case *lanirpc.PluginRequest:
 		pluginName = request.Name
-	case *fmtrpc.ControllerPluginRequest:
+	case *lanirpc.ControllerPluginRequest:
 		pluginName = request.Name
 	default:
 		return e.ErrInvalidRequestType
@@ -718,9 +718,9 @@ func (p *PluginManager) checkMacaroon(ctx context.Context, req interface{}, full
 }
 
 // SubscribePluginState implements the gRPC method of the same name. It subscribes a client to the given plugins state updates
-func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream fmtrpc.PluginAPI_SubscribePluginStateServer) error {
+func (p *PluginManager) SubscribePluginState(req *lanirpc.PluginRequest, stream lanirpc.PluginAPI_SubscribePluginStateServer) error {
 	if !p.noMacaroons {
-		err := p.checkMacaroon(stream.Context(), req, "/fmtrpc.PluginAPI/SubscribePluginState")
+		err := p.checkMacaroon(stream.Context(), req, "/lanirpc.PluginAPI/SubscribePluginState")
 		if err != nil {
 			return status.Error(codes.PermissionDenied, err.Error())
 		}
@@ -758,7 +758,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 				for i := 0; i < qLength-1; i++ {
 					inter := stateQ.Pop()
 					if inter != nil {
-						update := inter.(*fmtrpc.PluginStateUpdate)
+						update := inter.(*lanirpc.PluginStateUpdate)
 						if err := stream.Send(update); err != nil {
 							return err
 						}
@@ -797,7 +797,7 @@ func (p *PluginManager) SubscribePluginState(req *fmtrpc.PluginRequest, stream f
 			for i := 0; i < qLength-1; i++ {
 				inter := stateQ.Pop()
 				if inter != nil {
-					update := inter.(*fmtrpc.PluginStateUpdate)
+					update := inter.(*lanirpc.PluginStateUpdate)
 					if err := stream.Send(update); err != nil {
 						return err
 					}
