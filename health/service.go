@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -22,7 +22,7 @@ var (
 )
 
 type HealthService struct {
-	fmtrpc.UnimplementedHealthServer
+	lanirpc.UnimplementedHealthServer
 	registeredServices map[string]RegisteredHealthService
 }
 
@@ -35,13 +35,13 @@ func NewHealthService() *HealthService {
 
 // RegisterWithGrpcServer registers the health service with the gRPC server
 func (h *HealthService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
-	fmtrpc.RegisterHealthServer(grpcServer, h)
+	lanirpc.RegisterHealthServer(grpcServer, h)
 	return nil
 }
 
 // RegisterWithRestProxy registers the health service with the REST proxy server
 func (h *HealthService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
-	return fmtrpc.RegisterHealthHandlerFromEndpoint(
+	return lanirpc.RegisterHealthHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
 }
@@ -56,31 +56,31 @@ func (h *HealthService) RegisterHealthService(name string, s RegisteredHealthSer
 }
 
 // Check is the gRPC command to perform the health check on given API and plugin services
-func (h *HealthService) Check(ctx context.Context, req *fmtrpc.HealthRequest) (*fmtrpc.HealthResponse, error) {
+func (h *HealthService) Check(ctx context.Context, req *lanirpc.HealthRequest) (*lanirpc.HealthResponse, error) {
 	if req.Service == "" || req.Service == "all" {
 		// perform health checks on all registered services
-		statuses := []*fmtrpc.HealthUpdate{}
+		statuses := []*lanirpc.HealthUpdate{}
 		for name, service := range h.registeredServices {
 			newCtx, _ := context.WithTimeout(ctx, defaultCheckTimeout)
 			errChan := make(chan error)
 			go func(errChan chan error) {
 				errChan <- service.Ping(newCtx)
 			}(errChan)
-			status := &fmtrpc.HealthUpdate{
+			status := &lanirpc.HealthUpdate{
 				Name:  name,
-				State: fmtrpc.HealthUpdate_SERVING,
+				State: lanirpc.HealthUpdate_SERVING,
 			}
 			select {
 			case err := <-errChan:
 				if err != nil {
-					status.State = fmtrpc.HealthUpdate_NOT_SERVING
+					status.State = lanirpc.HealthUpdate_NOT_SERVING
 				}
 			case <-newCtx.Done():
-				status.State = fmtrpc.HealthUpdate_UNKNOWN
+				status.State = lanirpc.HealthUpdate_UNKNOWN
 			}
 			statuses = append(statuses, status)
 		}
-		return &fmtrpc.HealthResponse{
+		return &lanirpc.HealthResponse{
 			Status: statuses,
 		}, nil
 	}
@@ -93,17 +93,17 @@ func (h *HealthService) Check(ctx context.Context, req *fmtrpc.HealthRequest) (*
 	go func(errChan chan error) {
 		errChan <- service.Ping(newCtx)
 	}(errChan)
-	status := &fmtrpc.HealthUpdate{
+	status := &lanirpc.HealthUpdate{
 		Name:  req.Service,
-		State: fmtrpc.HealthUpdate_SERVING,
+		State: lanirpc.HealthUpdate_SERVING,
 	}
 	select {
 	case err := <-errChan:
 		if err != nil {
-			status.State = fmtrpc.HealthUpdate_NOT_SERVING
+			status.State = lanirpc.HealthUpdate_NOT_SERVING
 		}
 	case <-newCtx.Done():
-		status.State = fmtrpc.HealthUpdate_UNKNOWN
+		status.State = lanirpc.HealthUpdate_UNKNOWN
 	}
-	return &fmtrpc.HealthResponse{Status: []*fmtrpc.HealthUpdate{status}}, nil
+	return &lanirpc.HealthResponse{Status: []*lanirpc.HealthUpdate{status}}, nil
 }

@@ -12,9 +12,9 @@ GOINSTALL := GO111MODULE=on go install -v
 # ============
 
 build:
-	$(GOBUILD) -tags="${tags}" -o fmtd-debug $(PKG)/cmd/fmtd
-	$(GOBUILD) -tags="${tags}" -o fmtcli-debug $(PKG)/cmd/fmtcli
+	$(GOBUILD) -tags="${tags}" -o laniakea-debug $(PKG)/cmd/laniakea
+	$(GOBUILD) -tags="${tags}" -o lanicli-debug $(PKG)/cmd/lanicli
 
 install:
-	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/fmtd
-	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/fmtcli
+	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/laniakea
+	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/lanicli

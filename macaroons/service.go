@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
@@ -53,14 +53,14 @@ const (
 
 var (
 	knownPluginMethods = []string{
-		"/fmtrpc.PluginAPI/StartRecord",
-		"/fmtrpc.PluginAPI/StopRecord",
-		"/fmtrpc.PluginAPI/Subscribe",
-		"/fmtrpc.PluginAPI/StartPlugin",
-		"/fmtrpc.PluginAPI/StopPlugin",
-		"/fmtrpc.PluginAPI/Command",
-		"/fmtrpc.PluginAPI/GetPlugin",
-		"/fmtrpc.PluginAPI/SubscribePluginState",
+		"/lanirpc.PluginAPI/StartRecord",
+		"/lanirpc.PluginAPI/StopRecord",
+		"/lanirpc.PluginAPI/Subscribe",
+		"/lanirpc.PluginAPI/StartPlugin",
+		"/lanirpc.PluginAPI/StopPlugin",
+		"/lanirpc.PluginAPI/Command",
+		"/lanirpc.PluginAPI/GetPlugin",
+		"/lanirpc.PluginAPI/SubscribePluginState",
 	}
 )
 

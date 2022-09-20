@@ -1,0 +1,11 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/09/20
+
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: lanirpc.Health.Check
+      get: "/v2/health/check/{service}"

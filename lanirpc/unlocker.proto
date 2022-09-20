@@ -1,0 +1,75 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
+syntax = "proto3";
+
+package lanirpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/lanirpc";
+
+service Unlocker{
+    /* lanicli: `login`
+    Login will prompt the user to provide a password and send the response to the unlocker service for authentication.
+    */
+    rpc Login (LoginRequest) returns (LoginResponse);
+    /* lanicli: `setpassword`
+    SetPassword prompts the user to set a password on first startup if no password has already been set.
+    */
+    rpc SetPassword (SetPwdRequest) returns (SetPwdResponse);
+    /* lanicli: `changepassword`
+    ChangePassword prompts the user to enter the current password and enter a new password.
+    */
+    rpc ChangePassword (ChangePwdRequest) returns (ChangePwdResponse);
+}
+
+message LoginRequest {
+    /*
+    The password should be the current valid password for the daemon. This
+    will be required to decrypt on-disk material that the daemon requires to
+    function properly. When using REST, this field must be encoded as base64.
+    */
+    bytes password = 1;
+}
+
+message LoginResponse {
+}
+
+message SetPwdRequest {
+    /*
+    The password is the password that should be used to encrypt on-disk material 
+    that the daemon requires to function properly. After creation, this
+    password is required to unlock the daemon. When using REST, this field
+    must be encoded as base64.
+    */
+    bytes password = 1;
+}
+
+message SetPwdResponse {
+}
+
+message ChangePwdRequest {
+    /*
+    current_password should be the current valid password used to unlock the
+    daemon. When using REST, this field must be encoded as base64.
+    */
+    bytes current_password = 1;
+
+    /*
+    new_password should be the desired, new password used to unlock the
+    daemon. When using REST, this field must be encoded as base64.
+    */
+    bytes new_password = 2;
+
+    /*
+    new_macaroon_root_key is an optional argument instructing the daemon to
+    rotate the macaroon root key when set to true. This will invalidate all
+    previously generated macaroons.
+    */
+    bool new_macaroon_root_key = 3;
+}
+
+message ChangePwdResponse {
+}

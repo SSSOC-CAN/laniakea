@@ -1,0 +1,54 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/19
+*/
+
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/SSSOC-CAN/laniakea-plugin-sdk/proto";
+
+service Datasource {
+    // StartRecord starts the data recording process for a given plugin.
+    rpc StartRecord(Empty) returns (stream Frame);
+    // StopRecord stops the data recording process but does not shut down the plugin.
+    rpc StopRecord(Empty) returns (Empty);
+    // Stop stops the data recording process if the plugin is recording and prepares it for a graceful shutdown.
+    rpc Stop(Empty) returns (Empty);
+    // PushVersion pushes the version of Laniakea to the plugin.
+    rpc PushVersion(VersionNumber) returns (Empty);
+    // GetVersion retrieves the version number from the plugin.
+    rpc GetVersion(Empty) returns (VersionNumber);
+}
+
+service Controller {
+    // Stop stops any plugin subprocesses and prepares it for a graceful shutdown.
+    rpc Stop(Empty) returns (Empty);
+    // Command sends a command in byte format to the plugin to initiate a process. It allows a stream of data to be returned.
+    rpc Command(Frame) returns (stream Frame);
+    // PushVersion pushes the version of Laniakea to the plugin.
+    rpc PushVersion(VersionNumber) returns (Empty);
+    // GetVersion retrieves the version number from the plugin.
+    rpc GetVersion(Empty) returns (VersionNumber);
+}
+
+message Empty {}
+message Frame {
+    // The name of the source of this Frame
+    string source = 1;
+
+    // A MIME-like type indicating the kind of content within the payload field
+    string type = 2;
+
+    // The UNIX millisecond timestamp of this frame
+    int64 timestamp = 3;
+
+    // The actual payload data in bytes. Limit is 2^32
+    bytes payload = 4;
+}
+message VersionNumber {
+    // version number string
+    string version = 1;
+}

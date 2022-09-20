@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 */
 
 package unlocker
@@ -17,8 +17,8 @@ import (
 	"testing"
 
 	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/btcsuite/btcwallet/snacl"
@@ -155,10 +155,10 @@ func TestCommands(t *testing.T) {
 		t.Errorf("Failed to dial bufnet: %v", err)
 	}
 	defer conn.Close()
-	client := fmtrpc.NewUnlockerClient(conn)
+	client := lanirpc.NewUnlockerClient(conn)
 	// Login before setting password
-	t.Run("fmtcli login pre-pwd-set", func(t *testing.T) {
-		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
+	t.Run("lanicli login pre-pwd-set", func(t *testing.T) {
+		resp, err := client.Login(ctx, &lanirpc.LoginRequest{
 			Password: defaultTestPassword,
 		})
 		st, ok := status.FromError(err)
@@ -171,8 +171,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// ChangePassword before setting password
-	t.Run("fmtcli changepassword pre-pwd-set", func(t *testing.T) {
-		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
+	t.Run("lanicli changepassword pre-pwd-set", func(t *testing.T) {
+		resp, err := client.ChangePassword(ctx, &lanirpc.ChangePwdRequest{
 			CurrentPassword:    defaultTestPassword,
 			NewPassword:        []byte("password123"),
 			NewMacaroonRootKey: false,
@@ -187,8 +187,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// SetPassword
-	t.Run("fmtcli setpassword", func(t *testing.T) {
-		resp, err := client.SetPassword(ctx, &fmtrpc.SetPwdRequest{
+	t.Run("lanicli setpassword", func(t *testing.T) {
+		resp, err := client.SetPassword(ctx, &lanirpc.SetPwdRequest{
 			Password: defaultTestPassword,
 		})
 		if err != nil {
@@ -197,8 +197,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// SetPassword invalid
-	t.Run("fmtcli setpassword invalid", func(t *testing.T) {
-		resp, err := client.SetPassword(ctx, &fmtrpc.SetPwdRequest{
+	t.Run("lanicli setpassword invalid", func(t *testing.T) {
+		resp, err := client.SetPassword(ctx, &lanirpc.SetPwdRequest{
 			Password: defaultTestPassword,
 		})
 		st, ok := status.FromError(err)
@@ -211,8 +211,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// Login wrong password
-	t.Run("fmtcli login wrong-pwd", func(t *testing.T) {
-		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
+	t.Run("lanicli login wrong-pwd", func(t *testing.T) {
+		resp, err := client.Login(ctx, &lanirpc.LoginRequest{
 			Password: []byte("wrongpassword"),
 		})
 		st, ok := status.FromError(err)
@@ -225,8 +225,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// Login
-	t.Run("fmtcli login", func(t *testing.T) {
-		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
+	t.Run("lanicli login", func(t *testing.T) {
+		resp, err := client.Login(ctx, &lanirpc.LoginRequest{
 			Password: defaultTestPassword,
 		})
 		if err != nil {
@@ -235,8 +235,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// ChangePassword don't remove macaroons
-	t.Run("fmtcli changepassword keep-macs", func(t *testing.T) {
-		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
+	t.Run("lanicli changepassword keep-macs", func(t *testing.T) {
+		resp, err := client.ChangePassword(ctx, &lanirpc.ChangePwdRequest{
 			CurrentPassword:    defaultTestPassword,
 			NewPassword:        []byte("password123"),
 			NewMacaroonRootKey: false,
@@ -255,8 +255,8 @@ func TestCommands(t *testing.T) {
 		}
 	})
 	// Login again
-	t.Run("fmtcli login wrong password", func(t *testing.T) {
-		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
+	t.Run("lanicli login wrong password", func(t *testing.T) {
+		resp, err := client.Login(ctx, &lanirpc.LoginRequest{
 			Password: defaultTestPassword,
 		})
 		st, ok := status.FromError(err)
@@ -269,8 +269,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// Login again
-	t.Run("fmtcli login again", func(t *testing.T) {
-		resp, err := client.Login(ctx, &fmtrpc.LoginRequest{
+	t.Run("lanicli login again", func(t *testing.T) {
+		resp, err := client.Login(ctx, &lanirpc.LoginRequest{
 			Password: []byte("password123"),
 		})
 		if err != nil {
@@ -279,8 +279,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// Changepassword wrong password
-	t.Run("fmtcli changepassword wrong password", func(t *testing.T) {
-		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
+	t.Run("lanicli changepassword wrong password", func(t *testing.T) {
+		resp, err := client.ChangePassword(ctx, &lanirpc.ChangePwdRequest{
 			CurrentPassword:    defaultTestPassword,
 			NewPassword:        []byte("password123"),
 			NewMacaroonRootKey: false,
@@ -295,8 +295,8 @@ func TestCommands(t *testing.T) {
 		t.Log(resp)
 	})
 	// Changepassword erase macs
-	t.Run("fmtcli changepassword yeet-macs", func(t *testing.T) {
-		resp, err := client.ChangePassword(ctx, &fmtrpc.ChangePwdRequest{
+	t.Run("lanicli changepassword yeet-macs", func(t *testing.T) {
+		resp, err := client.ChangePassword(ctx, &lanirpc.ChangePwdRequest{
 			CurrentPassword:    []byte("password123"),
 			NewPassword:        defaultTestPassword,
 			NewMacaroonRootKey: true,

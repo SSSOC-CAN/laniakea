@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/07/08
+Last Date Changed: 2022/09/20
 */
 
 package plugins
@@ -25,7 +25,7 @@ import (
 
 	"github.com/SSSOC-CAN/fmtd/cert"
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
@@ -43,13 +43,13 @@ var (
 )
 
 // initPluginManager will init the plugin manager
-func initPluginManager(t *testing.T, pluginDir string, cfgs []*fmtrpc.PluginConfig) *PluginManager {
+func initPluginManager(t *testing.T, pluginDir string, cfgs []*lanirpc.PluginConfig) *PluginManager {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
 	return NewPluginManager(pluginDir, cfgs, logger, true)
 }
 
 var (
-	restProxyCfgs = []*fmtrpc.PluginConfig{
+	restProxyCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:        "test-plugin",
 			Type:        DATASOURCE_STR,
@@ -101,7 +101,7 @@ func TestRegisterWithRestProxy(t *testing.T) {
 }
 
 // initTestingSetup
-func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginConfig) (*PluginManager, fmtrpc.PluginAPIClient, func()) {
+func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*lanirpc.PluginConfig) (*PluginManager, lanirpc.PluginAPIClient, func()) {
 	lis = bufconn.Listen(bufSize)
 	grpcServer := grpc.NewServer()
 	pluginDir := getPluginDir(t)
@@ -121,7 +121,7 @@ func initTestingSetup(t *testing.T, ctx context.Context, cfgs []*fmtrpc.PluginCo
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
-	client := fmtrpc.NewPluginAPIClient(conn)
+	client := lanirpc.NewPluginAPIClient(conn)
 	cleanUp := func() {
 		grpcServer.Stop()
 		pluginManager.Stop()
@@ -142,7 +142,7 @@ var (
 	versionPluginExecName = "test_version_plugin"
 	ctrlPluginExecName    = "test_ctrl_plugin"
 	startPluginDir        = "plugins/_testing"
-	startDuplicateCfgs    = []*fmtrpc.PluginConfig{
+	startDuplicateCfgs    = []*lanirpc.PluginConfig{
 		{
 			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
@@ -158,7 +158,7 @@ var (
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 	}
-	startInvalidTypeCfgs = []*fmtrpc.PluginConfig{
+	startInvalidTypeCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
@@ -174,7 +174,7 @@ var (
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 	}
-	startInvalidVersionCfgs = []*fmtrpc.PluginConfig{
+	startInvalidVersionCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
@@ -190,7 +190,7 @@ var (
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 	}
-	startValidCfgs = []*fmtrpc.PluginConfig{
+	startValidCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
@@ -270,28 +270,28 @@ func TestStartPluginManager(t *testing.T) {
 var (
 	bufSize      = 1 * 1024 * 1024
 	lis          *bufconn.Listener
-	rngPluginCfg = &fmtrpc.PluginConfig{
+	rngPluginCfg = &lanirpc.PluginConfig{
 		Name:        rngPluginName,
 		Type:        DATASOURCE_STR,
 		ExecName:    rngPluginExecName,
 		Timeout:     defaultPluginTimeout,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
-	timeoutPluginCfg = &fmtrpc.PluginConfig{
+	timeoutPluginCfg = &lanirpc.PluginConfig{
 		Name:        timeoutPluginName,
 		Type:        DATASOURCE_STR,
 		ExecName:    timeoutPluginExecName,
 		Timeout:     15,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
-	errPluginCfg = &fmtrpc.PluginConfig{
+	errPluginCfg = &lanirpc.PluginConfig{
 		Name:        errPluginName,
 		Type:        DATASOURCE_STR,
 		ExecName:    errPluginExecName,
 		Timeout:     15,
 		MaxTimeouts: defaultPluginMaxTimeouts,
 	}
-	datasourceCfgs = []*fmtrpc.PluginConfig{
+	datasourceCfgs = []*lanirpc.PluginConfig{
 		rngPluginCfg,
 		timeoutPluginCfg,
 		errPluginCfg,
@@ -309,7 +309,7 @@ func TestDatasourcePlugin(t *testing.T) {
 	pluginManager, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, datasourceCfgs))
 	defer cleanUp()
 	t.Run("start record-plugin not registered", func(t *testing.T) {
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: "invalid-plugin"})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartRecord gRPC method: %v", err)
@@ -325,7 +325,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 		rngPlugin.setBusy()
 		defer rngPlugin.setReady()
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartRecord gRPC method: %v", err)
@@ -341,7 +341,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 		rngPlugin.setRecording()
 		defer rngPlugin.setNotRecording()
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartRecord gRPC method: %v", err)
@@ -351,7 +351,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start record-plugin error", func(t *testing.T) {
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartRecord gRPC method: %v", err)
@@ -360,56 +360,56 @@ func TestDatasourcePlugin(t *testing.T) {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		// check if the plugin state is Unknown
-		if plug := pluginManager.pluginRegistry[errPluginName]; plug.getState() != fmtrpc.PluginState_UNKNOWN {
+		if plug := pluginManager.pluginRegistry[errPluginName]; plug.getState() != lanirpc.PluginState_UNKNOWN {
 			t.Errorf("Unexpected plugin state after error when StartRecord: %v", plug.getState())
 		}
 	})
 	t.Run("start record-plugin timeout", func(t *testing.T) {
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		plug := pluginManager.pluginRegistry[timeoutPluginName]
 		// Sleep until the plugin has timed out
-		time.Sleep(time.Duration(plug.cfg.Timeout+6) * time.Second)
-		if plug.getState() != fmtrpc.PluginState_UNRESPONSIVE {
+		time.Sleep(time.Duration(plug.cfg.Timeout+5) * time.Second)
+		if plug.getState() != lanirpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Plugin in unexpected state after timing out: %v", plug.getState())
 		}
 		// Wait 10 more seconds and plugin manager should restart the plugin
 		time.Sleep(10 * time.Second)
-		if plug.getState() != fmtrpc.PluginState_READY {
+		if plug.getState() != lanirpc.PluginState_READY {
 			t.Errorf("Plugin in unexpected state after timeout restart: %v", plug.getState())
 		} else if plug.getTimeoutCount() != 1 {
 			t.Errorf("Plugin timeout counter unexpected value: %v", plug.getTimeoutCount())
 		}
 		// now we make the plugin timeout 2 more times to confirm it gets killed
 		for i := 0; i < int(plug.cfg.MaxTimeouts); i++ {
-			_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+			_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 			if err != nil {
 				t.Errorf("Unexpected error when calling StartRecord: %v", err)
 			}
 			time.Sleep(time.Duration(plug.cfg.Timeout+16) * time.Second)
 		}
-		if plug.getState() != fmtrpc.PluginState_KILLED {
+		if plug.getState() != lanirpc.PluginState_KILLED {
 			t.Errorf("Plugin in unexpected state after reaching max timeouts: %v timeout counter: %v", plug.getState(), plug.getTimeoutCount())
 		} else if plug.getTimeoutCount() != int(plug.cfg.MaxTimeouts) {
 			t.Errorf("Plugin timeout counter unexpected value: %v", plug.getTimeoutCount())
 		}
 	})
 	t.Run("start record-rng plugin", func(t *testing.T) {
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		defer func() {
-			_, _ = client.StopRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+			_, _ = client.StopRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		}()
 		var wg sync.WaitGroup
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				stream, err := client.Subscribe(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+				stream, err := client.Subscribe(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 				if err != nil {
 					t.Errorf("Unexpected error when calling Susbcribe: %v", err)
 				}
@@ -429,7 +429,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		wg.Wait()
 	})
 	t.Run("start plugin-unregistered plugin", func(t *testing.T) {
-		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
+		_, err := client.StartPlugin(ctx, &lanirpc.PluginRequest{Name: "invalid-plugin"})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
@@ -439,7 +439,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start plugin-invalid plugin state", func(t *testing.T) {
-		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
+		_, err := client.StartPlugin(ctx, &lanirpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
@@ -456,7 +456,7 @@ func TestDatasourcePlugin(t *testing.T) {
 			plug.cfg.Type = DATASOURCE_STR
 			plug.setReady()
 		}()
-		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
+		_, err := client.StartPlugin(ctx, &lanirpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
@@ -467,13 +467,13 @@ func TestDatasourcePlugin(t *testing.T) {
 	})
 	t.Run("start plugin-valid", func(t *testing.T) {
 		time.Sleep(1 * time.Second)
-		_, err := client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		_, err := client.StartPlugin(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartPlugin: %v", err)
 		}
 	})
 	t.Run("stop plugin-unregistered plugin", func(t *testing.T) {
-		_, err := client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: "invalid-plugin"})
+		_, err := client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: "invalid-plugin"})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StartPlugin gRPC method: %v", err)
@@ -483,13 +483,13 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("stop plugin-valid", func(t *testing.T) {
-		_, err := client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		_, err := client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
 		}
 	})
 	t.Run("stop plugin-plugin already stopped", func(t *testing.T) {
-		_, err := client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		_, err := client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StopPlugin gRPC method: %v", err)
@@ -502,7 +502,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		plug := pluginManager.pluginRegistry[timeoutPluginName]
 		plug.setReady()
 		defer plug.setKilled()
-		_, err := client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		_, err := client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error type coming from StopPlugin gRPC method: %v", err)
@@ -512,11 +512,11 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 	})
 	t.Run("start record-timeout while streaming", func(t *testing.T) {
-		_, err := client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err := client.StartRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
-		stream, err := client.Subscribe(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		stream, err := client.Subscribe(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling Susbcribe: %v", err)
 		}
@@ -540,11 +540,11 @@ func TestDatasourcePlugin(t *testing.T) {
 		plug.setUnresponsive()
 		wg.Wait()
 		time.Sleep(3 * time.Second)
-		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err = client.StartRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
-		stream, err = client.Subscribe(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		stream, err = client.Subscribe(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling Susbcribe: %v", err)
 		}
@@ -563,7 +563,7 @@ func TestDatasourcePlugin(t *testing.T) {
 			}
 		}()
 		time.Sleep(5 * time.Second)
-		_, err = client.StopRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err = client.StopRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StopRecord: %v", err)
 		}
@@ -572,7 +572,7 @@ func TestDatasourcePlugin(t *testing.T) {
 }
 
 var (
-	addPluginCfgs = []*fmtrpc.PluginConfig{
+	addPluginCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:        rngPluginName,
 			Type:        DATASOURCE_STR,
@@ -588,10 +588,10 @@ var (
 			MaxTimeouts: defaultPluginMaxTimeouts,
 		},
 	}
-	invalidPlugNameCfg = &fmtrpc.PluginConfig{
+	invalidPlugNameCfg = &lanirpc.PluginConfig{
 		Name: "not.asd$vaslidplugin",
 	}
-	invalidPlugExecCfgs = []*fmtrpc.PluginConfig{
+	invalidPlugExecCfgs = []*lanirpc.PluginConfig{
 		{
 			Name:     "test-plugin",
 			ExecName: "nasdnf$.exe",
@@ -601,22 +601,22 @@ var (
 			ExecName: "nasdnf_asQfd123.ex_e",
 		},
 	}
-	invalidPlugTypeCfg = &fmtrpc.PluginConfig{
+	invalidPlugTypeCfg = &lanirpc.PluginConfig{
 		Name:     "test-plugin",
 		ExecName: "test_plugin",
 		Type:     "not-a-valid-plugin-type",
 	}
-	invalidPlugNoFileCfg = &fmtrpc.PluginConfig{
+	invalidPlugNoFileCfg = &lanirpc.PluginConfig{
 		Name:     "test-plugin",
 		ExecName: "test_plugin",
 		Type:     DATASOURCE_STR,
 	}
-	invalidPlugAlreadyExistsCfg = &fmtrpc.PluginConfig{
+	invalidPlugAlreadyExistsCfg = &lanirpc.PluginConfig{
 		Name:     rngPluginName,
 		ExecName: rngPluginExecName,
 		Type:     DATASOURCE_STR,
 	}
-	validAddPlugin = &fmtrpc.PluginConfig{
+	validAddPlugin = &lanirpc.PluginConfig{
 		Name:        errPluginName,
 		Type:        DATASOURCE_STR,
 		ExecName:    errPluginExecName,
@@ -695,18 +695,18 @@ func TestPluginAPI(t *testing.T) {
 			t.Errorf("Unexpected plugin name mismatch: expected %v got %v", validAddPlugin.Name, resp.Name)
 		} else if resp.Type != plugType {
 			t.Errorf("Unexpected plugin type mismatch: expected %v got %v", plugType, resp.Type)
-		} else if resp.State != fmtrpc.PluginState_READY {
-			t.Errorf("Unexpected plugin state mismatch: expected %v got %v", fmtrpc.PluginState_READY, resp.State)
+		} else if resp.State != lanirpc.PluginState_READY {
+			t.Errorf("Unexpected plugin state mismatch: expected %v got %v", lanirpc.PluginState_READY, resp.State)
 		}
 	})
 }
 
 var (
 	getPluginCfgs         = datasourceCfgs
-	getPluginUnregistered = &fmtrpc.PluginRequest{
+	getPluginUnregistered = &lanirpc.PluginRequest{
 		Name: "not-a-registered-plugin",
 	}
-	getPluginValid = &fmtrpc.PluginRequest{
+	getPluginValid = &lanirpc.PluginRequest{
 		Name: errPluginName,
 	}
 )
@@ -747,7 +747,7 @@ func TestGetPlugins(t *testing.T) {
 		if err != nil {
 			t.Errorf("Unexpected error when calling ListPlugins: %v", err)
 		}
-		plugCfgMap := map[string]*fmtrpc.PluginConfig{
+		plugCfgMap := map[string]*lanirpc.PluginConfig{
 			rngPluginName:     rngPluginCfg,
 			errPluginName:     errPluginCfg,
 			timeoutPluginName: timeoutPluginCfg,
@@ -772,14 +772,14 @@ func TestGetPlugins(t *testing.T) {
 }
 
 var (
-	ctrlPluginCfg = &fmtrpc.PluginConfig{
+	ctrlPluginCfg = &lanirpc.PluginConfig{
 		Name:        ctrlPluginName,
 		Type:        CONTROLLER_STR,
 		ExecName:    ctrlPluginExecName,
 		Timeout:     10,
 		MaxTimeouts: 3,
 	}
-	controllerCfgs = []*fmtrpc.PluginConfig{
+	controllerCfgs = []*lanirpc.PluginConfig{
 		ctrlPluginCfg,
 	}
 )
@@ -790,7 +790,7 @@ func TestControllerPlugin(t *testing.T) {
 	pluginManager, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, controllerCfgs))
 	defer cleanUp()
 	t.Run("command-unregistered plugin", func(t *testing.T) {
-		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: "unregistered-plugin"})
+		stream, err := client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: "unregistered-plugin"})
 		if err == nil {
 			_, err = stream.Recv()
 			st, ok := status.FromError(err)
@@ -814,7 +814,7 @@ func TestControllerPlugin(t *testing.T) {
 		plug := pluginManager.pluginRegistry[ctrlPluginName]
 		plug.setBusy()
 		defer plug.setReady()
-		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName})
+		stream, err := client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: ctrlPluginName})
 		if err == nil {
 			_, err = stream.Recv()
 			st, ok := status.FromError(err)
@@ -835,7 +835,7 @@ func TestControllerPlugin(t *testing.T) {
 		}
 	})
 	t.Run("command-empty frame", func(t *testing.T) {
-		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{}})
+		stream, err := client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{}})
 		if err == nil {
 			_, err = stream.Recv()
 			st, ok := status.FromError(err)
@@ -868,7 +868,7 @@ func TestControllerPlugin(t *testing.T) {
 		if err != nil {
 			t.Errorf("Could not format request payload: %v", err)
 		}
-		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+		stream, err := client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
 			Source:    "client",
 			Type:      "application/json",
 			Timestamp: time.Now().UnixMilli(),
@@ -902,7 +902,7 @@ func TestControllerPlugin(t *testing.T) {
 		if err != nil {
 			t.Errorf("Could not format request payload: %v", err)
 		}
-		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+		stream, err := client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
 			Source:    "client",
 			Type:      "application/json",
 			Timestamp: time.Now().UnixMilli(),
@@ -927,7 +927,7 @@ func TestControllerPlugin(t *testing.T) {
 			}
 		}()
 		time.Sleep(5 * time.Second)
-		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: ctrlPluginName})
+		_, err = client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: ctrlPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StopPlugin: %v", err)
 		}
@@ -945,7 +945,7 @@ func TestControllerPlugin(t *testing.T) {
 		if err != nil {
 			t.Errorf("Could not format request payload: %v", err)
 		}
-		stream, err := client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+		stream, err := client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
 			Source:    "client",
 			Type:      "application/json",
 			Timestamp: time.Now().UnixMilli(),
@@ -974,7 +974,7 @@ func TestControllerPlugin(t *testing.T) {
 		plug.setUnresponsive()
 		wg.Wait()
 		time.Sleep(10 * time.Second)
-		stream, err = client.Command(ctx, &fmtrpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
+		stream, err = client.Command(ctx, &lanirpc.ControllerPluginRequest{Name: ctrlPluginName, Frame: &proto.Frame{
 			Source:    "client",
 			Type:      "application/json",
 			Timestamp: time.Now().UnixMilli(),
@@ -998,7 +998,7 @@ func TestControllerPlugin(t *testing.T) {
 			}
 		}()
 		time.Sleep(5 * time.Second)
-		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: ctrlPluginName})
+		_, err = client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: ctrlPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error occured when calling StopPlugin gRPC function: %v", err)
 		}
@@ -1016,7 +1016,7 @@ func TestSubscribePluginState(t *testing.T) {
 	pluginManager, client, cleanUp := initTestingSetup(t, ctx, ChangeCfgExec(runtime.GOOS, subStateCfgs))
 	defer cleanUp()
 	t.Run("individual-unregistered plugin", func(t *testing.T) {
-		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: "not-a-registered-plugin"})
+		stream, err := client.SubscribePluginState(ctx, &lanirpc.PluginRequest{Name: "not-a-registered-plugin"})
 		if err == nil {
 			_, err := stream.Recv()
 			st, ok := status.FromError(err)
@@ -1037,7 +1037,7 @@ func TestSubscribePluginState(t *testing.T) {
 		}
 	})
 	t.Run("individual-busy", func(t *testing.T) {
-		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		stream, err := client.SubscribePluginState(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
 		}
@@ -1050,29 +1050,29 @@ func TestSubscribePluginState(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+			if stateUpdate.State != lanirpc.PluginState_BUSY {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_READY {
+			if stateUpdate.State != lanirpc.PluginState_READY {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 		}()
-		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err = client.StartRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		wg.Wait()
-		_, err = client.StopRecord(ctx, &fmtrpc.PluginRequest{Name: rngPluginName})
+		_, err = client.StopRecord(ctx, &lanirpc.PluginRequest{Name: rngPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StopRecord: %v", err)
 		}
 	})
 	t.Run("individual-timeout", func(t *testing.T) {
-		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		stream, err := client.SubscribePluginState(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
 		}
@@ -1085,32 +1085,32 @@ func TestSubscribePluginState(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+			if stateUpdate.State != lanirpc.PluginState_BUSY {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_READY {
+			if stateUpdate.State != lanirpc.PluginState_READY {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_UNRESPONSIVE {
+			if stateUpdate.State != lanirpc.PluginState_UNRESPONSIVE {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 		}()
-		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: timeoutPluginName})
+		_, err = client.StartRecord(ctx, &lanirpc.PluginRequest{Name: timeoutPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
 		wg.Wait()
 	})
 	t.Run("individual-unknown and stopped", func(t *testing.T) {
-		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
+		stream, err := client.SubscribePluginState(ctx, &lanirpc.PluginRequest{Name: errPluginName})
 		if err != nil {
 			t.Errorf("Unexpected error when calling SusbcribePluginState: %v", err)
 		}
@@ -1123,32 +1123,32 @@ func TestSubscribePluginState(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+			if stateUpdate.State != lanirpc.PluginState_BUSY {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_UNKNOWN {
+			if stateUpdate.State != lanirpc.PluginState_UNKNOWN {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_STOPPING {
+			if stateUpdate.State != lanirpc.PluginState_STOPPING {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbcribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_STOPPED {
+			if stateUpdate.State != lanirpc.PluginState_STOPPED {
 				t.Errorf("Unexpected state received from SusbcribePluginState stream: %v", stateUpdate.State)
 			}
 		}()
-		_, err = client.StartRecord(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
+		_, err = client.StartRecord(ctx, &lanirpc.PluginRequest{Name: errPluginName})
 		st, ok := status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error format when calling StartRecord: expected gRPC status format, got %v", err)
@@ -1156,7 +1156,7 @@ func TestSubscribePluginState(t *testing.T) {
 		if st.Message() != "I don't wanna" {
 			t.Errorf("Unexpected error when calling StartRecord: %v", err)
 		}
-		_, err = client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: errPluginName})
+		_, err = client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: errPluginName})
 		st, ok = status.FromError(err)
 		if !ok {
 			t.Errorf("Unexpected error format when calling StopPlugin: expected gRPC status format, got %v", err)
@@ -1169,12 +1169,12 @@ func TestSubscribePluginState(t *testing.T) {
 	t.Run("all-valid", func(t *testing.T) {
 		// reset plugins
 		for _, cfg := range subStateCfgs {
-			_, err := client.StopPlugin(ctx, &fmtrpc.PluginRequest{Name: cfg.Name})
+			_, err := client.StopPlugin(ctx, &lanirpc.PluginRequest{Name: cfg.Name})
 			t.Logf("Error when calling stop plugin for plugin %v: %v", cfg.Name, err)
-			_, err = client.StartPlugin(ctx, &fmtrpc.PluginRequest{Name: cfg.Name})
+			_, err = client.StartPlugin(ctx, &lanirpc.PluginRequest{Name: cfg.Name})
 			t.Logf("Error when calling start plugin for plugin %v: %v", cfg.Name, err)
 		}
-		stream, err := client.SubscribePluginState(ctx, &fmtrpc.PluginRequest{Name: "all"})
+		stream, err := client.SubscribePluginState(ctx, &lanirpc.PluginRequest{Name: "all"})
 		if err != nil {
 			t.Errorf("Unexpected error when calling SusbscribePluginState: %v", err)
 		}
@@ -1188,28 +1188,28 @@ func TestSubscribePluginState(t *testing.T) {
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_READY {
+			if stateUpdate.State != lanirpc.PluginState_READY {
 				t.Errorf("Unexpected state received from state update: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_READY {
+			if stateUpdate.State != lanirpc.PluginState_READY {
 				t.Errorf("Unexpected state received from state update: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_READY {
+			if stateUpdate.State != lanirpc.PluginState_READY {
 				t.Errorf("Unexpected state received from state update: %v", stateUpdate.State)
 			}
 			stateUpdate, err = stream.Recv()
 			if err != nil {
 				t.Errorf("Unexpected error when reading SusbscribePluginState stream: %v", err)
 			}
-			if stateUpdate.State != fmtrpc.PluginState_BUSY {
+			if stateUpdate.State != lanirpc.PluginState_BUSY {
 				t.Errorf("Unexpected state received from state update: %v", err)
 			}
 		}()

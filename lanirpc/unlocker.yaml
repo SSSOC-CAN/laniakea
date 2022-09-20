@@ -1,0 +1,18 @@
+# Author: Paul Côté
+# Last Change Author: Paul Côté
+# Last Date Changed: 2022/09/20
+
+type: google.api.Service
+config_version: 3
+
+http:
+  rules:
+    - selector: lanirpc.Unlocker.Login
+      post: "/v1/login"
+      body: "*"
+    - selector: lanirpc.Unlocker.SetPassword
+      post: "/v1/setpassword"
+      body: "*"
+    - selector: lanirpc.Unlocker.ChangePassword
+      post: "/v1/changepassword"
+      body: "*"
