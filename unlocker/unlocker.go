@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
@@ -32,8 +32,8 @@ import (
 	"reflect"
 
 	"github.com/SSSOC-CAN/fmtd/api"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
 	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -61,7 +61,7 @@ type PasswordMsg struct {
 }
 
 type UnlockerService struct {
-	fmtrpc.UnimplementedUnlockerServer
+	lanirpc.UnimplementedUnlockerServer
 	ps            *kvdb.DB
 	PasswordMsgs  chan *PasswordMsg
 	macaroonFiles []string
@@ -83,13 +83,13 @@ func InitUnlockerService(db *kvdb.DB, macaroonFiles []string) (*UnlockerService,
 
 // RegisterWithGrpcServer registers the gRPC server to the unlocker service
 func (u *UnlockerService) RegisterWithGrpcServer(grpcServer *grpc.Server) error {
-	fmtrpc.RegisterUnlockerServer(grpcServer, u)
+	lanirpc.RegisterUnlockerServer(grpcServer, u)
 	return nil
 }
 
 // RegisterWithRestProxy registers the UnlockerService with the REST proxy
 func (u *UnlockerService) RegisterWithRestProxy(ctx context.Context, mux *proxy.ServeMux, restDialOpts []grpc.DialOption, restProxyDest string) error {
-	err := fmtrpc.RegisterUnlockerHandlerFromEndpoint(
+	err := lanirpc.RegisterUnlockerHandlerFromEndpoint(
 		ctx, mux, restProxyDest, restDialOpts,
 	)
 	if err != nil {
@@ -145,7 +145,7 @@ func (u *UnlockerService) readPassword(password []byte) error {
 }
 
 // Login will login a user
-func (u *UnlockerService) Login(ctx context.Context, req *fmtrpc.LoginRequest) (*fmtrpc.LoginResponse, error) {
+func (u *UnlockerService) Login(ctx context.Context, req *lanirpc.LoginRequest) (*lanirpc.LoginResponse, error) {
 	err := u.readPassword(req.Password)
 	if err == ErrPasswordNotSet {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
@@ -157,14 +157,14 @@ func (u *UnlockerService) Login(ctx context.Context, req *fmtrpc.LoginRequest) (
 	// We can now send the a PasswordMsg through the channel and return a successful loging message
 	select {
 	case u.PasswordMsgs <- &PasswordMsg{Password: req.Password, Err: nil}:
-		return &fmtrpc.LoginResponse{}, nil
+		return &lanirpc.LoginResponse{}, nil
 	case <-ctx.Done():
 		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout.Error())
 	}
 }
 
 // SetPassword will set the password of the kvdb if none has been set
-func (u *UnlockerService) SetPassword(ctx context.Context, req *fmtrpc.SetPwdRequest) (*fmtrpc.SetPwdResponse, error) {
+func (u *UnlockerService) SetPassword(ctx context.Context, req *lanirpc.SetPwdRequest) (*lanirpc.SetPwdResponse, error) {
 	err := u.setPassword(req.Password, false)
 	if err == ErrPasswordAlreadySet {
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
@@ -174,7 +174,7 @@ func (u *UnlockerService) SetPassword(ctx context.Context, req *fmtrpc.SetPwdReq
 	// We can now send the SetPasswordMsg through the channel
 	select {
 	case u.PasswordMsgs <- &PasswordMsg{Password: req.Password, Err: nil}:
-		return &fmtrpc.SetPwdResponse{}, nil
+		return &lanirpc.SetPwdResponse{}, nil
 
 	case <-ctx.Done():
 		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout.Error())
@@ -182,7 +182,7 @@ func (u *UnlockerService) SetPassword(ctx context.Context, req *fmtrpc.SetPwdReq
 }
 
 // ChangePassword takes the old password, validates it and sets the new password from the inputted new password only if a previous password has been set
-func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.ChangePwdRequest) (*fmtrpc.ChangePwdResponse, error) {
+func (u *UnlockerService) ChangePassword(ctx context.Context, req *lanirpc.ChangePwdRequest) (*lanirpc.ChangePwdResponse, error) {
 	// first we check the validaty of the old password
 	err := u.readPassword(req.CurrentPassword)
 	if err == ErrPasswordNotSet {
@@ -206,7 +206,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 		}
 	}
 	// Then we have to load the macaroon key-store, unlock it, change the old password and then shut it down
-	macaroonService, err := macaroons.InitService(*u.ps, "fmtd", zerolog.Nop(), []string{})
+	macaroonService, err := macaroons.InitService(*u.ps, "laniakea", zerolog.Nop(), []string{})
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -234,7 +234,7 @@ func (u *UnlockerService) ChangePassword(ctx context.Context, req *fmtrpc.Change
 	// We can now send the UnlockMsg through the channel
 	select {
 	case u.PasswordMsgs <- &PasswordMsg{Password: req.NewPassword, Err: nil}:
-		return &fmtrpc.ChangePwdResponse{}, nil
+		return &lanirpc.ChangePwdResponse{}, nil
 	case <-ctx.Done():
 		return nil, status.Error(codes.DeadlineExceeded, ErrUnlockTimeout.Error())
 	}

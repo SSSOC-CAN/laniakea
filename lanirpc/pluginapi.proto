@@ -1,0 +1,124 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
+syntax = "proto3";
+
+package lanirpc;
+
+import "plugin.proto";
+
+option go_package = "github.com/SSSOC-CAN/fmtd/lanirpc";
+
+service PluginAPI {
+    /* lanicli: `plugin-startrecord`
+    StartRecording will begin recording data from specified datasource.
+    */
+    rpc StartRecord(PluginRequest) returns (proto.Empty);
+    /* lanicli: `plugin-stoprecord`
+    StopRecording will end the recording of data from specified datasource.
+    */
+    rpc StopRecord(PluginRequest) returns (proto.Empty);
+    /*
+    Subscribe returns a uni-directional stream of data from a specified datasource.
+    */
+    rpc Subscribe(PluginRequest) returns (stream proto.Frame);
+    /* lanicli: `plugin-start`
+    StartPlugin will start the specified existing plugin. Plugins added in this way will not be present upon laniakea restart
+    */
+    rpc StartPlugin(PluginRequest) returns (proto.Empty);
+    /* lanicli: `plugin-stop`
+    StopPlugin will stop the specified plugin.
+    */
+    rpc StopPlugin(PluginRequest) returns (proto.Empty);
+    /* lanicli: `plugin-command`
+    Command will send any command to a controller service.
+    */
+    rpc Command(ControllerPluginRequest) returns (stream proto.Frame);
+    /* lanicli: `plugin-list`
+    ListPlugins will send a list of registered and running plugins.
+    */
+    rpc ListPlugins(proto.Empty) returns(PluginsList);
+    /* lanicli: `plugin-add`
+    AddPlugin will add a plugin from given information.
+    */
+    rpc AddPlugin(PluginConfig) returns (Plugin);
+    /* lanicli: `plugin-info`
+    GetPlugin will retrieve the information for the given plugin.
+    */
+    rpc GetPlugin(PluginRequest) returns (Plugin);
+    /*
+    SubscribePluginState will create a stream which pushes plugin state updates to client
+    */
+    rpc SubscribePluginState(PluginRequest) returns (stream PluginStateUpdate);
+}
+
+message PluginRequest {
+    // The name of the plugin we want to interact with
+    string name = 1;
+}
+enum PluginState {
+    READY = 0;
+    BUSY = 1;
+    STOPPING = 2;
+    STOPPED = 3;
+    UNKNOWN = 4;
+    UNRESPONSIVE = 5;
+    KILLED = 6;
+}
+message Plugin {
+    // The name of the plugin
+    string name = 1;
+    enum PluginType {
+        DATASOURCE = 0;
+        CONTROLLER = 1;
+    }
+    // The plugin type (either Datasource or Controller)
+    PluginType type = 2;
+    // the current state of the plugin
+    PluginState state = 3;
+    // Unix milli timestamp of when the plugin was started
+    int64 started_at = 4;
+    // Unix milli timestamp of when the plugin was stopped or killed. Value is 0 if it's not stopped or killed 
+    int64 stopped_at = 5;
+    // The version number of the plugin, specified in the plugin
+    string version = 6;
+
+}
+message PluginsList {
+    // List of all currently registered plugins
+    repeated Plugin plugins = 1;
+}
+message ControllerPluginRequest {
+    // the name of the plugin we wish to send the command to
+    string name = 1;
+
+    // the data we are sending to the plugin
+    proto.Frame frame = 2;
+}
+message PluginConfig {
+    // the name of the plugin
+    string name = 1;
+
+    // the type of the plugin, either datasource or controller
+    string type = 2;
+    
+    // the name of the executable of the plugin
+    string exec_name  = 3;
+
+    // the time in seconds to determine if a plugin has timed out
+    int64 timeout = 4;
+
+    // the maximum number of times a plugin can timeout
+    int64 max_timeouts = 5;
+
+}
+message PluginStateUpdate {
+    // the name of the plugin
+    string name = 1;
+
+    // the current state of the plugin
+    PluginState state = 2;
+}

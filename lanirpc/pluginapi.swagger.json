@@ -1,0 +1,491 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "pluginapi.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "PluginAPI"
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/v2/plugin/add": {
+      "post": {
+        "summary": "lanicli: `plugin-add`\nAddPlugin will add a plugin from given information.",
+        "operationId": "PluginAPI_AddPlugin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcPlugin"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcPluginConfig"
+            }
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/command": {
+      "post": {
+        "summary": "lanicli: `plugin-command`\nCommand will send any command to a controller service.",
+        "operationId": "PluginAPI_Command",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/protoFrame"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of protoFrame"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/lanirpcControllerPluginRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/start/record/{name}": {
+      "put": {
+        "summary": "lanicli: `plugin-startrecord`\nStartRecording will begin recording data from specified datasource.",
+        "operationId": "PluginAPI_StartRecord",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/start/{name}": {
+      "put": {
+        "summary": "lanicli: `plugin-start`\nStartPlugin will start the specified existing plugin. Plugins added in this way will not be present upon laniakea restart",
+        "operationId": "PluginAPI_StartPlugin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/stop/record/{name}": {
+      "put": {
+        "summary": "lanicli: `plugin-stoprecord`\nStopRecording will end the recording of data from specified datasource.",
+        "operationId": "PluginAPI_StopRecord",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/stop/{name}": {
+      "put": {
+        "summary": "lanicli: `plugin-stop`\nStopPlugin will stop the specified plugin.",
+        "operationId": "PluginAPI_StopPlugin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/protoEmpty"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/subscribe/{name}": {
+      "get": {
+        "summary": "Subscribe returns a uni-directional stream of data from a specified datasource.",
+        "operationId": "PluginAPI_Subscribe",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/protoFrame"
+                },
+                "error": {
+                  "$ref": "#/definitions/rpcStatus"
+                }
+              },
+              "title": "Stream result of protoFrame"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugin/{name}": {
+      "get": {
+        "summary": "lanicli: `plugin-info`\nGetPlugin will retrieve the information for the given plugin.",
+        "operationId": "PluginAPI_GetPlugin",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcPlugin"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "description": "The name of the plugin we want to interact with",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    },
+    "/v2/plugins": {
+      "get": {
+        "summary": "lanicli: `plugin-list`\nListPlugins will send a list of registered and running plugins.",
+        "operationId": "PluginAPI_ListPlugins",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/lanirpcPluginsList"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "tags": [
+          "PluginAPI"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "PluginPluginType": {
+      "type": "string",
+      "enum": [
+        "DATASOURCE",
+        "CONTROLLER"
+      ],
+      "default": "DATASOURCE"
+    },
+    "lanirpcControllerPluginRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "the name of the plugin we wish to send the command to"
+        },
+        "frame": {
+          "$ref": "#/definitions/protoFrame",
+          "title": "the data we are sending to the plugin"
+        }
+      }
+    },
+    "lanirpcPlugin": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The name of the plugin"
+        },
+        "type": {
+          "$ref": "#/definitions/PluginPluginType",
+          "title": "The plugin type (either Datasource or Controller)"
+        },
+        "state": {
+          "$ref": "#/definitions/lanirpcPluginState",
+          "title": "the current state of the plugin"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "int64",
+          "title": "Unix milli timestamp of when the plugin was started"
+        },
+        "stopped_at": {
+          "type": "string",
+          "format": "int64",
+          "title": "Unix milli timestamp of when the plugin was stopped or killed. Value is 0 if it's not stopped or killed"
+        },
+        "version": {
+          "type": "string",
+          "title": "The version number of the plugin, specified in the plugin"
+        }
+      }
+    },
+    "lanirpcPluginConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "the name of the plugin"
+        },
+        "type": {
+          "type": "string",
+          "title": "the type of the plugin, either datasource or controller"
+        },
+        "exec_name": {
+          "type": "string",
+          "title": "the name of the executable of the plugin"
+        },
+        "timeout": {
+          "type": "string",
+          "format": "int64",
+          "title": "the time in seconds to determine if a plugin has timed out"
+        },
+        "max_timeouts": {
+          "type": "string",
+          "format": "int64",
+          "title": "the maximum number of times a plugin can timeout"
+        }
+      }
+    },
+    "lanirpcPluginState": {
+      "type": "string",
+      "enum": [
+        "READY",
+        "BUSY",
+        "STOPPING",
+        "STOPPED",
+        "UNKNOWN",
+        "UNRESPONSIVE",
+        "KILLED"
+      ],
+      "default": "READY"
+    },
+    "lanirpcPluginStateUpdate": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "the name of the plugin"
+        },
+        "state": {
+          "$ref": "#/definitions/lanirpcPluginState",
+          "title": "the current state of the plugin"
+        }
+      }
+    },
+    "lanirpcPluginsList": {
+      "type": "object",
+      "properties": {
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/lanirpcPlugin"
+          },
+          "title": "List of all currently registered plugins"
+        }
+      }
+    },
+    "protoEmpty": {
+      "type": "object"
+    },
+    "protoFrame": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "title": "The name of the source of this Frame"
+        },
+        "type": {
+          "type": "string",
+          "title": "A MIME-like type indicating the kind of content within the payload field"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "int64",
+          "title": "The UNIX millisecond timestamp of this frame"
+        },
+        "payload": {
+          "type": "string",
+          "format": "byte",
+          "title": "The actual payload data in bytes. Limit is 2^32"
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

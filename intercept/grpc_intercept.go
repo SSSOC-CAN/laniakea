@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 
 Copyright (C) 2015-2018 Lightning Labs and The Lightning Network Developers
 
@@ -30,7 +30,7 @@ import (
 	"sync"
 
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/fmtd/macaroons"
 	"github.com/SSSOC-CAN/fmtd/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
@@ -59,32 +59,32 @@ const (
 var (
 	// List of commands that don't need macaroons
 	macaroonWhitelist = map[string]struct{}{
-		"/fmtrpc.Fmt/TestCommand":         {},
-		"/fmtrpc.Unlocker/Login":          {}, //don't need a macaroon to login because succesful login will create macaroons
-		"/fmtrpc.Unlocker/SetPassword":    {},
-		"/fmtrpc.Unlocker/ChangePassword": {},
-		"/fmtrpc.Fmt/SetTemperature":      {},
-		"/fmtrpc.Fmt/SetPressure":         {},
-		"/fmtrpc.Fmt/StartRecording":      {},
-		"/fmtrpc.Fmt/StopRecording":       {},
-		"/fmtrpc.Fmt/SubscribeDataStream": {},
-		"/fmtrpc.Fmt/LoadTestPlan":        {},
-		"/fmtrpc.Fmt/StartTestPlan":       {},
-		"/fmtrpc.Fmt/StopTestPlan":        {},
-		"/fmtrpc.Fmt/InsertROIMarker":     {},
-		"/fmtrpc.Health/Check":            {},
+		"/lanirpc.Lani/TestCommand":         {},
+		"/lanirpc.Unlocker/Login":           {}, //don't need a macaroon to login because succesful login will create macaroons
+		"/lanirpc.Unlocker/SetPassword":     {},
+		"/lanirpc.Unlocker/ChangePassword":  {},
+		"/lanirpc.Lani/SetTemperature":      {},
+		"/lanirpc.Lani/SetPressure":         {},
+		"/lanirpc.Lani/StartRecording":      {},
+		"/lanirpc.Lani/StopRecording":       {},
+		"/lanirpc.Lani/SubscribeDataStream": {},
+		"/lanirpc.Lani/LoadTestPlan":        {},
+		"/lanirpc.Lani/StartTestPlan":       {},
+		"/lanirpc.Lani/StopTestPlan":        {},
+		"/lanirpc.Lani/InsertROIMarker":     {},
+		"/lanirpc.Health/Check":             {},
 	}
 	pluginMethodNames = []string{
-		"/fmtrpc.PluginAPI/StartRecord",
-		"/fmtrpc.PluginAPI/StopRecord",
-		"/fmtrpc.PluginAPI/StartPlugin",
-		"/fmtrpc.PluginAPI/StopPlugin",
-		"/fmtrpc.PluginAPI/GetPlugin",
+		"/lanirpc.PluginAPI/StartRecord",
+		"/lanirpc.PluginAPI/StopRecord",
+		"/lanirpc.PluginAPI/StartPlugin",
+		"/lanirpc.PluginAPI/StopPlugin",
+		"/lanirpc.PluginAPI/GetPlugin",
 	}
 	pluginStreamingMethodNames = []string{
-		"/fmtrpc.PluginAPI/Subscribe",
-		"/fmtrpc.PluginAPI/Command",
-		"/fmtrpc.PluginAPI/SubscribePluginState",
+		"/lanirpc.PluginAPI/Subscribe",
+		"/lanirpc.PluginAPI/Command",
+		"/lanirpc.PluginAPI/SubscribePluginState",
 	}
 )
 
@@ -184,12 +184,12 @@ func (i *GrpcInterceptor) checkRPCState(srv interface{}) error {
 	case waitingToStart:
 		return ErrWaitingToStart
 	case daemonLocked:
-		_, ok := srv.(fmtrpc.UnlockerServer)
+		_, ok := srv.(lanirpc.UnlockerServer)
 		if !ok {
 			return ErrDaemonLocked
 		}
 	case daemonUnlocked, rpcActive:
-		_, ok := srv.(fmtrpc.UnlockerServer)
+		_, ok := srv.(lanirpc.UnlockerServer)
 		if ok {
 			return ErrDaemonUnlocked
 		}
@@ -334,13 +334,13 @@ func addPluginNametoContext(ctx context.Context, req interface{}) (context.Conte
 	// first we asset the request type
 	var pluginName string
 	switch request := req.(type) {
-	case *fmtrpc.PluginRequest:
+	case *lanirpc.PluginRequest:
 		pluginName = request.Name
-	case fmtrpc.PluginRequest:
+	case lanirpc.PluginRequest:
 		pluginName = request.Name
-	case *fmtrpc.ControllerPluginRequest:
+	case *lanirpc.ControllerPluginRequest:
 		pluginName = request.Name
-	case fmtrpc.ControllerPluginRequest:
+	case lanirpc.ControllerPluginRequest:
 		pluginName = request.Name
 	default:
 		return ctx, errors.ErrInvalidRequestType

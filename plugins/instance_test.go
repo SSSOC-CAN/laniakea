@@ -1,3 +1,9 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
 package plugins
 
 import (
@@ -6,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/fmtrpc"
+	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
 	"github.com/rs/zerolog"
 )
@@ -15,49 +21,49 @@ import (
 func TestInstanceStates(t *testing.T) {
 	instance := PluginInstance{}
 	t.Run("ready", func(t *testing.T) {
-		if instance.getState() != fmtrpc.PluginState_READY {
+		if instance.getState() != lanirpc.PluginState_READY {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("busy", func(t *testing.T) {
 		instance.setBusy()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.PluginState_BUSY {
+		if instance.getState() != lanirpc.PluginState_BUSY {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("unknown", func(t *testing.T) {
 		instance.setUnknown()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.PluginState_UNKNOWN {
+		if instance.getState() != lanirpc.PluginState_UNKNOWN {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("stopping", func(t *testing.T) {
 		instance.setStopping()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.PluginState_STOPPING {
+		if instance.getState() != lanirpc.PluginState_STOPPING {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("stopped", func(t *testing.T) {
 		instance.setStopped()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.PluginState_STOPPED {
+		if instance.getState() != lanirpc.PluginState_STOPPED {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("unresponsive", func(t *testing.T) {
 		instance.setUnresponsive()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.PluginState_UNRESPONSIVE {
+		if instance.getState() != lanirpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
 	t.Run("killed", func(t *testing.T) {
 		instance.setKilled()
 		defer instance.setReady()
-		if instance.getState() != fmtrpc.PluginState_KILLED {
+		if instance.getState() != lanirpc.PluginState_KILLED {
 			t.Errorf("Unexpected instance state: %v", instance.getState())
 		}
 	})
@@ -154,7 +160,7 @@ func TestStopRecordNoPlugin(t *testing.T) {
 // TestStopNoPlugin tests the plugin instance stop function without an actual plugin started
 func TestStopNoPlugin(t *testing.T) {
 	logger := zerolog.New(os.Stderr).With().Timestamp().Logger()
-	instance := &PluginInstance{cfg: &fmtrpc.PluginConfig{Name: "test"}, logger: &logger}
+	instance := &PluginInstance{cfg: &lanirpc.PluginConfig{Name: "test"}, logger: &logger}
 	t.Run("stopping state", func(t *testing.T) {
 		instance.setStopping()
 		defer instance.setReady()

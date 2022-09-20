@@ -1,7 +1,7 @@
 /*
 Author: Paul Côté
 Last Change Author: Paul Côté
-Last Date Changed: 2022/06/10
+Last Date Changed: 2022/09/20
 */
 
 package auth
@@ -109,7 +109,7 @@ func TestGetClientConnWithMac(t *testing.T) {
 	}
 	defer db.Close()
 	// macaroon service
-	macaroonService, err := macaroons.InitService(*db, "fmtd", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{})
+	macaroonService, err := macaroons.InitService(*db, "laniakea", zerolog.New(os.Stderr).With().Timestamp().Logger(), []string{})
 	if err != nil {
 		t.Fatalf("Error creating macaroon service: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestGetClientConnWithMac(t *testing.T) {
 		[]checkers.Caveat{macaroons.TimeoutCaveat(int64(0))},
 		[]bakery.Op{
 			{
-				Entity: "fmtd",
+				Entity: "laniakea",
 				Action: "read",
 			},
 		}...,

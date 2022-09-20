@@ -1,0 +1,44 @@
+/*
+Author: Paul Côté
+Last Change Author: Paul Côté
+Last Date Changed: 2022/09/20
+*/
+
+syntax = "proto3";
+
+package lanirpc;
+
+option go_package = "github.com/SSSOC-CAN/fmtd/lanirpc";
+
+service Health {
+    /*
+    Check will check the health of various API services and plugins
+    */
+    rpc Check(HealthRequest) returns (HealthResponse);
+}
+
+
+
+message HealthRequest {
+    // the name of the service or plugin for which we want health information. Leave blank or put all to get all health information
+    string service = 1;
+}
+
+message HealthUpdate {
+    // the name of the service
+    string name = 1;
+    
+    enum HealthState {
+        UNKNOWN = 0;
+        SERVING = 1;
+        NOT_SERVING = 2;
+        SERVICE_UNKNOWN = 3;
+    }
+    // the current state of the service
+    HealthState state = 2;
+}
+
+message HealthResponse {
+    // the current states of all given services/plugins
+    repeated HealthUpdate status = 1;
+}
