@@ -4,6 +4,9 @@
 *.dll
 *.so
 *.dylib
+*_macos
+demo_controller
+demo_datasource
 
 # Test binary, built with `go test -c`
 *.test
