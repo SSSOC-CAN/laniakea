@@ -168,7 +168,7 @@ GLOBAL OPTIONS:
 
 ## API Usage
 
-Laniakea also exposes much of its functionality via API. More info about using the Laniakea API can be found [here](https://github.com/SSSOC-CAN/fmtd/blob/main/docs/api/README.md).
+Laniakea exposes much of its functionality via API. More info about using the Laniakea API can be found [here](https://github.com/SSSOC-CAN/fmtd/blob/main/docs/api/README.md).
 
 # Contribution Guide
 
