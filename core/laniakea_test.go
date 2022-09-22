@@ -125,7 +125,6 @@ func initLani(t *testing.T, shutdownInterceptor *intercept.Interceptor, readySig
 	config.ConsoleOutput = testingConsoleOutput
 	config.DefaultLogDir = false
 	config.LogFileDir = tempDir
-	config.DataOutputDir = tempDir
 	config.MacaroonDBPath = path.Join(tempDir, "macaroon.db")
 	config.TLSCertPath = path.Join(tempDir, "tls.cert")
 	config.TLSKeyPath = path.Join(tempDir, "tls.key")
