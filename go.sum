@@ -38,6 +38,8 @@ github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220916202250-cdbc71d71f25 h1:K
 github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220916202250-cdbc71d71f25/go.mod h1:Yks9Y+b+H6aSTyv3jGsefv+mngwbRn+QT9iTLMOclvY=
 github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220920085338-f8d7589d5935 h1:DMgjjEGyvXNt6MHtqJt6D8uaHa7aQCxQ9q03014aue8=
 github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220920085338-f8d7589d5935/go.mod h1:MpNmx/d9DObeAXQUR10npztJXOk8iotQWOS1sjIX3Hc=
+github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220921013240-7a6b13e7c9e1 h1:ReWYEe3zueCsAlJocQkv3vL+4CGwlm16RWgH8A8ud6g=
+github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220921013240-7a6b13e7c9e1/go.mod h1:MpNmx/d9DObeAXQUR10npztJXOk8iotQWOS1sjIX3Hc=
 github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a h1:lloMlsBR6U0EIx/KuVkwsP6/I3Ci6M4jiKjZAKOQTks=
 github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a/go.mod h1:QmPQSk28XTjXldnFMmKGnYtux+oAI7n4h+VmXqi6Edg=
 github.com/SSSOCPaulCote/gux v0.0.0-20220813092205-97a703b3f636 h1:9LfcOxECnszDHXj7rARXTtj4vH6BRiucfWnS4xbcIhA=
