@@ -1,6 +1,6 @@
-# Laniakea API - Python
+# Laniakea gRPC API - Python
 
-In this guide, we will look at how to interact with the Laniakea API via gRPC
+In this guide, we will look at how to interact with the Laniakea gRPC API via Python
 
 ## Dependencies
 
