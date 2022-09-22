@@ -3,7 +3,7 @@ module github.com/SSSOC-CAN/fmtd
 go 1.17
 
 require (
-	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220920085338-f8d7589d5935
+	github.com/SSSOC-CAN/laniakea-plugin-sdk v0.0.0-20220921013240-7a6b13e7c9e1
 	github.com/SSSOCPaulCote/blunderguard v0.0.0-20220611160827-401cd5c1610a
 	github.com/SSSOCPaulCote/gux v0.0.0-20220813092205-97a703b3f636
 	github.com/btcsuite/btcwallet v0.12.0
