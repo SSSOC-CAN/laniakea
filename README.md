@@ -2,7 +2,7 @@
 Laniakea is a tool to easily connect various hardware sensors (datasources) and controllers together and expose the data they produce as well as their controls under one easy to use interface. Using the `hashicorp/go-plugin` package, new datasources and plugins can easily be integrated by writing a simple plugin.
 
 Here are the features summarized:
-- Build plugins in your favourite programming language (must support gRPC) to integrate new datasources or controllers
+- Easily build plugins in your favourite programming language (must support gRPC) using our [SDK](https://github.com/SSSOC-CAN/laniakea-plugin-sdk) to integrate new datasources or controllers
 - Capture their data using either the gRPC or REST API
 - Benefit from plugin lifecycle management under Laniakea
 - Highly configurable to suit your needs
