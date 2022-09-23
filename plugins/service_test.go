@@ -371,7 +371,7 @@ func TestDatasourcePlugin(t *testing.T) {
 		}
 		plug := pluginManager.pluginRegistry[timeoutPluginName]
 		// Sleep until the plugin has timed out
-		time.Sleep(time.Duration(plug.cfg.Timeout+5) * time.Second)
+		time.Sleep(time.Duration(plug.cfg.Timeout+6) * time.Second)
 		if plug.getState() != lanirpc.PluginState_UNRESPONSIVE {
 			t.Errorf("Plugin in unexpected state after timing out: %v", plug.getState())
 		}
