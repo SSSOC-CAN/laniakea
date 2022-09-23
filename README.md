@@ -11,7 +11,7 @@ Here are the features summarized:
 
 # Installation
 
-Laniakea runs on Go 1.17
+Laniakea requires Go 1.17 or higher
 
 On Linux:
 
