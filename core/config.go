@@ -33,7 +33,6 @@ type Config struct {
 	ConsoleOutput       bool                    `yaml:"ConsoleOutput" long:"consoleoutput" description:"Whether log information is printed to the console"`
 	GrpcPort            int64                   `yaml:"GrpcPort" long:"grpc_port" description:"The port where Laniakea listens for gRPC API requests"`
 	RestPort            int64                   `yaml:"RestPort" long:"rest_port" description:"The port where Laniakea listens for REST API requests"`
-	DataOutputDir       string                  `yaml:"DataOutputDir" long:"dataoutputdir" description:"Choose the directory where the recorded data is stored"`
 	ExtraIPAddr         []string                `yaml:"ExtraIPAddr" long:"tlsextraip" description:"Adds an extra ip to the generated certificate"` // optional parameter
 	PluginDir           string                  `yaml:"PluginDir" long:"plugindir" description:"The directory where plugin executables will live and be run from. Must be absolute path"`
 	Plugins             []*lanirpc.PluginConfig `yaml:"Plugins"`
@@ -62,7 +61,6 @@ var (
 	default_tls_key_path        string = default_log_dir() + "/tls.key"
 	default_admin_macaroon_path string = default_log_dir() + "/admin.macaroon"
 	test_macaroon_path          string = default_log_dir() + "/test.macaroon"
-	default_data_output_dir     string = default_log_dir()
 	default_ws_ping_interval           = time.Second * 30
 	default_ws_pong_wait               = time.Second * 5
 	default_log_file_size       int64  = 10
@@ -77,7 +75,6 @@ var (
 			ConsoleOutput:  true,
 			GrpcPort:       default_grpc_port,
 			RestPort:       default_rest_port,
-			DataOutputDir:  default_data_output_dir,
 			MacaroonDBPath: default_macaroon_db_file,
 			TLSCertPath:    default_tls_cert_path,
 			TLSKeyPath:     default_tls_key_path,
@@ -214,10 +211,6 @@ func check_yaml_config(config Config) Config {
 		case "TestMacPath":
 			if f.String() == "" {
 				change_field(f, test_macaroon_path)
-			}
-		case "DataOutputDir":
-			if f.String() == "" {
-				change_field(f, default_data_output_dir)
 			}
 		case "PluginDir":
 			if f.String() == "" {
