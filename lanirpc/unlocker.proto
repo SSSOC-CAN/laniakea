@@ -8,7 +8,7 @@ syntax = "proto3";
 
 package lanirpc;
 
-option go_package = "github.com/SSSOC-CAN/fmtd/lanirpc";
+option go_package = "github.com/SSSOC-CAN/laniakea/lanirpc";
 
 service Unlocker{
     /* lanicli: `login`

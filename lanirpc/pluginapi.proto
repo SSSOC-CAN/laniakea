@@ -10,7 +10,7 @@ package lanirpc;
 
 import "plugin.proto";
 
-option go_package = "github.com/SSSOC-CAN/fmtd/lanirpc";
+option go_package = "github.com/SSSOC-CAN/laniakea/lanirpc";
 
 service PluginAPI {
     /* lanicli: `plugin-startrecord`

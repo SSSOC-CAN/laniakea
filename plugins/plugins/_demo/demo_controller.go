@@ -19,7 +19,7 @@ import (
 var (
 	pluginName            = "demo-controller-plugin"
 	pluginVersion         = "1.0.0"
-	laniVersionConstraint = ">= 0.2.0"
+	laniVersionConstraint = ">= 1.0.0"
 )
 
 type DemoController struct {

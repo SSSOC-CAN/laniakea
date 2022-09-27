@@ -33,9 +33,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SSSOC-CAN/fmtd/intercept"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/intercept"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	e "github.com/pkg/errors"
 	"github.com/urfave/cli"

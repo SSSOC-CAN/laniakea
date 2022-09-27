@@ -13,7 +13,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	"github.com/google/go-cmp/cmp"
 )
 

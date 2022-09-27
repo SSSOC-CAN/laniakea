@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"

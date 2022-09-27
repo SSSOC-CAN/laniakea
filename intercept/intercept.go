@@ -33,7 +33,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOC-CAN/laniakea/errors"
 	"github.com/rs/zerolog"
 )
 

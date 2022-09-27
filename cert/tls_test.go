@@ -11,7 +11,8 @@ import (
 	"os"
 	"path"
 	"testing"
-	"github.com/SSSOC-CAN/fmtd/utils"
+
+	"github.com/SSSOC-CAN/laniakea/utils"
 )
 
 var (
