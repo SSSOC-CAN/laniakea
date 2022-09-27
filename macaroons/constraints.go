@@ -29,8 +29,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"gopkg.in/macaroon-bakery.v2/bakery/checkers"
 	macaroon "gopkg.in/macaroon.v2"

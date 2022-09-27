@@ -11,9 +11,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
 	"github.com/rs/zerolog"
 )
 

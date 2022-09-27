@@ -16,9 +16,9 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
-	"github.com/SSSOC-CAN/fmtd/plugins"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/plugins"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	flags "github.com/jessevdk/go-flags"
 	e "github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"

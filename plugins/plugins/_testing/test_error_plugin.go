@@ -12,7 +12,7 @@ import (
 var (
 	pluginName            = "test-error-plugin"
 	pluginVersion         = "0.4.0"
-	laniVersionConstraint = ">= 0.2.0"
+	laniVersionConstraint = ">= 1.0.0"
 	ErrStartRecord        = errors.New("I don't wanna")
 	ErrStopRecord         = errors.New("no thank you")
 	ErrStop               = errors.New("can't stop, won't stop")

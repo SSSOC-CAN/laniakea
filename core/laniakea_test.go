@@ -20,18 +20,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/api"
-	"github.com/SSSOC-CAN/fmtd/auth"
-	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/intercept"
-	"github.com/SSSOC-CAN/fmtd/kvdb"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
-	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/plugins"
-	"github.com/SSSOC-CAN/fmtd/unlocker"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
+	"github.com/SSSOC-CAN/laniakea/api"
+	"github.com/SSSOC-CAN/laniakea/auth"
+	"github.com/SSSOC-CAN/laniakea/cert"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/intercept"
+	"github.com/SSSOC-CAN/laniakea/kvdb"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/macaroons"
+	"github.com/SSSOC-CAN/laniakea/plugins"
+	"github.com/SSSOC-CAN/laniakea/unlocker"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	e "github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -49,8 +49,8 @@ const (
 var (
 	testingConsoleOutput bool = false
 	defaultTestingPwd         = []byte("abcdefgh")
-	coreDirRegexp             = `/(?:fmtd)/(?:core)$`
-	rootDirRegexp             = `/(?:fmtd)$`
+	coreDirRegexp             = `/(?:laniakea)/(?:core)$`
+	rootDirRegexp             = `/(?:laniakea)$`
 	startPluginDir            = "plugins/plugins/_testing"
 	pluginCfgs                = []*lanirpc.PluginConfig{
 		&lanirpc.PluginConfig{

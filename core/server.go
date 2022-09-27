@@ -28,8 +28,8 @@ package core
 import (
 	"sync/atomic"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	"github.com/rs/zerolog"
 )
 
