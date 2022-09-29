@@ -32,7 +32,8 @@ import (
 	"path"
 	"reflect"
 	"testing"
-	"github.com/SSSOC-CAN/fmtd/kvdb"
+
+	"github.com/SSSOC-CAN/laniakea/kvdb"
 	"github.com/btcsuite/btcwallet/snacl"
 )
 
@@ -177,7 +178,7 @@ func TestStorage(t *testing.T) {
 	}
 	if !reflect.DeepEqual(id2, rootId) {
 		t.Fatalf("The value of id2 %v should be the same as id %v: %v", id2, rootId, err)
-	}	
+	}
 }
 
 // TestGenerateNewRootKey tests that a root key can be replaced with a new one in the store

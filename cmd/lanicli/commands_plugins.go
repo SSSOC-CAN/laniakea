@@ -10,8 +10,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
 	"github.com/urfave/cli"
 )
 

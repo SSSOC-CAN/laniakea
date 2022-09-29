@@ -13,7 +13,7 @@ import (
 
 var (
 	pluginName            = "test-rng-plugin"
-	pluginVersion         = "0.1.0"
+	pluginVersion         = "1.0.0"
 	laniVersionConstraint = ">= 0.2.0"
 )
 

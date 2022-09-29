@@ -23,12 +23,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
-	"github.com/SSSOC-CAN/fmtd/utils"
 	sdk "github.com/SSSOC-CAN/laniakea-plugin-sdk"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
+	"github.com/SSSOC-CAN/laniakea/cert"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
@@ -38,8 +38,8 @@ import (
 )
 
 var (
-	rootDirRegexp   = `/(?:fmtd)$`
-	pluginDirRegexp = `/(?:fmtd)/(?:plugins)$`
+	rootDirRegexp   = `/(?:laniakea)$`
+	pluginDirRegexp = `/(?:laniakea)/(?:plugins)$`
 )
 
 // initPluginManager will init the plugin manager

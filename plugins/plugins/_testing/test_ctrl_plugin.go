@@ -16,7 +16,7 @@ import (
 var (
 	pluginName            = "test-ctrl-plugin"
 	pluginVersion         = "0.1.0"
-	laniVersionConstraint = ">= 0.2.0"
+	laniVersionConstraint = ">= 1.0.0"
 	ErrInvalidFrameType   = errors.New("invalid frame type")
 	ErrInvalidCommand     = errors.New("invalid command")
 	ErrEmptyRequest       = errors.New("request arg is nil")

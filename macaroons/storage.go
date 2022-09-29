@@ -31,16 +31,16 @@ import (
 	"crypto/rand"
 	"io"
 
-	"github.com/btcsuite/btcwallet/snacl"
-	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/SSSOC-CAN/laniakea/kvdb"
 	bg "github.com/SSSOCPaulCote/blunderguard"
+	"github.com/btcsuite/btcwallet/snacl"
 	bolt "go.etcd.io/bbolt"
 )
 
 const (
-	ErrAlreadyUnlocked   	 = bg.Error("macaroon store already unlocked")
-	ErrContextRootKeyID  	 = bg.Error("failed to read root key ID from context")
-	ErrKeyValueForbidden 	 = bg.Error("root key ID value is not allowed")
+	ErrAlreadyUnlocked       = bg.Error("macaroon store already unlocked")
+	ErrContextRootKeyID      = bg.Error("failed to read root key ID from context")
+	ErrKeyValueForbidden     = bg.Error("root key ID value is not allowed")
 	ErrPasswordRequired      = bg.Error("a non-nil password is required")
 	ErrStoreLocked           = bg.Error("macaroon store is locked")
 	ErrRootKeyBucketNotFound = bg.Error("root key bucket not found")
@@ -50,18 +50,18 @@ const (
 )
 
 var (
-	rootKeyBucketName 		 = []byte("macrootkeys")
-	RootKeyIDContextKey 	 = contextKey{"rootkeyid"}
-	RootKeyLen 				 = 32
-	DefaultRootKeyID 		 = []byte("0")
-	encryptionKeyID 		 = []byte("enckey")
+	rootKeyBucketName   = []byte("macrootkeys")
+	RootKeyIDContextKey = contextKey{"rootkeyid"}
+	RootKeyLen          = 32
+	DefaultRootKeyID    = []byte("0")
+	encryptionKeyID     = []byte("enckey")
 )
 
 type contextKey struct {
 	Name string
 }
 
-type RootKeyStorage struct{
+type RootKeyStorage struct {
 	kvdb.DB
 	encKey *snacl.SecretKey // Don't roll your own crypto
 }
@@ -75,7 +75,7 @@ func InitRootKeyStorage(db kvdb.DB) (*RootKeyStorage, error) {
 		return nil, err
 	}
 	return &RootKeyStorage{
-		DB: db,
+		DB:     db,
 		encKey: nil,
 	}, nil
 }
@@ -144,7 +144,7 @@ func generateAndStoreNewRootKey(bucket *bolt.Bucket, id []byte,
 }
 
 // Implements RootKey from the bakery.RootKeyStorage interface
-func (r* RootKeyStorage) RootKey(ctx context.Context) ([]byte, []byte, error) {
+func (r *RootKeyStorage) RootKey(ctx context.Context) ([]byte, []byte, error) {
 	r.Mutex.RLock()
 	defer r.Mutex.RUnlock()
 	if r.encKey == nil {
@@ -215,7 +215,7 @@ func (r *RootKeyStorage) CreateUnlock(password *[]byte) error {
 			r.encKey = encKey
 			return nil
 		}
-		// no key has been set so creating a new one 
+		// no key has been set so creating a new one
 		encKey, err := snacl.NewSecretKey(
 			password, snacl.DefaultN, snacl.DefaultR, snacl.DefaultP,
 		)

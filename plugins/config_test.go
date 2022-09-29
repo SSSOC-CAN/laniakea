@@ -9,8 +9,8 @@ package plugins
 import (
 	"testing"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
 )
 
 var (
