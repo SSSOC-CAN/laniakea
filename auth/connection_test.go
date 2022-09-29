@@ -15,9 +15,9 @@ import (
 	"path"
 	"testing"
 
-	"github.com/SSSOC-CAN/fmtd/cert"
-	"github.com/SSSOC-CAN/fmtd/kvdb"
-	"github.com/SSSOC-CAN/fmtd/macaroons"
+	"github.com/SSSOC-CAN/laniakea/cert"
+	"github.com/SSSOC-CAN/laniakea/kvdb"
+	"github.com/SSSOC-CAN/laniakea/macaroons"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc"
 	"gopkg.in/macaroon-bakery.v2/bakery"

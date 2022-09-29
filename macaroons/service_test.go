@@ -34,7 +34,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/SSSOC-CAN/fmtd/kvdb"
+	"github.com/SSSOC-CAN/laniakea/kvdb"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/metadata"
 	"gopkg.in/macaroon-bakery.v2/bakery"

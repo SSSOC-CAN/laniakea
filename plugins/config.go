@@ -9,9 +9,9 @@ package plugins
 import (
 	"path/filepath"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/errors"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 )
 

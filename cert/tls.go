@@ -39,7 +39,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	e "github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

@@ -3,8 +3,8 @@ package queue
 import (
 	"sync"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
 	"github.com/SSSOC-CAN/laniakea-plugin-sdk/proto"
+	"github.com/SSSOC-CAN/laniakea/errors"
 )
 
 const ()

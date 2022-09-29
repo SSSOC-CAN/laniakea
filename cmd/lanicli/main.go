@@ -30,9 +30,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/SSSOC-CAN/fmtd/auth"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/auth"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	"github.com/urfave/cli"
 )
 

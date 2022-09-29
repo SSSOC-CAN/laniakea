@@ -30,8 +30,8 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/SSSOC-CAN/fmtd/kvdb"
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/kvdb"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/metadata"

@@ -29,7 +29,7 @@ package lanirpc;
 
 import "plugin.proto";
 
-option go_package = "github.com/SSSOC-CAN/fmtd/lanirpc";
+option go_package = "github.com/SSSOC-CAN/laniakea/lanirpc";
 
 // Lani is the main RPC server of the daemon.
 service Lani {

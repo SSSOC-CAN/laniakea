@@ -8,12 +8,13 @@ package auth
 
 import (
 	"encoding/hex"
-	e "github.com/pkg/errors"
 	"fmt"
 	"os"
 	"syscall"
-	"github.com/SSSOC-CAN/fmtd/macaroons"
-	"github.com/SSSOC-CAN/fmtd/utils"
+
+	"github.com/SSSOC-CAN/laniakea/macaroons"
+	"github.com/SSSOC-CAN/laniakea/utils"
+	e "github.com/pkg/errors"
 	"golang.org/x/crypto/ssh/terminal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -67,7 +68,6 @@ func GetClientConn(grpcServerAddr, grpcServerPort, tlsCertPath, adminMacPath str
 	}
 	return conn, nil
 }
-
 
 // ReadPassword prompts the user for a password in the command line
 func ReadPassword(text string) ([]byte, error) {

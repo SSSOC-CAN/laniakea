@@ -26,8 +26,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/SSSOC-CAN/fmtd/auth"
-	"github.com/SSSOC-CAN/fmtd/lanirpc"
+	"github.com/SSSOC-CAN/laniakea/auth"
+	"github.com/SSSOC-CAN/laniakea/lanirpc"
 	"github.com/urfave/cli"
 )
 

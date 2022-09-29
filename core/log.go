@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/SSSOC-CAN/fmtd/utils"
+	"github.com/SSSOC-CAN/laniakea/utils"
 	bg "github.com/SSSOCPaulCote/blunderguard"
 	"github.com/mattn/go-colorable"
 	color "github.com/mgutz/ansi"

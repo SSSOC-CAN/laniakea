@@ -14,7 +14,7 @@ import (
 var (
 	pluginName            = "test-timeout-plugin"
 	pluginVersion         = "0.3.0"
-	laniVersionConstraint = ">= 0.2.0"
+	laniVersionConstraint = ">= 1.0.0"
 )
 
 type DatasourceExample struct {

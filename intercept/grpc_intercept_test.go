@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/SSSOC-CAN/fmtd/errors"
+	"github.com/SSSOC-CAN/laniakea/errors"
 	"github.com/rs/zerolog"
 	"gopkg.in/macaroon-bakery.v2/bakery"
 )

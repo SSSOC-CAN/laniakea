@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SSSOC-CAN/fmtd/core"
-	"github.com/SSSOC-CAN/fmtd/intercept"
+	"github.com/SSSOC-CAN/laniakea/core"
+	"github.com/SSSOC-CAN/laniakea/intercept"
 )
 
 // main is the entry point for the Laniakea daemon.

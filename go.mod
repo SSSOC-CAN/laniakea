@@ -1,4 +1,4 @@
-module github.com/SSSOC-CAN/fmtd
+module github.com/SSSOC-CAN/laniakea
 
 go 1.17
 
