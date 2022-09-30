@@ -1,5 +1,5 @@
 # Laniakea
-Laniakea is a data superclustering tool. With it, you can easily connect various hardware sensors (datasources) and controllers together and expose them under one easy to use interface. Using the `hashicorp/go-plugin` package, new datasource and controller can easily be integrated by writing a simple plugin.
+Laniakea is a data superclustering tool. With it, you can easily connect various hardware sensors (datasources) and controllers together and expose them under one easy to use interface. Using the `hashicorp/go-plugin` package, new datasources and controllers can easily be integrated by writing a simple plugin.
 
 Here are the features summarized:
 - Easily build plugins in your favourite programming language (must support gRPC) using our [SDK](https://github.com/SSSOC-CAN/laniakea-plugin-sdk) to integrate new datasources or controllers
@@ -172,69 +172,8 @@ Laniakea exposes much of its functionality via API. More info about using the La
 
 # Contribution Guide
 
-## Coding Style
-Our aim is to write the most legible code we can within the constraints of the language. [This blog post](https://golang.org/doc/effective_go) is a good start for understanding how to write effective Go code. Important things to retain would include:
-- using `switch` and `case` instead of `if` and `else if` when appropriate
-- declaring global variables and constants as well as import statements in one block instead of many seperate lines. Ex:
-```
-import (
-    "fmt"
-    "os"
-)
+A comprehensive contribution guide will be devised at a later date.
 
-const (
-    pi = 3.14
-)
-
-var (
-    foo string
-    bar bool
-)
-```
-
-## Comments
-Ideally, we'd like to use Go's native automated documentation tool `godoc`. For that, we must comment functions, methods, structs, interfaces, packages, etc. Using the following:
-- a single or multi line comment above the declaration statement of what it is we are documenting starting with the exact name of that object. Ex:
-```
-// foo returns the product of two integers
-func foo(a, b int) int {
-    return a+b
-}
-```
-- This rule also applies to packages but package documentation starts with the word `Package` and then is followed by the name of the package. Ex:
-```
-// Package bar is the place you want to be 
-package bar
-```
-
-For effective work with teams, work on a go file that is merged into the `main` branch, but has future work that remains to be completed, please add `TODO:<name> -` comments in areas where future work will be performed. For example:
-```
-func sum(a, b int) int {
-    // TODO:SSSOCPaulCote - Add error handling for invalid types
-    return a+b
-}
-```
-In general, any useful comments to understand the context of your code are encouraged.
-
-## Git Workflow
-
-When making any changes to the codebase, please create a feature branch and send frequent commits on the feature branch. The name of the new feature branch should be short and contain `iss<number_of_the_issue>` for example `iss28_new_command`. When the new feature is ready to be merged, create a merge request. In the creation of the merge request, please add any of the organization administrators as reviewers and await their approval before merging any changes into `main`. Additionally, a reference to the issue in Github **MUST** be included in the merge request. Which means any and all work is going to be documented using issues.
-```
-$ git checkout -b <name_of_new_branch>          # Creates a feature branch with specified name and carries over any uncommited changes from the previous branch
-$ git add -A                                    # Adds all modified files to the commit
-$ git commit -m "useful comments"               # Creates a commit with useful comments attached
-$ git push origin <name_of_new_branch>          # pushes the commit on the new branch to GitHub
-```
-In the future, Continuous Integration (CI) and automated testing will be a part of every commit
-
-## Testing
-
-[This blog post](https://blog.alexellis.io/golang-writing-unit-tests/) covers how Go handles unit tests natively. A strategy for integration testing will be devised at a later time. For now, remember that for every method/function you create, a minimum of one unit test will be created to ensure that this function meets the requirements defined for it.
-
-To perform unit tests, run the following command from the projects root directory:
-```
-$ go test -v ./...
-```
 ## Installing Protoc
 
 In order to compile protos in Go, you need `protoc`.
@@ -280,7 +219,7 @@ $ go get github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway \
      google.golang.org/grpc/cmd/protoc-gen-go-grpc
 ```
 
-Write the proxy command in the `rpcserver.go` file and then define it's permissions in `grpc_intercept.go`. For lanicli access, write a proxy in `commands.go`.
+Write the command implementation and then define it's permissions in `rpcserver.go`. For lanicli access, write a proxy in `commands.go`.
 
 ## Release Strategy
 
