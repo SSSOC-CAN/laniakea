@@ -1,5 +1,5 @@
 # Laniakea
-Laniakea is a data superclustering tool. With it, you can easily connect various hardware sensors (datasources) and controllers together and expose them under one easy to use interface. Using the `hashicorp/go-plugin` package, new datasources and controllers can easily be integrated by writing a simple plugin.
+Laniakea is an IoT data superclustering tool. With it, you can easily connect various hardware sensors (datasources) and controllers together and expose them under one easy to use interface. Using the `hashicorp/go-plugin` package, new datasources and controllers can easily be integrated by writing a simple plugin.
 
 Here are the features summarized:
 - Easily build plugins in your favourite programming language (must support gRPC) using our [SDK](https://github.com/SSSOC-CAN/laniakea-plugin-sdk) to integrate new datasources or controllers
