@@ -37,6 +37,10 @@ $ sudo dnf config-manager --add-repo https://releases.laniakea.dev/RHEL/laniakea
 $ sudo dnf -y install laniakea
 ```
 
+## Windows and macOS
+
+[Visit the releases page on GitHub](https://github.com/SSSOC-CAN/laniakea/releases) and select the latest version, choosing the package that best fits your operating system and system architecture. 
+
 ## From Source
 
 Laniakea requires Go 1.17 or higher
