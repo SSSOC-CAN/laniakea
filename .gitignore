@@ -29,5 +29,13 @@ Dockerfile
 # tls certificates and macaroons
 *.macaroon
 *.cert
+
+# Release
 dist/
 .goreleaser.yaml
+build/
+nfpm*
+*.gpg
+*.deb
+*.rpm
+*.apk
