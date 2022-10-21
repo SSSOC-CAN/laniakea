@@ -11,6 +11,34 @@ Here are the features summarized:
 
 # Installation
 
+## Linux
+
+### Ubuntu/Debian
+
+```bash
+$ apt-key adv --keyserver keyserver.ubuntu.com --recv-keys FF297D0A5A9DFB22
+$ add-apt-repository "deb https://releases.laniakea.dev/ trusty main"
+$ apt-get update && apt-get install laniakea
+```
+
+### CentOS/RHEL
+
+```bash
+$ sudo yum install -y yum-utils
+$ sudo yum-config-manager --add-repo https://releases.laniakea.dev/RHEL/laniakea.repo
+$ sudo yum -y install laniakea
+```
+
+### Fedora
+
+```bash
+$ sudo dnf install -y dnf-plugins-core
+$ sudo dnf config-manager --add-repo https://releases.laniakea.dev/RHEL/laniakea.repo
+$ sudo dnf -y install laniakea
+```
+
+## From Source
+
 Laniakea requires Go 1.17 or higher
 
 On Linux:
@@ -30,10 +58,7 @@ export PATH=$PATH:/usr/local/go/bin
 export GOPATH=/Path/To/Your/Working/Directory
 export PATH=$PATH:$GOPATH/bin
 ```
-If you type `$ go version` you should see `go1.17 linux/amd64`
-## Installing Laniakea from source
-
-In your working directory (which is your `GOPATH`), create a `/src/github.com/SSSOC-CAN` directory
+If you type `$ go version` you should see `go1.17 linux/amd64`. In your working directory (which is your `GOPATH`), create a `/src/github.com/SSSOC-CAN` directory
 ```
 $ mkdir src/github.com/SSSOC-CAN
 $ cd src/github.com/SSSOC-CAN

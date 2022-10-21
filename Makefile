@@ -12,8 +12,8 @@ GOINSTALL := GO111MODULE=on go install -v
 # ============
 
 build:
-	$(GOBUILD) -tags="${tags}" -o laniakea-debug $(PKG)/cmd/laniakea
-	$(GOBUILD) -tags="${tags}" -o lanicli-debug $(PKG)/cmd/lanicli
+	$(GOBUILD) -tags="${tags}" -o ./build/${bin} $(PKG)/cmd/laniakea
+	$(GOBUILD) -tags="${tags}" -o ./build/${bincli} $(PKG)/cmd/lanicli
 
 install:
 	$(GOINSTALL) -tags="${tags}" $(PKG)/cmd/laniakea
