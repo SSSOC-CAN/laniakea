@@ -33,7 +33,7 @@ $ sudo yum -y install laniakea
 
 ```bash
 $ sudo dnf install -y dnf-plugins-core
-$ sudo dnf config-manager --add-repo https://releases.laniakea.dev/RHEL/laniakea.repo
+$ sudo dnf config-manager --add-repo https://releases.laniakea.dev/fedora/laniakea.repo
 $ sudo dnf -y install laniakea
 ```
 
